@@ -242,6 +242,14 @@
   config:
     allowParallelInProgress: true
 
+# Model-authored interactive pages. The tool registers into the host `tools`
+# registry and appends the durable a2ui/surface record to the owning session;
+# a web session renders the page natively. Open-only by default.
+- id: tool-a2ui-surface
+  name: '@deepseek-ai/dsh-tool-a2ui-surface'
+  config:
+    allowUpdate: false
+
 # The `web` service and its search provider stay in the host composition; only
 # the model-facing tool is per-session.
 - id: tool-web

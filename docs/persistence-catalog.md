@@ -94,6 +94,26 @@ Sources: [`packages/core/session/src/types.ts:336`](../packages/core/session/src
 
 ## Events
 
+### `a2ui/*`
+
+<a id="a2uisurface--log-only"></a>
+
+#### `a2ui/surface` — log-only
+
+```ts persistence-catalog
+/**
+ * Opens, or with an explicit `surfaceId` replaces, one model-authored A2UI
+ * surface: a declarative page the web UI renders as an interactive form.
+ * Each open appends a fresh record keyed by `surfaceId`; the latest page
+ * for an id wins on replay. The user's later submission reaches the model
+ * as an ordinary `user/message`, so this record stays log-only.
+ * @param data - stable surface identity and the page definition.
+ */
+'a2ui/surface': A2uiSurfaceData
+```
+
+Source: [`packages/web/tool-a2ui-surface/src/types.ts:68`](../packages/web/tool-a2ui-surface/src/types.ts)
+
 ### `agent/*`
 
 <a id="agentinboxspliced--log-only"></a>

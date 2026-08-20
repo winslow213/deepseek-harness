@@ -210,6 +210,11 @@
     - id: ui-workflow-run
       name: '@deepseek-ai/dsh-client-ui-workflow-run'
 
+    # Model-authored A2UI form pages: projects the durable a2ui/surface event
+    # into an interactive Chat node rendered natively in the transcript.
+    - id: ui-a2ui
+      name: '@deepseek-ai/dsh-client-ui-a2ui'
+
     # Turn tail: the produced-files row under each closing assistant message.
     # Remove this entry to turn the surface off; the tail hole renders empty.
     - id: ui-deliverables
@@ -393,6 +398,11 @@
   disabled: true
 
 - id: tool-workflow
+  disabled: true
+
+# The A2UI surface tool is agent-plane: the web surface disables the base
+# row and lets each session mount it through its agent preset.
+- id: tool-a2ui-surface
   disabled: true
 
 - id: tool-ralph

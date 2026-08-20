@@ -17,6 +17,7 @@
 
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
+| `@deepseek-ai/dsh-tool-a2ui-surface` | `a2ui_surface` | `ctx.tools`、`a calling Agent (exec.agent writes the a2ui/surface record to its session)` | `tool/call`、`a2ui/surface (durable session record)`、`tool/result` | - | a2ui_surface 在 Web UI 中原生渲染模型生成的页面 JSON，并将其记录到持久日志；用户提交以携带 surfaceId 的普通 user/message 返回。`allowUpdate` 必填且无默认值——本目录展示随产品发布的取值（`false`，仅开页）；允许模型替换 surface 的部署应设为 `true`。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`、`ctx.codeRuntime (execution time)`、`ctx.systemPrompt` | `tool/call`、`one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`、`tool/result` | - | 在 `mode: code`／`mode: both` 下，它由工具注册表所有，作为可过滤能力层之外的保留传输机制（参见 Code Mode Agent Note）。在 `code` 下，它是注册表对协议格式（wire format）的唯一贡献；其他可见能力在使用已加载运行时语言生成的 SDK 章节中声明。程序通过 binding 调用这些能力，调用按照原生并发约定调度：启动顺序和策略遵循提交顺序，并发安全的函数体最多重叠执行 `maxParallelSubCalls` 个。调用会重新进入完整且受守卫保护的工具流水线，并将每个嵌套执行关联到此外层结果。 |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`、`ctx.systemPrompt`、`ctx.userQuestions (execution time, opportunistic)` | `tool/call`、`plan/mode inactive on an approved review`、`tool/result` | - | 规划未激活时，exit_plan_mode 仍保留在面向模型的 schema 中，这样状态转换不会在规划策略变更之外额外造成工具目录变动。其执行路径会拒绝规划模式之外的调用；在规划模式下，它通过用户交互 seam 提交计划（批准／根据反馈继续规划），批准后会在步骤边界记录规划模式已停用。 |
@@ -41,6 +42,127 @@
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
+
+<a id="deepseek-aidsh-tool-a2ui-surface"></a>
+
+## \`@deepseek-ai/dsh-tool-a2ui-surface\`
+
+### \`a2ui_surface\`
+
+在 Web UI 中渲染一个交互式表单页面。你提供的页面 JSON 会由浏览器原生绘制为可填写的表单；用户填写后点击提交，你随后会收到一条携带同一 \`surfaceId\` 以及按字段 \`name\` 键控的已收集字段值的消息。用它向用户收集结构化输入，而不是提出开放式问题。字段只保留你确实需要的那些，为每个字段提供简短唯一的 \`name\` 和人类可读的 \`label\`，且只为必填输入设置 \`required: true\`。对于 \`select\` 字段请提供 \`options\`（label/value 对）；自由文本优先用 \`text\`，更长的输入用 \`textarea\`；数值用 \`number\`，布尔值用 \`checkbox\`。可选的 \`instruction\` 会告诉用户提交后的处理方式——把它放在有助于用户作答的位置。
+
+\`\`\`json
+{
+  "type": "object",
+  "properties": {
+    "page": {
+      "type": "object",
+      "description": "The declarative page the browser renders as a form.",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Page heading shown above the fields."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional explanatory text under the title."
+        },
+        "submitLabel": {
+          "type": "string",
+          "description": "Submit button label; defaults to the UI locale copy."
+        },
+        "instruction": {
+          "type": "string",
+          "description": "What the user should expect after submitting."
+        },
+        "fields": {
+          "type": "array",
+          "description": "Form controls, one per input the user must provide.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Stable identity the submission payload keys by."
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable control label."
+              },
+              "type": {
+                "type": "string",
+                "description": "Widget kind.",
+                "enum": [
+                  "text",
+                  "textarea",
+                  "select",
+                  "number",
+                  "checkbox"
+                ]
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Whether the user must fill the field."
+              },
+              "placeholder": {
+                "type": "string",
+                "description": "Placeholder while the control is empty."
+              },
+              "help": {
+                "type": "string",
+                "description": "Short help text under the control."
+              },
+              "options": {
+                "type": "array",
+                "description": "Selectable options; meaningful only for \`select\`.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "description": "Option text."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "Stable option value."
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "label",
+              "type"
+            ]
+          }
+        }
+      },
+      "required": [
+        "title",
+        "fields"
+      ]
+    },
+    "surfaceId": {
+      "type": "string",
+      "description": "Optional stable identity to replace an existing surface (only when updates are allowed)."
+    }
+  },
+  "required": [
+    "page"
+  ]
+}
+```
+Source: [`packages/web/tool-a2ui-surface/src/index.ts`](../packages/web/tool-a2ui-surface/src/index.ts)
+
+a2ui_surface 在 Web UI 中原生渲染模型生成的页面 JSON，并将其记录到持久日志；用户提交以携带 surfaceId 的普通 user/message 返回。`allowUpdate` 必填且无默认值——本目录展示随产品发布的取值（`false`，仅开页）；允许模型替换 surface 的部署应设为 `true`。
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 

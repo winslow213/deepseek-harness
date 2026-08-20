@@ -63,6 +63,7 @@ import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
+import * as ToolA2uiSurface from '@deepseek-ai/dsh-tool-a2ui-surface'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -182,6 +183,20 @@ export interface ToolPackage {
  * guard proves it is exhaustive against the on-disk glob.
  */
 const TOOL_PACKAGES: ToolPackage[] = [
+  {
+    pkg: '@deepseek-ai/dsh-tool-a2ui-surface',
+    dir: 'tool-a2ui-surface',
+    source: 'packages/web/tool-a2ui-surface/src/index.ts',
+    requires: ['ctx.tools', 'a calling Agent (exec.agent writes the a2ui/surface record to its session)'],
+    writes: ['tool/call', 'a2ui/surface (durable session record)', 'tool/result'],
+    async mount(ctx) {
+      // Schema harvest needs no owning agent; the surface record is appended
+      // only when a real call runs. The catalog states the shipped default.
+      await ctx.plugin(ToolA2uiSurface, { allowUpdate: false })
+    },
+    note:
+      'a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`.',
+  },
   {
     pkg: '@deepseek-ai/dsh-tool-ask-user',
     dir: 'tool-ask-user',

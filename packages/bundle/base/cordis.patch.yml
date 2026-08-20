@@ -340,6 +340,15 @@
     - id: tool-workflow
       name: '@deepseek-ai/dsh-tool-workflow'
 
+    # Model-authored interactive pages: the a2ui_surface tool renders a
+    # declarative page JSON in the web UI and records it in the session log.
+    # Open-only by default; a deployment may set allowUpdate to let the model
+    # replace an existing surface with a refined page.
+    - id: tool-a2ui-surface
+      name: '@deepseek-ai/dsh-tool-a2ui-surface'
+      config:
+        allowUpdate: false
+
     - id: timeout-policy
       name: '@deepseek-ai/dsh-tool-call-timeout-policy'
 
