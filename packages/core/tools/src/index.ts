@@ -19,6 +19,7 @@ import type { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type { ToolCallView, ToolResultView } from './presentation.ts'
+import type { ToolRestriction } from './types.ts'
 import { assertSupportedJsonSchema, validateJsonSchemaValue } from './json-schema.ts'
 import type { JsonSchemaNode } from './json-schema.ts'
 import { createRunCodeTool, RUN_CODE_NAME } from './ptc.ts'
@@ -91,7 +92,7 @@ export {
   type JsonSchemaScalar,
 } from './json-schema.ts'
 
-export type { PtcDispatchEventData, PtcDispatchStartEventData } from './types.ts'
+export type { PtcDispatchEventData, PtcDispatchStartEventData, ToolRestriction } from './types.ts'
 
 export { CodeRunFailedError, RUN_CODE_NAME } from './ptc.ts'
 export { jsonSchemaToTs, renderToolsSdk } from './ts-types.ts'
@@ -664,17 +665,6 @@ export interface Config {
    * restores strictly serial dispatch. Must be a positive integer.
    */
   maxParallelSubCalls?: number
-}
-
-/**
- * Per-scope filter over global tools. Restrictions intersect and do not affect
- * scoped registrations or the reserved PTC mode transport.
- */
-export interface ToolRestriction {
-  /** Global tool names that stay visible; everything else is removed. */
-  readonly allow?: readonly string[]
-  /** Global tool names removed from visibility. */
-  readonly deny?: readonly string[]
 }
 
 /** One restriction compiled at registration for repeated live-global lookup. */

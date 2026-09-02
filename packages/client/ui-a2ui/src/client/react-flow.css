@@ -252,6 +252,7 @@ svg.react-flow__connectionline {
   background-color: var(--xy-handle-background-color, var(--xy-handle-background-color-default));
   border: 1px solid var(--xy-handle-border-color, var(--xy-handle-border-color-default));
   border-radius: 100%;
+  corner-shape: round;
 }
 .react-flow__handle.connectingfrom {
     pointer-events: all;

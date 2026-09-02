@@ -6,7 +6,7 @@
   width: 100%;
   min-width: 0;
   padding: 12px 16px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-module-platform);
 }
@@ -65,7 +65,7 @@
   width: 100%;
   min-width: 0;
   padding: 6px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
@@ -117,7 +117,7 @@
   height: 360px;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-specific-input-major);
 }
@@ -136,7 +136,7 @@
 .canvasNodePlain {
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-primary);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .canvasNodeStart {
@@ -171,6 +171,7 @@
   height: 10px;
   border: 2px solid var(--dsw-alias-bg-module-platform);
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
 }
 
@@ -180,7 +181,7 @@
   width: 100%;
   min-width: 0;
   padding: 2px 6px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 4px;
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
@@ -297,7 +298,7 @@
   box-sizing: border-box;
   min-width: 100px;
   padding: 2px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
