@@ -506,6 +506,18 @@ describe('replacing a composition', () => {
     expect(selected).toEqual([[SessionId('sess-selected'), 'minimal']])
   })
 
+  it('ignores session events that are not preset selections', async () => {
+    const agent = await agentOn(ctx, 'sess-ignored', 'standard')
+    const selected: Array<[SessionId, string]> = []
+    ctx.on('agent-preset/selected', (sessionId, agentPreset) => {
+      selected.push([sessionId, agentPreset])
+    })
+
+    agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    expect(selected).toEqual([])
+  })
+
   it('swaps the agent\'s tools without touching another session', async () => {
     const keeper = await agentOn(ctx, 'sess-keeper', 'standard')
     const handle = await ctx.agents.create({
@@ -791,5 +803,46 @@ describe('editing a composition file', () => {
     await racer.ensureStanding({ id: 'stale', trust: 'user', path })
 
     expect(livePresetMounts().filter(mount => mount.presetId === 'stale')).toHaveLength(1)
+  })
+})
+
+describe('node profile resolution', () => {
+  /** One harness over a fresh preset directory, optionally carrying profile.yml. */
+  async function profiled(id: string, profile?: string): Promise<Context> {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-profile-resolve-'))
+    await mkdir(join(root, id))
+    await writeFile(join(root, id, COMPOSITION_FILE), '[]\n')
+    if (profile !== undefined) await writeFile(join(root, id, 'profile.yml'), profile)
+    return await harness({ default: id, roots: [{ path: root, trust: 'user' as const }], includeShippedRoot: false, includeUserRoot: false })
+  }
+
+  it('resolves a preset that declares a usable profile.yml', async () => {
+    const scoped = await profiled('auditor', 'persona: 你是审查员\ntools:\n  allow:\n    - bash\n  deny:\n    - shell\n')
+
+    await expect(scoped.agentPresets.resolveNodeProfile('auditor')).resolves.toEqual({
+      persona: '你是审查员',
+      toolFilter: { allow: ['bash'], deny: ['shell'] },
+    })
+  })
+
+  it('refuses a preset that declares no profile.yml', async () => {
+    const scoped = await profiled('plain')
+
+    await expect(scoped.agentPresets.resolveNodeProfile('plain'))
+      .rejects.toThrow(/declares no node profile/)
+  })
+
+  it('refuses a preset whose profile.yml is malformed, with the discovery reason', async () => {
+    const scoped = await profiled('broken', 'tools: 5\n')
+
+    await expect(scoped.agentPresets.resolveNodeProfile('broken'))
+      .rejects.toThrow(/has an invalid "tools" entry/)
+  })
+
+  it('fails loud for an unknown preset id', async () => {
+    const scoped = await profiled('known')
+
+    await expect(scoped.agentPresets.resolveNodeProfile('no-such'))
+      .rejects.toThrow(/not found/)
   })
 })

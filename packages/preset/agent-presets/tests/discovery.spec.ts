@@ -231,6 +231,35 @@ describe('composition health', () => {
   })
 })
 
+describe('node profile discovery', () => {
+  /** One preset directory under a fresh root, scanned once. */
+  async function discovered(profile?: string): Promise<{ profile?: unknown; problem?: unknown }> {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-presets-profile-'))
+    await mkdir(join(root, 'probe'))
+    await writeFile(join(root, 'probe', COMPOSITION_FILE), '[]\n')
+    if (profile !== undefined) await writeFile(join(root, 'probe', 'profile.yml'), profile)
+    const [preset] = await scanRoot({ path: root, trust: 'user' }, HARNESS)
+    return {
+      ...preset!.profile !== undefined ? { profile: preset!.profile } : {},
+      ...preset!.profileProblem !== undefined ? { problem: preset!.profileProblem } : {},
+    }
+  }
+
+  it('carries a parsed profile.yml on the preset', async () => {
+    await expect(discovered('persona: 你是审查员\ntools:\n  deny:\n    - shell\n')).resolves.toEqual({
+      profile: { persona: '你是审查员', toolFilter: { deny: ['shell'] } },
+    })
+  })
+
+  it('reports a malformed profile.yml as a profile problem, not a broken preset', async () => {
+    await expect(discovered('tools: 5\n')).resolves.toMatchObject({ problem: /invalid "tools" entry/ })
+  })
+
+  it('omits both profile fields when the preset declares none', async () => {
+    await expect(discovered()).resolves.toEqual({})
+  })
+})
+
 describe('rows naming a plugin that cannot be resolved', () => {
   /** One directory under a fresh root holding `composition`, scanned. */
   async function scanned(composition: string): Promise<string | undefined> {

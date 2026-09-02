@@ -46,6 +46,7 @@ import {
 } from './composition-inventory.ts'
 import type { AgentPreset, Config, PresetRoot } from './preset.ts'
 import { agentPresetProjectionDefinition } from './session.ts'
+import { NodeProfileError, type NodeProfile } from './profile.ts'
 export type * from './types.ts'
 export type {
   AgentPresetComposition, AgentPresetCompositionRow, CompositionRowEnablement,
@@ -81,6 +82,9 @@ export {
   type JoinedPresetMount, type PresetMount,
 } from './mount.ts'
 export { copyComposition, deleteComposition, readComposition, writableRoot } from './authoring.ts'
+export {
+  NodeProfileError, PROFILE_FILE, readNodeProfile, type NodeProfile,
+} from './profile.ts'
 export { agentPresetProjectionDefinition } from './session.ts'
 export type { AgentPreset, Config, PresetRoot, PresetTrust } from './preset.ts'
 
@@ -353,6 +357,32 @@ export class AgentPresets extends TypertRemoteService {
       )
     }
     return found
+  }
+
+  /**
+   * Resolve one preset's node profile for a workflow `agent({ profile })`.
+   *
+   * The profile is the preset's standalone persona/toolFilter bundle, read at
+   * discovery like the composition. A preset that carries no `profile.yml`
+   * resolves to no profile — the workflow caller named a preset that declared
+   * none — and a preset whose profile file is malformed is refused with the
+   * discovery-reported reason. Both fail loud here rather than leaving the
+   * child to silently run without the persona/toolFilter the script asked for.
+   * @param id - the preset id whose node profile is requested.
+   * @returns the preset's node profile.
+   * @throws when the preset is unknown, declares no node profile, or its
+   *   profile file is unusable.
+   */
+  async resolveNodeProfile(id: string): Promise<NodeProfile> {
+    const preset = await this.resolve(id)
+    if (preset.profileProblem !== undefined) {
+      throw new NodeProfileError(id, preset.profileProblem)
+    }
+    const profile = preset.profile
+    if (profile === undefined) {
+      throw new NodeProfileError(id, 'the preset directory declares no node profile (profile.yml)')
+    }
+    return profile
   }
 
   /**

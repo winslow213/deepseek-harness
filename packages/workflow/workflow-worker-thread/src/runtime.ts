@@ -17,7 +17,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { assertObjectJsonSchema, JsonSchemaError } from '@deepseek-ai/dsh-tools'
-import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import type { ObjectJsonSchema, ToolRestriction } from '@deepseek-ai/dsh-tools'
 import { isFatalWorkflowError, WorkflowError } from '@deepseek-ai/dsh-workflow'
 import type {
   WorkflowAgentEndInfo,
@@ -37,7 +37,7 @@ export interface ExecutionObserver {
 }
 
 /** The `agent()` options the script may pass; everything else rejects loud. */
-const SUPPORTED_AGENT_OPTIONS = new Set(['label', 'phase', 'schema', 'provider', 'model'])
+const SUPPORTED_AGENT_OPTIONS = new Set(['label', 'phase', 'schema', 'provider', 'model', 'persona', 'toolFilter', 'profile'])
 /** Deferred Claude Code options we name explicitly in the rejection message. */
 const DEFERRED_AGENT_OPTIONS = new Set(['effort', 'isolation', 'agentType'])
 
@@ -280,6 +280,9 @@ export class WorkflowExecution {
           ...opts.schema !== undefined ? { schema: opts.schema } : {},
           ...opts.provider !== undefined ? { provider: opts.provider } : {},
           ...opts.model !== undefined ? { model: opts.model } : {},
+          ...opts.persona !== undefined ? { persona: opts.persona } : {},
+          ...opts.toolFilter !== undefined ? { toolFilter: opts.toolFilter } : {},
+          ...opts.profile !== undefined ? { profile: opts.profile } : {},
         })
       } catch (error: unknown) {
         // The host refuses starts once the run is cancelled — a refusal that
@@ -351,6 +354,9 @@ export class WorkflowExecution {
     phase?: string
     provider?: string
     model?: string
+    persona?: string
+    toolFilter?: ToolRestriction
+    profile?: string
     schema?: ObjectJsonSchema
   } {
     if (rawOpts === undefined) return {}
@@ -369,11 +375,11 @@ export class WorkflowExecution {
     for (const key of Object.keys(record)) {
       if (SUPPORTED_AGENT_OPTIONS.has(key)) continue
       if (DEFERRED_AGENT_OPTIONS.has(key)) {
-        throw new WorkflowError(`agent() option "${key}" is deferred and not supported by this engine (supported: label, phase, schema, provider, model)`, 'UNSUPPORTED_OPTION')
+        throw new WorkflowError(`agent() option "${key}" is deferred and not supported by this engine (supported: label, phase, schema, provider, model, persona, toolFilter, profile)`, 'UNSUPPORTED_OPTION')
       }
-      throw new WorkflowError(`agent() option "${key}" is not recognized (supported: label, phase, schema, provider, model)`, 'UNSUPPORTED_OPTION')
+      throw new WorkflowError(`agent() option "${key}" is not recognized (supported: label, phase, schema, provider, model, persona, toolFilter, profile)`, 'UNSUPPORTED_OPTION')
     }
-    for (const key of ['label', 'phase', 'provider', 'model'] as const) {
+    for (const key of ['label', 'phase', 'provider', 'model', 'persona', 'profile'] as const) {
       if (record[key] !== undefined && typeof record[key] !== 'string') {
         throw new WorkflowError(`agent() option "${key}" must be a string`, 'INVALID_ARGUMENT')
       }
@@ -389,12 +395,43 @@ export class WorkflowExecution {
         throw new WorkflowError(`agent() schema is outside the supported subset — ${error.message}`, 'UNSUPPORTED_SCHEMA', { cause: error })
       }
     }
+    const toolFilter = this.readToolFilter(record.toolFilter)
     return {
       ...record.label !== undefined ? { label: record.label as string } : {},
       ...record.phase !== undefined ? { phase: record.phase as string } : {},
       ...record.provider !== undefined ? { provider: record.provider as string } : {},
       ...record.model !== undefined ? { model: record.model as string } : {},
+      ...record.persona !== undefined ? { persona: record.persona as string } : {},
+      ...toolFilter !== undefined ? { toolFilter } : {},
+      ...record.profile !== undefined ? { profile: record.profile as string } : {},
       ...schema !== undefined ? { schema } : {},
+    }
+  }
+
+  /** Validate the `agent()` `toolFilter` option: an `{ allow?, deny? }` object of tool-name arrays. */
+  private readToolFilter(raw: unknown): ToolRestriction | undefined {
+    if (raw === undefined) return undefined
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new WorkflowError('agent() option "toolFilter" must be an object', 'INVALID_ARGUMENT')
+    }
+    const record = raw as Record<string, unknown>
+    const names = (key: 'allow' | 'deny'): readonly string[] | undefined => {
+      const value = record[key]
+      if (value === undefined) return undefined
+      if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+        throw new WorkflowError(`agent() option "toolFilter.${key}" must be an array of tool names`, 'INVALID_ARGUMENT')
+      }
+      // Array.isArray narrows to any[]; the element check above proves strings.
+      return value as string[]
+    }
+    const allow = names('allow')
+    const deny = names('deny')
+    if (allow === undefined && deny === undefined) {
+      throw new WorkflowError('agent() option "toolFilter" must name at least one tool in "allow" or "deny"', 'INVALID_ARGUMENT')
+    }
+    return {
+      ...allow !== undefined ? { allow } : {},
+      ...deny !== undefined ? { deny } : {},
     }
   }
 

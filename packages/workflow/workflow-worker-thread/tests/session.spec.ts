@@ -152,6 +152,35 @@ describe('runWorkerSession over an in-process MessageChannel', () => {
     host.close()
   })
 
+  it('agent({persona, toolFilter}) forwards both on the start request', async () => {
+    const host = fakeHost({ reply: () => text('ok') })
+    void runWorkerSession(host.port, init(`
+      const a = await agent('a', { persona: '你是审查员', toolFilter: { allow: ['bash'] } })
+      const b = await agent('b', { toolFilter: { deny: ['shell'] } })
+      return [a, b]
+    `))
+    const result = await host.result()
+    expect(result.value).toEqual(['ok', 'ok'])
+    const starts = host.ofType(WorkerToHostType.ChildStart)
+    expect(starts[0]!.request.persona).toBe('你是审查员')
+    expect(starts[0]!.request.toolFilter).toEqual({ allow: ['bash'] })
+    expect(starts[1]!.request.persona).toBeUndefined()
+    expect(starts[1]!.request.toolFilter).toEqual({ deny: ['shell'] })
+    host.close()
+  })
+
+  it('agent({profile}) forwards the profile id on the start request', async () => {
+    const host = fakeHost({ reply: () => text('ok') })
+    void runWorkerSession(host.port, init("return await agent('p', { profile: 'auditor' })"))
+    const result = await host.result()
+    expect(result.value).toBe('ok')
+    const start = host.ofType(WorkerToHostType.ChildStart)[0]!
+    expect(start.request.profile).toBe('auditor')
+    expect(start.request.persona).toBeUndefined()
+    expect(start.request.toolFilter).toBeUndefined()
+    host.close()
+  })
+
   it('a schema child completing WITHOUT a structured value resolves null with a failed outcome', async () => {
     const host = fakeHost({ reply: () => text('prose, no structure') })
     void runWorkerSession(host.port, init("return await agent('p', { schema: { type: 'object' } })"))
@@ -338,8 +367,13 @@ describe('runWorkerSession over an in-process MessageChannel', () => {
       ["return await agent('p', { label: 3 })", '"label" must be a string'],
       ["return await agent('p', { get label() { throw new Error('read failed') } })", 'options must be plain JSON data'],
       ["return await agent('p', { bogus: true })", '"bogus" is not recognized'],
-      ["return await agent('p', { effort: 'high' })", '"effort" is deferred and not supported by this engine (supported: label, phase, schema, provider, model)'],
+      ["return await agent('p', { effort: 'high' })", '"effort" is deferred and not supported by this engine (supported: label, phase, schema, provider, model, persona, toolFilter, profile)'],
       ["return await agent('p', { schema: { type: 'object', oneOf: [] } })", 'outside the supported subset'],
+      ["return await agent('p', { persona: 3 })", '"persona" must be a string'],
+      ["return await agent('p', { profile: 3 })", '"profile" must be a string'],
+      ["return await agent('p', { toolFilter: 'x' })", '"toolFilter" must be an object'],
+      ["return await agent('p', { toolFilter: {} })", 'must name at least one tool in "allow" or "deny"'],
+      ["return await agent('p', { toolFilter: { allow: [1] } })", '"toolFilter.allow" must be an array of tool names'],
       ['return await parallel([() => 1, () => 2, () => 3])', 'over the per-call cap (2)'],
       ['return await pipeline([1, 2, 3], (x) => x)', 'maxItemsPerCall'],
       ["return await parallel('no')", 'parallel() requires an array'],

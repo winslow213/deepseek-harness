@@ -30,6 +30,7 @@ import { load } from 'js-yaml'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import { readPresetMetadata } from './metadata.ts'
+import { readNodeProfile } from './profile.ts'
 import { PRESET_ID, type AgentPreset, type PresetRoot } from './preset.ts'
 import { classifyRowSpecifier, type RowSpecifier } from './specifier.ts'
 
@@ -309,8 +310,16 @@ export async function scanRoot(root: PresetRoot, harnessBase: string): Promise<A
     // Display text only, and never fatal: a preset with unreadable metadata
     // still mounts, it just shows its id.
     const metadata = await readPresetMetadata(directory)
+    // A node profile is a capability, so a malformed one is a profile PROBLEM
+    // rather than an absent profile: dropping it would make a later
+    // `agent({ profile })` fail with a misleading "declared none". It is still
+    // not a broken composition — the preset mounts, and only profile
+    // resolution refuses it.
+    const { profile, problem } = await readNodeProfile(directory)
     found.push({
       id: child.name, trust: root.trust, path, ...metadata,
+      ...profile !== undefined ? { profile } : {},
+      ...problem !== undefined ? { profileProblem: problem } : {},
       ...broken === undefined ? {} : { broken },
     })
   }

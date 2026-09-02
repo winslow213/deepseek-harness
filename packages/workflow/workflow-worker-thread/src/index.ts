@@ -10,6 +10,11 @@ import { randomUUID } from 'node:crypto'
 import { availableParallelism } from 'node:os'
 import * as vm from 'node:vm'
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: makes `runCtx.get('agentPresets')` resolve to the preset roster
+// when composed — profile resolution is opportunistic, never a hard dep, and
+// a rosterless deployment simply cannot honor `agent({ profile })` (fails
+// loud per child in WorkerRun).
+import type {} from '@deepseek-ai/dsh-agent-presets'
 import z from '@deepseek-ai/schemastery'
 import WorkflowEngine, { WorkflowError, WorkflowRunId } from '@deepseek-ai/dsh-workflow'
 import type { WorkflowRun, WorkflowRunInfo, WorkflowStartRequest } from '@deepseek-ai/dsh-workflow'
@@ -169,9 +174,15 @@ class WorkerThreadWorkflowEngine extends WorkflowEngine {
     // the now-inactive engine fiber and break the seam's holder-owned lifetime.
     const runCtx = this.ctx
     const subagents = runCtx.subagents
+    // Capture the preset roster with the subagent handle: profile resolution is
+    // opportunistic (rosterless deployments simply cannot honor `agent({
+    // profile })`), and holding it here keeps an engine HMR unload from
+    // stranding profile resolution mid-run.
+    const agentPresets = runCtx.get('agentPresets')
     const workerRun = new WorkerRun(
       runCtx,
       subagents,
+      agentPresets,
       id,
       meta,
       request.parent,

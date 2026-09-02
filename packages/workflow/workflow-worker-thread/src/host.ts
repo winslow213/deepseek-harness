@@ -12,7 +12,15 @@ import type { WorkerOptions } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+// Type-only: makes `ctx.get('agentPresets')` resolve to the preset roster
+// when composed and names the `AgentPresets` service type. Profile resolution
+// is opportunistic in the same sense as subagent composition inheritance — a
+// rosterless deployment simply cannot honor `agent({ profile })`, and must
+// fail loud rather than silently drop the persona/toolFilter a script asked
+// for.
+import type { AgentPresets } from '@deepseek-ai/dsh-agent-presets'
 import { assertNever, snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
+import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { WorkflowAgentEndInfo, WorkflowAgentInfo, WorkflowMeta, WorkflowResult, WorkflowRun, WorkflowRunId } from '@deepseek-ai/dsh-workflow'
@@ -90,6 +98,26 @@ function resolveWorkerSpawn(init: WorkerInit): { entry: string | URL; options: W
 }
 
 /**
+ * Merge an explicit `toolFilter` over a named profile's, field by field: an
+ * `allow`/`deny` the call names replaces the profile's, a field the call
+ * leaves unnamed keeps the profile's. Both sides are already validated, so
+ * the merge of them stays a valid restriction.
+ * @param explicit - the `agent({ toolFilter })` value, if the call passed one.
+ * @param profile - the named profile's restriction, if it declared one.
+ * @returns the merged restriction, or undefined when neither side exists.
+ */
+function mergeToolFilter(explicit: ToolRestriction | undefined, profile: ToolRestriction | undefined): ToolRestriction | undefined {
+  if (explicit === undefined) return profile
+  if (profile === undefined) return explicit
+  return {
+    ...profile.allow !== undefined && explicit.allow === undefined ? { allow: profile.allow } : {},
+    ...explicit.allow !== undefined ? { allow: explicit.allow } : {},
+    ...profile.deny !== undefined && explicit.deny === undefined ? { deny: profile.deny } : {},
+    ...explicit.deny !== undefined ? { deny: explicit.deny } : {},
+  }
+}
+
+/**
  * One live worker-engine run — the seam's {@link WorkflowRun}, returned by
  * `start()` directly. Owns the Worker, the child registry, and the result
  * settlement; `result` never rejects. `meta` is trusted same-process data
@@ -131,6 +159,12 @@ export class WorkerRun implements WorkflowRun {
   constructor(
     private readonly ctx: Context,
     private readonly subagents: SubagentRuntime,
+    /**
+     * The agent-preset roster, captured at start() like the subagent handle so
+     * an engine HMR unload cannot strand profile resolution mid-run. Absent in
+     * a rosterless deployment; `agent({ profile })` then fails loud per child.
+     */
+    private readonly agentPresets: AgentPresets | undefined,
     readonly id: WorkflowRunId,
     readonly meta: WorkflowMeta,
     private readonly parent: Agent,
@@ -348,11 +382,14 @@ export class WorkerRun implements WorkflowRun {
   private async startChild(callId: number, request: ChildStartRequest): Promise<void> {
     let run: SubagentRun
     try {
+      const { persona, toolFilter } = await this.resolveChildProfile(request)
       run = await this.subagents.start(this.provider, {
         prompt: [{ type: 'text', text: request.prompt }],
         parent: this.parent,
         signal: this.controller.signal,
         ...request.schema !== undefined ? { outputSchema: request.schema } : {},
+        ...persona !== undefined ? { persona } : {},
+        ...toolFilter !== undefined ? { toolFilter } : {},
         ...request.provider !== undefined || request.model !== undefined
           ? {
             agentOptions: {
@@ -408,6 +445,38 @@ export class WorkerRun implements WorkflowRun {
     )
     this.post(HostToWorkerType.ChildStarted, { callId, childId: run.id })
     void forwardResult.then((forward) => { forward() })
+  }
+
+  /**
+   * Resolve the child's persona/toolFilter. With no named profile, the
+   * explicit options pass through. With one, the roster's node profile
+   * supplies the fields the call left unnamed, and an explicit option
+   * overrides the profile's field (see {@link mergeToolFilter}). A profile
+   * request in a rosterless deployment, for an unknown preset id, or for a
+   * preset whose profile.yml is unusable, throws — the script asked for a
+   * persona/toolFilter the deployment cannot honor, and a silent run without
+   * them would hide a misconfiguration.
+   * @param request - the validated child-start request.
+   * @returns the resolved persona and toolFilter.
+   */
+  private async resolveChildProfile(request: ChildStartRequest): Promise<{ persona?: string; toolFilter?: ToolRestriction }> {
+    if (request.profile === undefined) {
+      return {
+        ...request.persona !== undefined ? { persona: request.persona } : {},
+        ...request.toolFilter !== undefined ? { toolFilter: request.toolFilter } : {},
+      }
+    }
+    const presets = this.agentPresets
+    if (presets === undefined) {
+      throw new Error('workflow agent({ profile }) requires the agent-presets service, which is not composed')
+    }
+    const nodeProfile = await presets.resolveNodeProfile(request.profile)
+    const persona = request.persona ?? nodeProfile.persona
+    const toolFilter = mergeToolFilter(request.toolFilter, nodeProfile.toolFilter)
+    return {
+      ...persona !== undefined ? { persona } : {},
+      ...toolFilter !== undefined ? { toolFilter } : {},
+    }
   }
 
   private onChildDispose(callId: number): void {

@@ -51,6 +51,15 @@ kind: "package-reference"
 
 运行启动后，脚本正文在 worker 中以顶层 `await` 执行，并可使用钩子 `agent()`、`parallel()`、`pipeline()`、`phase()` 与 `log()`；`meta` 与 `args` 以普通 JSON 数据到达，绝不作为代码求值。每次 `agent()` 调用都会在配置的提供方下启动一个宿主侧 subagent，并以运行的父级作为每个子 agent 的父级。运行以脚本的最终 JSON 值结算；普通子 agent 失败会把 `agent()` 兑现为 `null`，由脚本处理。
 
+在 worker 内，脚本会收到 `args` 以及以下钩子：
+
+- `agent(prompt, { label, phase, schema, model, persona, toolFilter, profile })` 启动一个宿主侧 subagent。提供 schema 时返回结构化值，否则返回最终文本。`persona`/`toolFilter` 限定子 agent 的身份与工具；`profile` 指定一个预设，其节点配置为两者提供默认值，显式选项逐字段覆盖 profile。普通子 agent 失败会产生 `null`；
+- `parallel(thunks)` 在已配置的并发限制下运行 thunk；
+- `pipeline(items, ...stages)` 在没有跨阶段屏障的情况下传递 `(previous, item, index)`；
+- `phase(title)` 和 `log(message)` 发出观察器叙述。
+
+未知选项、格式错误的参数、不支持的 schema、超出上限、提供方启动失败和基础设施结果失败都属于致命工作流错误。有意不注入 timer、文件系统 API 或 Node 全局变量，但上述信任注意事项仍然适用。
+
 格式错误的 meta 块、无法解析的正文、不可用的提供方路由或高于上限的单次运行上限，都会在 worker 存在之前被同步拒绝，调用方因此看到违规清单并可以修正调用。执行期间，钩子误用与超出上限会用致命工作流错误终止脚本。取消是有界的：忽略取消的脚本会在 `disposeGraceMs` 后被强制以 cancelled 结算，其 worker 被终止。
 
 ### 信任预期

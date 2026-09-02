@@ -1,5 +1,7 @@
 /** Agent-preset vocabulary shared by discovery, mounting, and consumers. */
 
+import type { NodeProfile } from './profile.ts'
+
 /**
  * Where a preset's composition came from. A `system` preset ships with the
  * deployment; a `user` preset was authored locally, by a person or by an
@@ -38,6 +40,20 @@ export interface AgentPreset {
    * up front with this reason instead of failing deep inside the loader.
    */
   readonly broken?: string
+  /**
+   * The preset's reusable per-node configuration, present when its
+   * `profile.yml` parsed. Independent of {@link broken}: a preset with an
+   * unloadable composition may still carry a usable node profile, because the
+   * profile only shapes workflow children and mounts nothing.
+   */
+  readonly profile?: NodeProfile
+  /**
+   * Why the preset's `profile.yml` cannot be used, absent when there is no
+   * profile or it parsed. A malformed profile is a problem, not a broken
+   * composition: the preset still mounts for ordinary sessions, while a
+   * workflow `agent({ profile })` resolving it fails loud.
+   */
+  readonly profileProblem?: string
 }
 
 /** One directory scanned for preset subdirectories. */

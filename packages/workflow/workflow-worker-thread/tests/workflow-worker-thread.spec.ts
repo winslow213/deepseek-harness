@@ -7,6 +7,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentCapabilities, SubagentProvider, SubagentResult, SubagentRun, SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
+import { NodeProfileError, type AgentPresets } from '@deepseek-ai/dsh-agent-presets'
 import type { WorkflowMeta, WorkflowResult, WorkflowResultInfo, WorkflowRun, WorkflowRunInfo } from '@deepseek-ai/dsh-workflow'
 import * as workerEngineModule from '../src/index.ts'
 import WorkerThreadWorkflowEngine, { type Config } from '../src/index.ts'
@@ -63,7 +64,7 @@ class StubProvider implements SubagentProvider {
     outputSchema: true,
     depthLimit: true,
     toolFilter: true,
-    persona: false,
+    persona: true,
   }
   readonly inheritsParentContext = false
   readonly runs: ControlledRun[] = []
@@ -244,6 +245,149 @@ describe('dsh-workflow-worker-thread', { timeout: 120_000 }, () => {
 
       expect(result.value).toBe('stub reply')
       expect(provider.runs[0]!.request.agentOptions).toEqual({ provider: 'openai' })
+    })
+
+    it('agent({persona, toolFilter}) forwards both to the provider across the thread', async () => {
+      const { ctx, parent, provider } = await setup()
+      const result = await run(ctx, parent, scripted("return await agent('scoped', { persona: '你是审查员', toolFilter: { deny: ['shell'] } })"))
+
+      expect(result.value).toBe('stub reply')
+      expect(provider.runs[0]!.request.persona).toBe('你是审查员')
+      expect(provider.runs[0]!.request.toolFilter).toEqual({ deny: ['shell'] })
+    })
+
+    it('agent({profile}) resolves the profile persona/toolFilter onto the child request', async () => {
+      const { ctx, parent, provider } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => ({ persona: '你是审查员', toolFilter: { deny: ['shell'] } })),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted("return await agent('audit', { profile: 'auditor' })"))
+
+        expect(result.value).toBe('stub reply')
+        expect(provider.runs[0]!.request.persona).toBe('你是审查员')
+        expect(provider.runs[0]!.request.toolFilter).toEqual({ deny: ['shell'] })
+      } finally {
+        dispose()
+      }
+    })
+
+    it('lets an explicit persona/toolFilter override the profile field by field', async () => {
+      const { ctx, parent, provider } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => ({
+          persona: 'profile persona',
+          toolFilter: { allow: ['bash'], deny: ['shell'] },
+        })),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted(
+          "return await agent('audit', { profile: 'auditor', persona: 'explicit', toolFilter: { deny: ['git'] } })",
+        ))
+
+        expect(result.value).toBe('stub reply')
+        // The explicit persona replaces the profile's; the explicit deny replaces
+        // only the deny side, leaving the profile's allow intact.
+        expect(provider.runs[0]!.request.persona).toBe('explicit')
+        expect(provider.runs[0]!.request.toolFilter).toEqual({ allow: ['bash'], deny: ['git'] })
+      } finally {
+        dispose()
+      }
+    })
+
+    it('falls back to the explicit toolFilter when the profile declares none', async () => {
+      const { ctx, parent, provider } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => ({ persona: 'profile persona' })),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted(
+          "return await agent('audit', { profile: 'auditor', toolFilter: { allow: ['bash'] } })",
+        ))
+
+        expect(result.value).toBe('stub reply')
+        expect(provider.runs[0]!.request.persona).toBe('profile persona')
+        expect(provider.runs[0]!.request.toolFilter).toEqual({ allow: ['bash'] })
+      } finally {
+        dispose()
+      }
+    })
+
+    it('replaces the profile allow side and passes an absent persona through empty', async () => {
+      const { ctx, parent, provider } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => ({ toolFilter: { allow: ['bash'] } })),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted(
+          "return await agent('audit', { profile: 'auditor', toolFilter: { allow: ['git'] } })",
+        ))
+
+        expect(result.value).toBe('stub reply')
+        expect(provider.runs[0]!.request.persona).toBeUndefined()
+        expect(provider.runs[0]!.request.toolFilter).toEqual({ allow: ['git'] })
+      } finally {
+        dispose()
+      }
+    })
+
+    it('keeps the profile deny side when the explicit toolFilter names only allow', async () => {
+      const { ctx, parent, provider } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => ({ toolFilter: { deny: ['shell'] } })),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted(
+          "return await agent('audit', { profile: 'auditor', toolFilter: { allow: ['git'] } })",
+        ))
+
+        expect(result.value).toBe('stub reply')
+        expect(provider.runs[0]!.request.persona).toBeUndefined()
+        expect(provider.runs[0]!.request.toolFilter).toEqual({ allow: ['git'], deny: ['shell'] })
+      } finally {
+        dispose()
+      }
+    })
+
+    it('passes no toolFilter when neither the call nor the profile declares one', async () => {
+      const { ctx, parent, provider } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => ({ persona: 'profile persona' })),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted("return await agent('audit', { profile: 'auditor' })"))
+
+        expect(result.value).toBe('stub reply')
+        expect(provider.runs[0]!.request.persona).toBe('profile persona')
+        expect(provider.runs[0]!.request.toolFilter).toBeUndefined()
+      } finally {
+        dispose()
+      }
+    })
+
+    it('fails loud for agent({profile}) when no agent-presets service is composed', async () => {
+      const { ctx, parent } = await setup()
+      const result = await run(ctx, parent, scripted("return await agent('audit', { profile: 'auditor' })"))
+
+      expect(result.stopReason).toBe('error')
+      expect(result.error).toContain('requires the agent-presets service')
+    })
+
+    it('fails loud when the named profile cannot be resolved', async () => {
+      const { ctx, parent } = await setup()
+      const dispose = ctx.provide('agentPresets', {
+        resolveNodeProfile: vi.fn(async () => { throw new NodeProfileError('auditor', 'profile.yml must be a map') }),
+      } as unknown as AgentPresets)
+      try {
+        const result = await run(ctx, parent, scripted("return await agent('audit', { profile: 'auditor' })"))
+
+        expect(result.stopReason).toBe('error')
+        expect(result.error).toContain('agent() could not start a child')
+        expect(result.error).toContain('auditor')
+        expect(result.error).toContain('must be a map')
+      } finally {
+        dispose()
+      }
     })
 
     it('a start-request provider override selects every child without changing the engine default', async () => {

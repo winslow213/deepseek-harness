@@ -6,7 +6,7 @@
  */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import type { ObjectJsonSchema, ToolRestriction } from '@deepseek-ai/dsh-tools'
 import type { WorkflowMeta } from '@deepseek-ai/dsh-workflow'
 
 /**
@@ -46,6 +46,17 @@ export interface ChildStartRequest {
   provider?: string
   /** The per-child model override, if the call passed one. */
   model?: string
+  /** The per-child persona (shadowing the deployment persona), if the call passed one. */
+  persona?: string
+  /** The per-child tool restriction, if the call passed one. */
+  toolFilter?: ToolRestriction
+  /**
+   * The preset id whose node profile supplies default persona/toolFilter, if
+   * the call passed one. The HOST resolves it through agent-presets and lets
+   * explicit options override the profile field by field; the worker only
+   * validates the id and passes it along.
+   */
+  profile?: string
 }
 
 /**

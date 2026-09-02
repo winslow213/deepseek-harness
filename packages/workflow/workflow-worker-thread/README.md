@@ -51,6 +51,15 @@ An owning consumer may set `WorkflowStartRequest.subagentProvider` and `Workflow
 
 When a run starts, the script body executes in the worker with top-level `await` and the hooks `agent()`, `parallel()`, `pipeline()`, `phase()`, and `log()`; `meta` and `args` arrive as plain JSON data, never evaluated code. Every `agent()` call starts a host-side subagent under the configured provider, with the run's parent as the parent of every child. The run settles with the script's final JSON value; an ordinary child failure resolves `agent()` to `null` so the script can handle it.
 
+Inside the worker, the script receives `args` and these hooks:
+
+- `agent(prompt, { label, phase, schema, model, persona, toolFilter, profile })` starts one host-side subagent. With a schema it returns the structured value; otherwise it returns final text. `persona`/`toolFilter` scope the child's identity and tools; `profile` names a preset whose node profile supplies defaults for both, with an explicit option overriding the profile field by field. An ordinary failed child yields `null`.
+- `parallel(thunks)` runs thunks under the configured concurrency limit.
+- `pipeline(items, ...stages)` passes `(previous, item, index)` without a cross-stage barrier.
+- `phase(title)` and `log(message)` emit observer narration.
+
+Unknown options, malformed arguments, unsupported schemas, tripped caps, provider-start failures, and infrastructure result failures are fatal workflow errors. No timers, filesystem API, or Node globals are intentionally injected, though the trust caveat above still applies.
+
 A malformed meta block, a body that does not parse, an unavailable provider route, or a per-run cap above the ceiling is rejected synchronously before a worker exists, so the caller sees a violation list and can correct the call. During execution, hook misuse and tripped caps kill the script with a fatal workflow error. Cancellation is bounded: a script that ignores it is force-settled as cancelled and its worker terminated after `disposeGraceMs`.
 
 ### Trust expectations
