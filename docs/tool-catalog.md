@@ -15,6 +15,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 | Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
+| `@deepseek-ai/dsh-tool-a2ui-surface` | `a2ui_surface` | `ctx.tools`, `a calling Agent (exec.agent writes the a2ui/surface record to its session)` | `tool/call`, `a2ui/surface (durable session record)`, `tool/result` | - | a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: ptc` / `mode: both` (see the PTC mode Agent Note). Under `ptc` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
@@ -40,6 +41,220 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+
+<a id="deepseek-aidsh-tool-a2ui-surface"></a>
+
+## `@deepseek-ai/dsh-tool-a2ui-surface`
+
+### `a2ui_surface`
+
+Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "page": {
+      "type": "object",
+      "description": "The declarative page the browser renders: `kind: \"form\"` draws a fillable form, `kind: \"canvas\"` a draggable node graph.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Which renderer draws the page.",
+          "enum": [
+            "form",
+            "canvas"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "description": "Page heading shown above the content."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional explanatory text under the title."
+        },
+        "submitLabel": {
+          "type": "string",
+          "description": "Submit button label; defaults to the UI locale copy."
+        },
+        "instruction": {
+          "type": "string",
+          "description": "What the user should expect after submitting."
+        },
+        "fields": {
+          "type": "array",
+          "description": "Form controls, one per input the user must provide; required when `kind` is `form`.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Stable identity the submission payload keys by."
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable control label."
+              },
+              "type": {
+                "type": "string",
+                "description": "Widget kind.",
+                "enum": [
+                  "text",
+                  "textarea",
+                  "select",
+                  "number",
+                  "checkbox"
+                ]
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Whether the user must fill the field."
+              },
+              "placeholder": {
+                "type": "string",
+                "description": "Placeholder while the control is empty."
+              },
+              "help": {
+                "type": "string",
+                "description": "Short help text under the control."
+              },
+              "options": {
+                "type": "array",
+                "description": "Selectable options; meaningful only for `select`.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "description": "Option text."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "Stable option value."
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "label",
+              "type"
+            ]
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Canvas nodes the user arranges; required when `kind` is `canvas`.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable node identity the edges reference by."
+              },
+              "label": {
+                "type": "string",
+                "description": "Node heading shown inside the node card."
+              },
+              "detail": {
+                "type": "string",
+                "description": "Optional secondary text under the label."
+              },
+              "role": {
+                "type": "string",
+                "description": "Optional visual role; absent is a plain card.",
+                "enum": [
+                  "start",
+                  "end"
+                ]
+              },
+              "position": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "description": "Horizontal canvas coordinate."
+                  },
+                  "y": {
+                    "type": "number",
+                    "description": "Vertical canvas coordinate."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "position"
+            ]
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "Directed connections between nodes; required when `kind` is `canvas`.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable edge identity."
+              },
+              "source": {
+                "type": "string",
+                "description": "Source node id (the outgoing end)."
+              },
+              "target": {
+                "type": "string",
+                "description": "Target node id (the incoming end)."
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional text shown on the connector."
+              }
+            },
+            "required": [
+              "id",
+              "source",
+              "target"
+            ]
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "title"
+      ]
+    },
+    "surfaceId": {
+      "type": "string",
+      "description": "Optional stable identity to replace an existing surface (only when updates are allowed)."
+    }
+  },
+  "required": [
+    "page"
+  ]
+}
+```
+
+Source: [`packages/web/tool-a2ui-surface/src/index.ts`](../packages/web/tool-a2ui-surface/src/index.ts)
+
+a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`.
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -2115,7 +2330,7 @@ Run a JavaScript workflow script that orchestrates subagents at scale. Use this 
 The workflow's identity rides the `meta` parameter as JSON: required `name` (short kebab-case) and `description` strings, optional `whenToUse` string and `phases` array (`{title, detail?, provider?, model?}`). The `script` parameter is the plain JavaScript body ONLY (NOT TypeScript, and NO `export const meta` statement — meta is a parameter, not code), running with top-level await; end with `return <value>` — the value must be JSON-serializable and is this tool's result.
 
 Script-body hooks:
-- `agent(prompt, opts?): Promise<any>` — run one subagent to completion. Without `opts.schema` it resolves to the child's final text; with `opts.schema` (an object-rooted JSON Schema using ONLY type/properties/required/additionalProperties/items/enum/const/oneOf — no pattern/format/numeric bounds) it resolves to the validated object. Resolves `null` when the child fails (filter with `.filter(Boolean)`). Other opts: `label` (display), `phase` (progress group), and independent `provider`/`model` LLM target overrides (either may be provided alone). Anything else (`effort`/`isolation`/`agentType`) is rejected loudly.
+- `agent(prompt, opts?): Promise<any>` — run one subagent to completion. Without `opts.schema` it resolves to the child's final text; with `opts.schema` (an object-rooted JSON Schema using ONLY type/properties/required/additionalProperties/items/enum/const/oneOf — no pattern/format/numeric bounds) it resolves to the validated object. Resolves `null` when the child fails (filter with `.filter(Boolean)`). Other opts: `label` (display), `phase` (progress group), independent `provider`/`model` LLM target overrides (either may be provided alone), `persona` (per-child persona shadowing the deployment persona), `toolFilter` (`{ allow?, deny? }` arrays of tool names scoping the child's tools; both require in-process provider support and fail loudly otherwise), and `profile` (a preset id whose node profile supplies default `persona`/`toolFilter` — an explicit `persona`/`toolFilter` overrides the profile field by field; resolving a profile requires the agent-presets roster and fails loudly otherwise). Anything else (`effort`/`isolation`/`agentType`) is rejected loudly.
 - `pipeline(items, ...stages): Promise<any[]>` — run each item through the stages independently with NO barrier between stages (prefer this for multi-stage work). Each stage receives `(prev, item, index)`. An ordinary stage throw drops that ITEM to `null` and skips its remaining stages.
 - `parallel(thunks): Promise<any[]>` — run zero-argument functions concurrently and await ALL of them (a barrier; use only when a stage genuinely needs every prior result together). A throwing thunk resolves to `null`.
 - `phase(title)` — start a progress phase; `log(message)` — narrate progress; `args` — the tool call's `args` input, verbatim.

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A2UI Canvas 拖拽演示</title>
+    <style>
+      /* DSW 设计 token 的最小回退，让独立演示页面也保持可读配色。 */
+      :root {
+        --dsw-alias-bg-module-platform: #ffffff;
+        --dsw-alias-bg-module: #ffffff;
+        --dsw-alias-label-primary: #1f2329;
+        --dsw-alias-label-secondary: #4e5969;
+        --dsw-alias-label-tertiary: #86909c;
+        --dsw-alias-border-l2: #e5e6eb;
+        --dsw-alias-state-business-primary: #4f6ef7;
+        --dsw-alias-state-business-tertiary: #e8f1ff;
+        --dsw-alias-state-success-primary: #00b42a;
+        --dsw-alias-state-success-tertiary: #e8ffea;
+        --dsw-alias-state-error-primary: #f53f3f;
+        --dsw-alias-interactive-bg-hover: #f2f3f5;
+        --dsw-alias-interactive-bg-hover-accent: rgba(79, 110, 247, 0.1);
+        --dsw-specific-input-major: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: #f2f3f5;
+      }
+
+      .tip {
+        max-width: 980px;
+        margin: 24px auto 12px;
+        color: var(--dsw-alias-label-secondary);
+        font-size: 13px;
+        line-height: 20px;
+      }
+
+      #app {
+        max-width: 980px;
+        margin: 0 auto 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="tip">
+      拖动线段中部的圆点即可弯曲连线、绕开节点；也可以拖动节点、或把一条线的端点拖到另一个端口来重连。
+      其中的「直通」连线在初始状态正好穿过「构建镜像」节点，试着把它拖开看看。
+    </p>
+    <div id="app"></div>
+    <script type="module" src="/demo.tsx"></script>
+  </body>
+</html>

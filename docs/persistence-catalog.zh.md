@@ -96,6 +96,27 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ## 事件
 
+### `a2ui/*`
+
+<a id="a2uisurface--log-only"></a>
+
+#### `a2ui/surface` — log-only
+
+```ts persistence-catalog
+/**
+ * Opens, or with an explicit `surfaceId` replaces, one model-authored A2UI
+ * surface: a declarative page the web UI renders as an interactive form or
+ * a draggable node canvas. Each open appends a fresh record keyed by
+ * `surfaceId`; the latest page for an id wins on replay. The user's later
+ * submission reaches the model as an ordinary `user/message`, so this
+ * record stays log-only.
+ * @param data - stable surface identity and the page definition.
+ */
+'a2ui/surface': A2uiSurfaceData
+```
+
+来源：[`packages/web/tool-a2ui-surface/src/types.ts:113`](../packages/web/tool-a2ui-surface/src/types.ts)
+
 ### `agent/*`
 
 <a id="agentinboxspliced--log-only"></a>
@@ -886,7 +907,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/code-dispatch': PtcDispatchEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:64`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -909,7 +930,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/code-dispatch-start': PtcDispatchStartEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:48`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

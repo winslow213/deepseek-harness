@@ -1,0 +1,312 @@
+.root {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.title {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.description,
+.instruction {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  font-weight: 510;
+  line-height: 20px;
+}
+
+.required {
+  flex: none;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+  font-weight: 510;
+  line-height: 16px;
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.checkboxRow input {
+  margin: 3px 0 0;
+}
+
+.help {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.canvas {
+  box-sizing: border-box;
+  height: 360px;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-specific-input-major);
+}
+
+.canvasNode {
+  box-sizing: border-box;
+  min-width: 120px;
+  max-width: 200px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 14%);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.canvasNodePlain {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  border: 1px solid var(--dsw-alias-border-l2);
+}
+
+.canvasNodeStart {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-label-primary);
+  border: 1px solid var(--dsw-alias-state-business-primary);
+}
+
+.canvasNodeEnd {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-label-primary);
+  border: 1px solid var(--dsw-alias-state-success-primary);
+}
+
+.canvasNodeSelected {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.canvasNodeLabel {
+  font-weight: 510;
+}
+
+.canvasNodeDetail {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.canvasHandle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--dsw-alias-bg-module-platform);
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+/* Double-click editing: the in-card inputs replace the static text. */
+.canvasNodeInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  line-height: 18px;
+}
+
+.canvasNodeInput:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.canvasNodeLabelInput {
+  font-size: 13px;
+  font-weight: 510;
+}
+
+.canvasNodeDetailInput {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  resize: vertical;
+}
+
+/*
+ * React Flow ships a hardcoded light theme (light-gray edges, white edge-label
+ * chips, white control buttons) that never switches to its `.dark` variant.
+ * Remap its CSS variables onto the DSW design tokens so the canvas chrome —
+ * edges, arrows, edge labels, controls, dot grid, and selection box — all
+ * follow the live light/dark theme like the rest of the panel.
+ */
+.canvas :global(.react-flow) {
+  --xy-edge-stroke-default: var(--dsw-alias-label-tertiary);
+  --xy-edge-stroke-width-default: 1.5;
+  --xy-edge-stroke-selected-default: var(--dsw-alias-state-business-primary);
+  --xy-connectionline-stroke-default: var(--dsw-alias-state-business-primary);
+  --xy-background-pattern-dots-color-default: var(--dsw-alias-border-l2);
+  --xy-edge-label-background-color-default: var(--dsw-alias-bg-module-platform);
+  --xy-edge-label-color-default: var(--dsw-alias-label-secondary);
+  --xy-controls-button-background-color-default: var(--dsw-alias-bg-module-platform);
+  --xy-controls-button-background-color-hover-default: var(--dsw-alias-interactive-bg-hover);
+  --xy-controls-button-color-default: var(--dsw-alias-label-secondary);
+  --xy-controls-button-color-hover-default: var(--dsw-alias-label-primary);
+  --xy-controls-button-border-color-default: var(--dsw-alias-border-l2);
+  --xy-controls-box-shadow-default: 0 1px 4px rgb(0 0 0 / 14%);
+  --xy-selection-background-color-default: var(--dsw-alias-interactive-bg-hover-accent);
+  --xy-selection-border-default: 1px dotted var(--dsw-alias-state-business-primary);
+}
+
+/* The updating edge stroke is a bare `#777` in the shipped stylesheet. */
+.canvas :global(.react-flow__edge.updating .react-flow__edge-path) {
+  stroke: var(--dsw-alias-label-tertiary);
+}
+
+/* The attribution chip ships on a translucent white pill. */
+.canvas :global(.react-flow__attribution) {
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+/*
+ * Edges are reconnectable: hovering or selecting one thickens the line so it
+ * reads as pullable. The pull anchors themselves already carry a move cursor.
+ */
+.canvas :global(.react-flow__edge:hover .react-flow__edge-path),
+.canvas :global(.react-flow__edge.selected .react-flow__edge-path) {
+  stroke-width: 2.5;
+}
+
+/*
+ * Bendable edges: the drag knob sits at the apex of the line, catches on a
+ * transparent hit disc larger than the stroke, and grows while it is dragged.
+ */
+.canvasEdgeBend {
+  pointer-events: all;
+  cursor: move;
+}
+
+.canvasEdgeBendHit {
+  fill: transparent;
+}
+
+.canvasEdgeBendDot {
+  fill: var(--dsw-alias-state-business-primary);
+  stroke: var(--dsw-alias-bg-module-platform);
+  stroke-width: 2px;
+}
+
+/*
+ * The edge label chip floats on the line at the apex. It doubles as the
+ * rename target, so it signals the double-click affordance and stays legible
+ * over the stroke; the edit input replaces it in place while typing. Both are
+ * taken out of flow so the `translate(control)` positions them from the
+ * renderer's origin instead of stacking on each other below the line.
+ */
+.canvasEdgeLabel {
+  position: absolute;
+  box-sizing: border-box;
+  max-width: 160px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-module-platform);
+  box-shadow: 0 0 0 1px var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.canvasEdgeLabelInput {
+  position: absolute;
+  box-sizing: border-box;
+  min-width: 100px;
+  padding: 2px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.canvasEdgeLabelInput:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}

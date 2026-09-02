@@ -94,6 +94,27 @@ Sources: [`packages/core/session/src/types.ts:366`](../packages/core/session/src
 
 ## Events
 
+### `a2ui/*`
+
+<a id="a2uisurface--log-only"></a>
+
+#### `a2ui/surface` — log-only
+
+```ts persistence-catalog
+/**
+ * Opens, or with an explicit `surfaceId` replaces, one model-authored A2UI
+ * surface: a declarative page the web UI renders as an interactive form or
+ * a draggable node canvas. Each open appends a fresh record keyed by
+ * `surfaceId`; the latest page for an id wins on replay. The user's later
+ * submission reaches the model as an ordinary `user/message`, so this
+ * record stays log-only.
+ * @param data - stable surface identity and the page definition.
+ */
+'a2ui/surface': A2uiSurfaceData
+```
+
+Source: [`packages/web/tool-a2ui-surface/src/types.ts:113`](../packages/web/tool-a2ui-surface/src/types.ts)
+
 ### `agent/*`
 
 <a id="agentinboxspliced--log-only"></a>
@@ -884,7 +905,7 @@ Source: [`packages/core/session/src/types.ts:306`](../packages/core/session/src/
 'tool/code-dispatch': PtcDispatchEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:64`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -907,7 +928,7 @@ Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types
 'tool/code-dispatch-start': PtcDispatchStartEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:48`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 
