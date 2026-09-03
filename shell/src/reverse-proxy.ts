@@ -64,8 +64,17 @@ function proxyUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, upstre
     path: req.url ?? '/',
     headers: req.headers,
   })
-  forward.on('upgrade', (_upstreamRes, upstreamSocket, upstreamHead) => {
-    socket.write('HTTP/1.1 101 Switching Protocols\r\n')
+  forward.on('upgrade', (upstreamRes, upstreamSocket, upstreamHead) => {
+    // Forward the upstream 101 handshake verbatim so the browser receives the
+    // upstream's Sec-WebSocket-Accept. Skip hop-by-hop headers Node already
+    // manages (connection/upgrade would repeat on the downstream side).
+    socket.write(`HTTP/1.1 ${String(upstreamRes.statusCode ?? 101)} Switching Protocols\r\n`)
+    for (const [key, value] of Object.entries(upstreamRes.headers)) {
+      if (value === undefined) continue
+      const lower = key.toLowerCase()
+      if (lower === 'connection' || lower === 'upgrade' || lower === 'transfer-encoding') continue
+      socket.write(`${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}\r\n`)
+    }
     socket.write('Upgrade: websocket\r\n')
     socket.write('Connection: Upgrade\r\n')
     socket.write('\r\n')
