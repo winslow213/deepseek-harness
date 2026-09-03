@@ -1,4 +1,4 @@
-import type { ChatNode } from './chat-nodes.ts'
+import type { ChatConversationViewNode, ChatNode } from './chat-nodes.ts'
 
 /** Current process range and finalized answer boundary derived from one Turn. */
 export interface TurnProcessSpec {
@@ -31,6 +31,19 @@ const TURN_PROCESS_INDEPENDENT_KIND_LIST = [
 export const TURN_PROCESS_INDEPENDENT_KINDS: ReadonlySet<string> = new Set(
   TURN_PROCESS_INDEPENDENT_KIND_LIST,
 )
+
+/**
+ * Whether a Chat node stays independent of its Turn's process disclosure.
+ * A node is independent either when its kind is one of the built-in
+ * transcript rows (user/steering/turn controls) or when its business
+ * Definition flagged the node `turnProcessIndependent` — the per-node opt-out
+ * for durable mid-turn surfaces contributed by other modules.
+ * @param node - the Chat node to classify.
+ * @returns whether process folding must never hide it.
+ */
+export function isTurnProcessIndependent(node: ChatConversationViewNode): boolean {
+  return node.turnProcessIndependent === true || TURN_PROCESS_INDEPENDENT_KINDS.has(node.kind)
+}
 
 /**
  * Compare immutable Turn-process specifications by their published fields.

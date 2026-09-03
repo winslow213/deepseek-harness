@@ -10,6 +10,15 @@ export interface ChatConversationViewNode extends ConversationViewNode {
   readonly anchorSeq: number
   readonly location: ConversationLocation
   readonly visibility: 'visible' | 'hidden'
+  /**
+   * True for a durable surface the business Definition opens mid-turn that
+   * must stay visible as an independent transcript row — an interactive page,
+   * a long-running run view — rather than being folded into the turn's
+   * process disclosure when the turn closes under a compact transcript.
+   * Kind-agnostic so any Chat business module can opt its nodes out of
+   * process folding without ui-chat knowing the kind.
+   */
+  readonly turnProcessIndependent?: boolean
 }
 
 /** Merge-extensible payload registry keyed by final Chat renderer kind. */

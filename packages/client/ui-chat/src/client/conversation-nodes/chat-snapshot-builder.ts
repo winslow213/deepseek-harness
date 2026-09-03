@@ -11,7 +11,7 @@ import type {
   ChatTurnNavigationIndex, ChatTurnProcessPresentation, ConversationNode, LegacyConversationSlice,
   PartialAssistant, RunningToolCall, TurnNavigationItem,
 } from '../contract/snapshot.ts'
-import { TURN_PROCESS_INDEPENDENT_KINDS } from '../contract/turn-process.ts'
+import { isTurnProcessIndependent } from '../contract/turn-process.ts'
 import { sessionRecallLabels } from './event-projection.ts'
 import { sameTurnNavigationItem, turnNavigationItem } from './turn-navigation.ts'
 import { ChatTurnProcessProjector } from './turn-process-presentation.ts'
@@ -345,7 +345,7 @@ function turnProcessPresentations(
       })
       continue
     }
-    if (TURN_PROCESS_INDEPENDENT_KINDS.has(node.kind)) continue
+    if (isTurnProcessIndependent(node)) continue
     presentations.set(location.turn.turn, {
       ...current,
       earliestProcessAnchor: Math.min(current.earliestProcessAnchor ?? node.anchorSeq, node.anchorSeq),
@@ -376,7 +376,7 @@ function presentationPosition(
   const openingHumanAnchor = presentation.openingHumanAnchor
   if (openingHumanAnchor !== undefined
     && node.anchorSeq < openingHumanAnchor
-    && !TURN_PROCESS_INDEPENDENT_KINDS.has(node.kind)) {
+    && !isTurnProcessIndependent(node)) {
     return { anchor: openingHumanAnchor, rank: 2, originalAnchor: node.anchorSeq }
   }
   if (presentation.control !== undefined && node.key === presentation.control.key) {

@@ -65,6 +65,10 @@ export const a2uiSurfaceDefinition: ConversationNodeDefinition<A2uiSurfaceData> 
       anchorSeq: context.start.event.seq,
       location: context.start.location,
       visibility: 'visible',
+      // The page is a durable mid-turn surface the user returns to after the
+      // turn closes; keep it visible as an independent transcript row instead
+      // of folding it into the turn's process disclosure.
+      turnProcessIndependent: true,
       data: {
         seq: context.start.event.seq,
         surfaceId: context.state.surfaceId,
