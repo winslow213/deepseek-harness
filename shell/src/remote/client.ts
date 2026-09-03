@@ -8,7 +8,7 @@
  * @module dsh-team-shell/remote-client
  */
 
-import type { AgentRecord } from './hub.ts'
+import type { AgentRecord, MountRecord } from './hub.ts'
 
 export interface ExecSpec {
   user: string
@@ -46,6 +46,13 @@ export async function listAgents(hubBase: string): Promise<AgentRecord[]> {
   const res = await fetch(`${hubControlBase(hubBase)}/api/agents`)
   if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
   return (await res.json()) as AgentRecord[]
+}
+
+/** List mountable regions (GET /api/mounts). */
+export async function listMounts(hubBase: string): Promise<MountRecord[]> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/mounts`)
+  if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
+  return (await res.json()) as MountRecord[]
 }
 
 /** Parse an NDJSON body into frames; rejects on HTTP errors. */

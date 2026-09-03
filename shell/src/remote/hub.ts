@@ -31,6 +31,8 @@ export interface HubOptions {
   controlHost?: string
   /** Map of user id to the agent token issued for that user. */
   tokens: ReadonlyMap<string, string>
+  /** Root directory under which mount shadow directories live (default `/var/lib/dsh-mounts`). */
+  shadowRoot?: string
   /** Interval between hub heartbeat pings to each agent. */
   heartbeatMs?: number
   /** Lifetime of an unconsumed pairing code in milliseconds. */
@@ -71,6 +73,38 @@ export interface AgentRecord {
   lastSeen: number
 }
 
+/**
+ * One mountable region from a connected agent: the agent's served root,
+ * addressable server-side under a real shadow directory. Workspaces reference
+ * the shadow path (so dsh's realpath/stat checks pass); a RegionRouter maps
+ * shadow-path accesses back to the agent's hub user and real root. Shadow
+ * directories are created lazily when the user adds the mount as a workspace
+ * and removed when it is unloaded; the mapping itself lives only in hub
+ * memory (no mapping file).
+ */
+export interface MountRecord {
+  /** Agent serving this root. */
+  agentId: string
+  /** Hub user whose agent owns the root. */
+  user: string
+  /** The real root path on the agent host (e.g. `D:\workspace`). */
+  root: string
+  /** Real shadow directory on the server for this root (e.g. `/var/lib/dsh-mounts/alice/wh1`). */
+  shadowPath: string
+}
+
+/**
+ * Build the server-side shadow directory path for one agent root. The shadow
+ * path is a real absolute directory under the configured shadow root that dsh
+ * treats as a normal workspace path; a RegionRouter translates accesses under
+ * it to the agent's served root.
+ */
+export function shadowPathFor(user: string, agentId: string, root: string, ordinal: number, shadowRoot: string): string {
+  const agentSegment = agentId.replace(/[^\w@.-]/g, '_')
+  const rootSegment = ordinal === 0 ? '' : `/root${ordinal}`
+  return `${shadowRoot.replace(/\/+$/, '')}/${user}/${agentSegment}${rootSegment}`
+}
+
 interface AgentConn extends AgentRecord {
   socket: Socket
 }
@@ -85,6 +119,8 @@ export interface TeamHub {
   controlPort: number
   /** Snapshot of connected agents, newest first. */
   agents(): AgentRecord[]
+  /** Mountable region view: every online agent's roots mapped under a virtual server prefix. */
+  mounts(): MountRecord[]
   /** Pending (unconsumed) pairing codes, newest first. */
   pairings(): PendingPairing[]
   /** Stop both listeners and terminate every agent channel. */
@@ -239,6 +275,7 @@ export function createHub(options: HubOptions): TeamHub {
   const heartbeatMs = options.heartbeatMs ?? 15_000
   const pairingTtlMs = options.pairingTtlMs ?? 10 * 60 * 1000
   const onPaired = options.onPaired
+  const shadowRoot = options.shadowRoot ?? '/var/lib/dsh-mounts'
 
   const agentServer = createNetServer((socket) => {
     socket.setKeepAlive(true, 30_000)
@@ -316,6 +353,11 @@ export function createHub(options: HubOptions): TeamHub {
     if (url.pathname === '/api/pairings' && (req.method ?? 'GET') === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify(pairingList(), null, 2))
+      return
+    }
+    if (url.pathname === '/api/mounts' && (req.method ?? 'GET') === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(mounts(), null, 2))
       return
     }
     if (req.method !== 'POST') {
@@ -472,6 +514,22 @@ export function createHub(options: HubOptions): TeamHub {
       .sort((a, b) => b.connectedAt - a.connectedAt)
   }
 
+  function mounts(): MountRecord[] {
+    const result: MountRecord[] = []
+    for (const agent of byAgentId.values()) {
+      agent.roots.forEach((root, ordinal) => {
+        const shadowPath = shadowPathFor(agent.user, agent.agentId, root, ordinal, shadowRoot)
+        result.push({
+          agentId: agent.agentId,
+          user: agent.user,
+          root,
+          shadowPath,
+        })
+      })
+    }
+    return result.sort((a, b) => a.shadowPath.localeCompare(b.shadowPath))
+  }
+
   function pairingList(): PendingPairing[] {
     return [...pairings.values()].sort((a, b) => b.createdAt - a.createdAt)
   }
@@ -483,6 +541,7 @@ export function createHub(options: HubOptions): TeamHub {
     agentPort: options.agentPort,
     controlPort: options.controlPort,
     agents,
+    mounts,
     pairings: pairingList,
     close: () => new Promise<void>((resolveClose) => {
       clearInterval(heartbeat)

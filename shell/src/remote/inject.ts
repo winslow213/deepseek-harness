@@ -27,6 +27,14 @@ export const PROFILE_PATCH_FILENAME = 'cordis.patch.yml'
 /** Runtime modules copied into the profile plugins directory. */
 export const REMOTE_RUNTIME_FILES = ['executor.ts', 'fs-provider.ts', 'client.ts'] as const
 
+/** Runtime modules copied for the region-router (dual-region) assembly. */
+export const REGION_RUNTIME_FILES = [
+  'region-assemble.ts',
+  'region-router.ts',
+  'shadow.ts',
+  'client.ts',
+] as const
+
 /** Profile plugin directory holding the copied remote provider runtime. */
 export function pluginsDirFor(profileDir: string): string {
   return join(profileDir, 'plugins', 'remote')
@@ -175,4 +183,69 @@ export function removeRemoteProviders(profileDir: string): boolean {
 /** Back-compat alias for {@link removeRemoteProviders}. */
 export function removeRemoteShell(profileDir: string): boolean {
   return removeRemoteProviders(profileDir)
+}
+
+/**
+ * Render a region-router assembly patch: disable the shipped fs-sandbox row
+ * (the router replaces it as host ctx.fs and reloads the local delegate into
+ * an isolated realm) and insert the region-assemble row.
+ */
+export function regionAssemblePatchYaml(config: {
+  hubUrl: string
+  shadowRoot?: string
+  assembleFileUrl: string
+  fsCwd?: string
+}): string {
+  const lines = [
+    '# Injected by the team shell (region router): one ctx.fs serving both the',
+    '# local server disk and every paired agent\'s mounted root under the shadow tree.',
+    '# The local sandboxed filesystem is disabled here and re-loaded inside an',
+    '# isolated realm by region-assemble; the router registers as the host ctx.fs.',
+    '# Delete this file to fall back to the local providers.',
+    '- id: fs-sandbox',
+    '  disabled: true',
+    '- insert:',
+    '    - id: region-assemble',
+    `      name: ${JSON.stringify(config.assembleFileUrl)}`,
+    '      config:',
+    `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
+    `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+    ...config.fsCwd === undefined ? [] : [
+      '        localFs:',
+      `          cwd: ${JSON.stringify(config.fsCwd)}`,
+    ],
+    '',
+  ]
+  return lines.join('\n')
+}
+
+export interface InjectRegionAssembleOptions {
+  /** Directory of the provider runtime sources to copy (`shell/src/remote`). */
+  runtimeSourceDir: string
+  /** Hub control API base the router forwards mounted operations to. */
+  hubUrl: string
+  /** Root holding every mount's shadow directory. */
+  shadowRoot?: string
+  /** Local working directory for relative local fs operations. */
+  fsCwd?: string
+  /** Profile directory to patch (`<DSH_HOME>/profiles/web`). */
+  profileDir: string
+}
+
+/** Copy the region-router runtime and write the assembly patch into a profile. */
+export function injectRegionAssemble(options: InjectRegionAssembleOptions): string {
+  const pluginsDir = pluginsDirFor(options.profileDir)
+  mkdirSync(pluginsDir, { recursive: true })
+  for (const file of REGION_RUNTIME_FILES) {
+    cpSync(join(options.runtimeSourceDir, file), join(pluginsDir, file), { force: true })
+  }
+  const assembleFileUrl = pathToFileURL(join(pluginsDir, 'region-assemble.ts')).href
+  const patch = join(options.profileDir, PROFILE_PATCH_FILENAME)
+  writeFileSync(patch, regionAssemblePatchYaml({
+    hubUrl: options.hubUrl,
+    shadowRoot: options.shadowRoot,
+    assembleFileUrl,
+    fsCwd: options.fsCwd,
+  }))
+  return patch
 }

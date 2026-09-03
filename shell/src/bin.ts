@@ -9,7 +9,7 @@ import { startProxy } from './reverse-proxy.ts'
 import { join } from 'node:path'
 import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
-import { listAgents, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
+import { listAgents, listMounts, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
 import { injectRemoteProviders, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
 
 const [, , command, ...args] = process.argv
@@ -76,6 +76,9 @@ async function main(): Promise<void> {
         case 'agents':
           await remoteAgents(rest)
           break
+        case 'mounts':
+          await remoteMounts(rest)
+          break
         case 'exec':
           await remoteExec(rest)
           break
@@ -91,10 +94,11 @@ async function main(): Promise<void> {
         default:
           console.error(
             [
-              'usage: dsh-shell remote <hub|agent|agents|exec|cat|pair|inject> ...',
+              'usage: dsh-shell remote <hub|agent|agents|mounts|exec|cat|pair|inject> ...',
               '  hub      start the hub  (see remote hub --help)',
               '  agent    start an agent  (see remote agent --help)',
               '  agents   list connected agents',
+              '  mounts   list mountable agent roots under /dsh-mount',
               '  exec     run a command through a user\'s agent',
               '  cat      stream a file through a user\'s agent',
               '  pair     mint a one-time pairing code for a user (and optionally wait)',
@@ -155,7 +159,7 @@ async function remoteHub(args: readonly string[]): Promise<void> {
   const { flags, positionals } = parseFlags(args)
   if (flags.get('help') === 'true') {
     console.error(
-      'usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N] [--no-auto-inject]',
+      'usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N] [--shadow-root DIR] [--no-auto-inject]',
     )
     process.exit(0)
   }
@@ -165,6 +169,7 @@ async function remoteHub(args: readonly string[]): Promise<void> {
   }
   const agentPort = intFlag(flags, 'agent-port', 'DSH_HUB_AGENT_PORT', 7101)
   const control = controlPort(flags)
+  const shadowRoot = flags.get('shadow-root')
   const autoInject = flags.get('no-auto-inject') !== 'true'
   const tokens = new Map<string, string>()
   const pairs = flags.get('user-token')
@@ -179,7 +184,7 @@ async function remoteHub(args: readonly string[]): Promise<void> {
     }
   }
   if (tokens.size === 0) {
-    console.error('usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N]')
+    console.error('usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N] [--shadow-root DIR]')
     process.exit(1)
   }
 
@@ -221,7 +226,13 @@ async function remoteHub(args: readonly string[]): Promise<void> {
       }
     }
     : undefined
-  const hub = createHub({ agentPort, controlPort: control, tokens, onPaired })
+  const hub = createHub({
+    agentPort,
+    controlPort: control,
+    tokens,
+    onPaired,
+    ...shadowRoot === undefined ? {} : { shadowRoot },
+  })
   console.log(`hub agent listener on 0.0.0.0:${String(agentPort)}`)
   console.log(`hub control API on http://127.0.0.1:${String(control)}`)
   console.log(autoInject ? 'auto-inject: on (paired agents get remote providers injected)' : 'auto-inject: off')
@@ -245,6 +256,17 @@ async function remoteAgents(args: readonly string[]): Promise<void> {
   }
   const agents = await listAgents(loopbackControlBase(controlPort(flags)))
   console.log(JSON.stringify(agents, null, 2))
+}
+
+async function remoteMounts(args: readonly string[]): Promise<void> {
+  const { flags, positionals } = parseFlags(args)
+  checkHelp(flags)
+  if (positionals.length > 0) {
+    console.error(`unexpected positional ${positionals[0]}`)
+    process.exit(1)
+  }
+  const mounts = await listMounts(loopbackControlBase(controlPort(flags)))
+  console.log(JSON.stringify(mounts, null, 2))
 }
 
 /** Print a hub result frame; returns true when the exchange ended in an error. */

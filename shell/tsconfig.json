@@ -25,6 +25,8 @@
     // shell build excludes them.
     "src/remote/executor.ts",
     "src/remote/fs-provider.ts",
+    "src/remote/region-router.ts",
+    "src/remote/region-assemble.ts",
     "tests",
     "node_modules",
     "lib"

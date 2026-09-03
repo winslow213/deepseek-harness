@@ -28,6 +28,8 @@
   "include": [
     "src/remote/executor.ts",
     "src/remote/fs-provider.ts",
+    "src/remote/region-router.ts",
+    "src/remote/region-assemble.ts",
     "src/remote/client.ts"
   ]
 }

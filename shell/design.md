@@ -288,3 +288,83 @@ stat/readText/listDir/write(带 before/版本守卫)/edit(字面匹配)/stale
 5. **账号层**：用户注册/登录、DSH_HOME 分配、token 管理
 6. **生命周期**：健康检查、崩溃重启、空闲回收、任务式 spawn
 7. **多机路由**：调度层抽象，单机验证后加 worker 注册
+
+### 7.8 形态 A：单实例双后端（workspace 分本地/挂载区）
+
+需求：**同一个**用户 dsh web 实例里，"工作区"分两类可自由选择——本地区
+（本机授权目录）与挂载区（配对 agent 提供的根）。探索确认 upstream 无法在
+同一 realm 注册两个 `ctx.fs`/`ctx.shell`，dsh 的既有模式是
+`sandboxPolicy.resolve({ session })`（单一服务按会话参数路由）。据此定案：
+
+**架构：单一 RegionRouter provider + 虚拟挂载前缀**
+
+```
+用户 dsh 实例（一个进程、一份 profile）
+  ctx.fs  = RegionRouterFileSystem（单一 provider）
+    ├─ ctx.isolate('fs', local)   → 本地 delegate（原 fs-sandbox）
+    ├─ ctx.isolate('fs', remote)  → RemoteFileSystem（经 hub 到配对机）
+    └─ resolve(path,{cwd}) 见 cwd 前缀分派：
+         /dsh-mount/<user>/<agent>/…  → 剥离前缀 → 远端 agent root
+         其余绝对路径                   → 本地 delegate
+  ctx.shell = RegionRouterShellExecutor（同构；虚拟前缀 → 远端 bash，
+              本地路径 → 本地 bash-sandbox）
+```
+
+- **工作区 = 一个路径根**（不变 upstream 模型）：本地区 workspace 路径是真实
+  服务器目录；挂载区 workspace 路径是 `/dsh-mount/<user>/<agent>/` 虚拟前缀
+  下的一个目录（内容由远端 agent 提供）。`session.header.cwd` 仍是绝对路径，
+  校验与工具层解析全部照旧。
+- **工具层零改动**：read/write/edit/bash 解析相对路径的基准仍是
+  `session.header.cwd`，经 `ctx.fs`/`ctx.shell` 单点进入 router。
+- **本地只授权目录**：本地区目录仍由既有 `directory-picker` 原生/浏览门禁
+  限定；router 不新增本地放行。
+- **挂载区 = 配对即现**：配对 agent 的 `roots` 以虚拟前缀注册进 router
+  （user→agent→roots→hub 路由表），UI 挂载区即可刷出选中。
+- **路由表来源**：hub 的 agent 在线表 + 每 agent 的虚拟前缀映射，经一个
+  loopback host 插件暴露给实例。
+
+关键决策：virtual 前缀而非 session 存"远端 id"，使 session header cwd 仍是
+纯字符串绝对路径，`workspace.json`、session-log、快照等不下游改动；远端身份
+经前缀推导。风险与校验点：目录观察（fs-observation）、session 标题/快照把
+虚拟路径当真实路径处理——行为与本地一致因为它们只操作字符串。
+
+落地分层（每层独立可验证）：
+1. RegionRouterFileSystem/Shell：isolate 双 delegate + 前缀分派（host 侧单测）
+2. 挂载前缀路由表：hub agents → /dsh-mount/<user>/<agent> 映射（shell 侧）
+3. profile 装配：注入 patch 用 RegionRouter 替换 fs-sandbox/remote-fs 两行
+4. UI：WorkspacePicker/Browser 加挂载区列表（client 侧，slots 组合）
+5. 配对完成后 UI 自动出现该 agent 挂载区
+
+## 8. 验证状态
+
+### 7.9 形态 A 落定：影子目录桥（方向 2）
+
+探索证实 dsh 的 workspace/session 深度绑定真实文件系统：`workspaceRegistry.create`
+realpath+stat 目录、session 挂载与启动索引同样校验，虚拟前缀 `/dsh-mount/...`
+无法注册成 workspace（ENOENT 拒绝）。定案改走**影子目录桥**：
+
+```
+配对 agent 上线 → hub 建真实影子目录 /srv/dsh-mounts/<user>/<agent>/<ordinal>/
+                     （每个 agent root 一个空目录；workspace 可 realpath/stat）
+UI 工作区 = 影子路径（dsh 无感知：存在、可 stat、可绑定 session）
+工具调用 (fs/bash) → RegionRouter
+  ├─ cwd 命中 /srv/dsh-mounts/<user>/<agent>/<ordinal>/ 前缀
+  │     → 翻译：影子相对路径 + 映射的 agent root → hub fs:op / exec
+  └─ 其它 → 本地 delegate（原 fs-sandbox / bash-sandbox）
+```
+
+- 影子目录本身内容为空壳；RegionRouter 拦截所有对它的访问并转发远端，
+  因此 UI 目录浏览/搜索看到的是远端真实内容（经 router 翻译）。
+- 路由表 = hub 的 mounts（user→agent→roots→影子路径），agent 离线则该
+  影子目录对 router 返回"agent 离线"错误。
+- workspace/session/快照零改动；新增 shell/ 层 RegionRouter + 影子目录
+  provision，装配仍走 profile inject。
+
+落地：
+1. shadow 目录 provision + hub mounts 端点（已加 /api/mounts）
+2. RegionRouterFileSystem（影子前缀→hub fs:op）
+3. RegionRouterShellExecutor（影子 cwd→hub exec）
+4. profile 装配 + 双 delegate
+5. UI 挂载分区（picker/browser 第二来源）
+
+## 8. 验证状态
