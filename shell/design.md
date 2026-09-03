@@ -227,24 +227,42 @@ TLS 长连接（中心主动连代理）或代理主动上报（代理在 NAT �
 远程执行落地后，每用户实例的配置（settings）仍然建议走路线 A 放开，
 因为实例只服务单一用户，受信列表放开风险可控。
 
+### 7.7 当前实现（`shell/src/remote/`）
+
+方向 B 已按原型落地，组件与分工：
+
+| 文件 | 角色 |
+|---|---|
+| `protocol.ts` | 中心 ↔ 代理 wire：持久 TCP + 每行一个 JSON 帧（hello/ack、ping/pong、exec、fs:read、stream、exit） |
+| `hub.ts` | 代理拨号接入（`net` 监听 + token 鉴权 + 心跳 + 重复连接驱逐）+ loopback HTTP 控制 API（`/api/agents`、`/api/exec`、`/api/fs-read`，NDJSON 流式回传） |
+| `agent.ts` | 部署在用户 Linux 的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝、`fs:read` realpath 越界拒绝 |
+| `client.ts` | 控制端：CLI 与未来 dsh executor 共用 |
+
+验证通过：cat/exec 探针、命令白名单拒绝、绝对路径与 `..` 逃逸拒绝、
+`fs:read` 越界拒绝、错误 token 拒绝、hub 重启后代理自动拨回重连。
+
+未做：TLS（当前明文 TCP，仅限内网/可信网络）、`exec` 的会话式
+`ShellProcess`（start/reads/kill）、代理侧命令黑名单（现用白名单）、
+dsh 实例内 executor/fs provider 注入（§7.5 的下一步）。
+
 ## 8. 验证状态
 
 - [x] 最小 spawn 原型：给定用户名 spawn 隔离 dsh web 实例 + 捕获 token URL
 - [x] 独立 DSH_HOME 自动初始化完整（credentials/profiles/storages）
 - [x] 无 watcher 崩溃（patchReload: startup）
 - [x] 反代整链路（HTTP 页面/assets/plugins/鉴权，WebSocket 待真机验证）
-- [ ] 路线 A：受信 host 放开 settings（改 dsh 判定）
-- [ ] remote-agent 原型：单命令远程执行（中心 → 代理 bash -c）
+- [x] 路线 A：受信 host 放开 settings（trustedHosts 注入浏览器特权面）
+- [x] remote 桥：hub + 代理拨号 + exec/fs:read 流式回传 + 白名单/越界拒绝 + 断线重连
+- [ ] dsh executor 注入：per-user 实例的 shell/fs 能力替换为经 hub 的远程提供方
 - [ ] 账号层
-- [ ] 黑白名单权限管控
 - [ ] 空闲回收/健康检查
 - [ ] 多机路由
 
 ## 9. 后续里程碑
 
 1. **路线 A settings 放开**：受信 host 也允许 settings 读写（跨包改造）
-2. **remote-agent 最小原型**：中心 shell executor → 代理 bash -c → 流式回传
-   （验证 ShellExecutor 远程实现的可行性）
+2. **dsh executor 注入**：把 per-user 实例的 shell executor / fs provider 换成
+   经 hub 控制 API 的远程实现（hub/agent 侧已验证，见 §7.7）
 3. **远程 fs**：文件读/写/搜索经代理
 4. **黑白名单**：命令/路径策略中心下发 + 代理强制
 5. **账号层**：用户注册/登录、DSH_HOME 分配、token 管理
