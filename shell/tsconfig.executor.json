@@ -1,0 +1,32 @@
+{
+  // Type-check the remote executor against the repo's source graphs. The
+  // executor runs INSIDE a dsh instance, so it imports @deepseek-ai/dsh-shell
+  // and @deepseek-ai/cordis through the repo aliases here, not through the
+  // shell/ standalone build (shell/ is deliberately outside the workspace).
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "types": ["node"],
+    // The repo base strict flags are too strict for vendored cordis SOURCE,
+    // which compiles under its own relaxed tsconfig (project references keep
+    // the shipped packages strict). Relaxing the same flags here lets the
+    // executor typecheck against vendor/dsh-shell source directly.
+    "noImplicitAny": false,
+    "noImplicitThis": false,
+    "strictFunctionTypes": false,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noImplicitOverride": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/remote/executor.ts",
+    "src/remote/client.ts"
+  ]
+}

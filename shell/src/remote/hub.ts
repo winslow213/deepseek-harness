@@ -263,7 +263,11 @@ export function createHub(options: HubOptions): TeamHub {
     }
 
     let frame: RequestFrame | undefined
-    const id = randomUUID()
+    // Clients that must kill an exec provide their own id so they can address
+    // it before any output frame returns (a silent command's first frame is
+    // its exit). The executor supplies a uuid; CLI callers let the hub default.
+    const bodyId = (body as { id?: unknown }).id
+    const id = typeof bodyId === 'string' && bodyId !== '' ? bodyId : randomUUID()
     if (url.pathname === '/api/exec') {
       const s = body as { argv?: unknown; cwd?: unknown; timeoutMs?: unknown }
       if (!Array.isArray(s.argv) || s.argv.length === 0 || s.argv.some((a) => typeof a !== 'string')) {
@@ -278,6 +282,14 @@ export function createHub(options: HubOptions): TeamHub {
         ...(typeof s.cwd === 'string' ? { cwd: s.cwd } : {}),
         ...(typeof s.timeoutMs === 'number' ? { timeoutMs: s.timeoutMs } : {}),
       }
+    } else if (url.pathname === '/api/kill') {
+      const s = body as { id?: unknown }
+      if (typeof s.id !== 'string') {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'expected string field "id"' }))
+        return
+      }
+      frame = { type: 'kill', id: s.id }
     } else if (url.pathname === '/api/fs-read') {
       const s = body as { path?: unknown; maxBytes?: unknown }
       if (typeof s.path !== 'string') {
@@ -301,6 +313,14 @@ export function createHub(options: HubOptions): TeamHub {
     if (conn === undefined || conn.socket.destroyed) {
       res.writeHead(503, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ error: `agent offline for user ${user}` }))
+      return
+    }
+    // Kill is fire-and-forget: forward it and answer immediately. The agent
+    // ends the matching exec's own NDJSON response when the process dies.
+    if (frame.type === 'kill') {
+      if (!conn.socket.destroyed) conn.socket.write(encodeFrame(frame))
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
       return
     }
     res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' })

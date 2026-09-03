@@ -45,15 +45,40 @@ node --import tsx/esm shell/src/bin.ts remote exec --control-port 7100 alice git
 agent 是本桥的**最后防线**：只执行白名单命令、只读/写 `--root` 内的目录
 （绝对路径与 `..` 逃逸都拒绝），即使中心被攻破也无法越界。
 
+### 让用户的 dsh 实例用远程执行（inject）
+
+把 per-user 实例的 bash 能力指向其主机上的 agent：
+
+```sh
+# 把远程 executor 拷进 <DSH_HOME>/profiles/web/plugins/remote 并写 patch
+# （disable 本地 sandbox executor、插入 remote-shell 行）
+node --import tsx/esm shell/src/bin.ts remote inject \
+  --home /srv/dsh-users/alice --hub http://127.0.0.1:7100 \
+  --user alice --cwd /home/alice/code \
+  --sandbox-mode workspace-write   # 声明 agent root 的权限意图（默认 workspace-write）
+
+# agent 侧必须允许 bash 才能执行任意 shell 命令
+node --import tsx/esm shell/src/bin.ts remote agent \
+  --user alice --token SECRET_A --hub 10.33.2.56:7101 \
+  --root /home/alice/code --allow-command bash --allow-command cat
+```
+
+之后该用户实例的模型 `bash` 工具调用会经 hub 落到其主机上执行
+（`resolve`/`run`/后台 `start`、超时与 kill 语义等同本地）。
+删除 `cordis.patch.yml` 即回退本地 executor。
+
 ## 开发
 
 ```sh
-# 类型检查（复用仓库根已装的 typescript/tsx）
+# 独立 shell 编译/类型检查（不含 executor.ts，它在 dsh 运行时内解析依赖）
 npx tsc -p shell/tsconfig.json --noEmit
+# executor.ts 在仓库源图下检查（引 @deepseek-ai/dsh-shell）
+npx tsc -p shell/tsconfig.executor.json --noEmit
 ```
 
 ## 状态
 
-最小 spawn 原型、反代聚合、路线 A settings 放开与 remote 桥原型
-（hub + agent 拨号 + exec/fs:read + 白名单/断线重连）已验证；dsh executor
-注入、账号层、生命周期管理见 [design.md](design.md) 里程碑。
+最小 spawn 原型、反代聚合、路线 A settings 放开、remote 桥原型与
+**dsh executor 注入**（远程 ShellExecutor 装配进 per-user dsh 实例，
+前台/超时/后台全语义验证）已完成；远程 fs provider、账号层、生命周期
+管理见 [design.md](design.md) 里程碑。

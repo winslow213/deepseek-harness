@@ -19,5 +19,13 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["tests", "node_modules", "lib"]
+  "exclude": [
+    // executor.ts imports @deepseek-ai/dsh-shell, which only resolves inside a
+    // dsh runtime (see tsconfig.executor.json); the standalone shell build
+    // excludes it.
+    "src/remote/executor.ts",
+    "tests",
+    "node_modules",
+    "lib"
+  ]
 }

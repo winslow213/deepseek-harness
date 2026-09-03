@@ -5,9 +5,11 @@
 
 import { spawnUserInstance } from './spawn-user.ts'
 import { startProxy } from './reverse-proxy.ts'
+import { join } from 'node:path'
 import { createHub, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
-import { listAgents, runExec, runFsRead, type ResultFrame } from './remote/client.ts'
+import { listAgents, loopbackControlBase, runExec, runFsRead, type ResultFrame } from './remote/client.ts'
+import { injectRemoteShell } from './remote/inject.ts'
 
 const [, , command, ...args] = process.argv
 
@@ -79,15 +81,19 @@ async function main(): Promise<void> {
         case 'cat':
           await remoteCat(rest)
           break
+        case 'inject':
+          await remoteInject(rest)
+          break
         default:
           console.error(
             [
-              'usage: dsh-shell remote <hub|agent|agents|exec|cat> ...',
-              '  hub     start the hub  (see remote hub --help)',
-              '  agent   start an agent  (see remote agent --help)',
-              '  agents  list connected agents',
-              '  exec    run a command through a user\'s agent',
-              '  cat     stream a file through a user\'s agent',
+              'usage: dsh-shell remote <hub|agent|agents|exec|cat|inject> ...',
+              '  hub      start the hub  (see remote hub --help)',
+              '  agent    start an agent  (see remote agent --help)',
+              '  agents   list connected agents',
+              '  exec     run a command through a user\'s agent',
+              '  cat      stream a file through a user\'s agent',
+              '  inject   point a per-user profile\'s shell at the remote executor',
             ].join('\n'),
           )
           process.exit(1)
@@ -189,7 +195,7 @@ async function remoteAgents(args: readonly string[]): Promise<void> {
     console.error(`unexpected positional ${positionals[0]}`)
     process.exit(1)
   }
-  const agents = await listAgents(controlPort(flags))
+  const agents = await listAgents(loopbackControlBase(controlPort(flags)))
   console.log(JSON.stringify(agents, null, 2))
 }
 
@@ -217,7 +223,7 @@ async function remoteExec(args: readonly string[]): Promise<void> {
   let exitCode: number | null = null
   let failed = false
   try {
-    await runExec(controlPort(flags), { user, argv }, (frame) => {
+    await runExec(loopbackControlBase(controlPort(flags)), { user, argv }, (frame) => {
       if (frame.type === 'request-error') failed = true
       if (frame.type === 'exit') exitCode = frame.code
       framePrinter(process.stdout, process.stderr)(frame)
@@ -240,7 +246,7 @@ async function remoteCat(args: readonly string[]): Promise<void> {
   }
   let failed = false
   try {
-    await runFsRead(controlPort(flags), { user, path }, (frame) => {
+    await runFsRead(loopbackControlBase(controlPort(flags)), { user, path }, (frame) => {
       if (frame.type === 'request-error') failed = true
       framePrinter(process.stdout, process.stderr)(frame)
     })
@@ -249,6 +255,40 @@ async function remoteCat(args: readonly string[]): Promise<void> {
     process.exit(1)
   }
   if (failed) process.exitCode = 1
+}
+
+/** Point a per-user profile's shell executor at the remote bridge. */
+async function remoteInject(args: readonly string[]): Promise<void> {
+  const { flags, positionals } = parseFlags(args)
+  if (flags.get('help') === 'true') {
+    console.error(
+      'usage: dsh-shell remote inject --home <dsh-home> --hub <url> --user <u> --cwd <remote-dir> [--sandbox-mode <mode>]',
+    )
+    process.exit(0)
+  }
+  const home = flags.get('home')
+  const hub = flags.get('hub')
+  const user = flags.get('user')
+  const cwd = flags.get('cwd')
+  if (home === undefined || hub === undefined || user === undefined || cwd === undefined) {
+    console.error('remote inject requires --home <dsh-home> --hub <url> --user <u> --cwd <remote-dir>')
+    process.exit(1)
+  }
+  if (positionals.length > 0) {
+    console.error(`unexpected positional ${positionals[0]}`)
+    process.exit(1)
+  }
+  const modeFlag = flags.get('sandbox-mode')
+  const sandboxMode = modeFlag === undefined
+    ? undefined
+    : modeFlag === 'read-only' || modeFlag === 'workspace-write' || modeFlag === 'danger-full-access'
+      ? modeFlag
+      : (console.error(`invalid --sandbox-mode ${JSON.stringify(modeFlag)}; expected read-only|workspace-write|danger-full-access`), process.exit(1), undefined)
+  const profileDir = join(home, 'profiles', 'web')
+  const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
+  const written = injectRemoteShell({ runtimeSourceDir, hubUrl: hub, user, cwd, profileDir, sandboxMode })
+  console.log(`injected remote shell for user ${user} into ${written}`)
+  console.log(`runtime modules: ${join(profileDir, 'plugins', 'remote')}`)
 }
 
 void main().catch((error: unknown) => {

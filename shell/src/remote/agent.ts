@@ -19,7 +19,7 @@
  */
 
 import { connect, type Socket } from 'node:net'
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path'
 import { hostname } from 'node:os'
@@ -30,6 +30,7 @@ import {
   type AgentOutFrame,
   type ExecRequest,
   type FsReadRequest,
+  type KillRequest,
 } from './protocol.ts'
 
 export interface AgentOptions {
@@ -121,7 +122,19 @@ interface Session {
   readonly opts: AgentOptions
   readonly realRoots: string[]
   readonly commands: ReadonlySet<string>
+  /** In-flight exec children keyed by request id (kill targets). */
+  readonly active: Map<string, ChildProcess>
   authed: boolean
+}
+
+/** SIGKILL a detached process group, ignoring an already-gone process. */
+function killProcessGroup(child: ChildProcess): void {
+  if (child.pid === undefined) return
+  try {
+    process.kill(-child.pid, 'SIGKILL')
+  } catch {
+    /* already gone */
+  }
 }
 
 /** True when `absPath` equals or lives under one of the real roots. */
@@ -173,8 +186,16 @@ async function resolveUnderRoot(absPath: string, realRoots: readonly string[]): 
  * the file access path the dsh fs tools use.
  */
 function findUnsafePathArg(cwdReal: string, tokens: readonly string[], realRoots: readonly string[]): string | undefined {
-  for (const token of tokens) {
-    if (token === '-') continue
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]
+    if (token === undefined || token === '-') continue
+    // A shell `-c` body is the command itself (arbitrary script text), not a
+    // path argument. The agent's command allowlist is the gate for shells:
+    // allowlisting `bash` deliberately grants arbitrary remote execution.
+    if (token === '-c') {
+      i += 1
+      continue
+    }
     const looksLikePath = token === '..' || token === '.' || token.includes('/') || token.includes('\\') || isAbsolute(token)
     if (!looksLikePath) continue
     const candidate = normalize(isAbsolute(token) ? token : join(cwdReal, token))
@@ -223,12 +244,11 @@ async function runExec(session: Session, req: ExecRequest): Promise<void> {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  session.active.set(req.id, child)
   const timer = req.timeoutMs === undefined
     ? undefined
     : setTimeout(() => {
-      if (child.pid !== undefined) {
-        try { process.kill(-child.pid, 'SIGKILL') } catch { /* already gone */ }
-      }
+      killProcessGroup(child)
     }, req.timeoutMs)
   child.stdout?.on('data', (data: Buffer) => {
     send({ type: 'stream', id: req.id, channel: 'stdout', data: data.toString('utf8') })
@@ -238,9 +258,17 @@ async function runExec(session: Session, req: ExecRequest): Promise<void> {
   })
   child.on('error', (error: Error) => { fail(`spawn failed: ${error.message}`) })
   child.on('close', (code, signal) => {
+    session.active.delete(req.id)
     if (timer !== undefined) clearTimeout(timer)
     send({ type: 'exit', id: req.id, code, signal })
   })
+}
+
+/** Kill one in-flight exec's process group (no-op when the id is unknown). */
+function killExec(session: Session, req: KillRequest): void {
+  const child = session.active.get(req.id)
+  if (child === undefined) return
+  killProcessGroup(child)
 }
 
 /** Stream the content of a file under an allowed root (the `cat` primitive). */
@@ -290,6 +318,9 @@ function handleFrame(session: Session, frame: unknown): void {
     case 'exec':
       void runExec(session, frame as ExecRequest)
       break
+    case 'kill':
+      killExec(session, frame as KillRequest)
+      break
     case 'fs:read':
       void runFsRead(session, frame as FsReadRequest)
       break
@@ -302,7 +333,7 @@ function handleFrame(session: Session, frame: unknown): void {
 function connectOnce(opts: AgentOptions, realRoots: string[], commands: ReadonlySet<string>): Promise<void> {
   return new Promise((done) => {
     const socket = connect({ host: opts.hubHost, port: opts.hubPort })
-    const session: Session = { socket, opts, realRoots, commands, authed: false }
+    const session: Session = { socket, opts, realRoots, commands, active: new Map(), authed: false }
     const send = (out: AgentOutFrame) => { sendFrame(socket, out) }
 
     socket.on('connect', () => {

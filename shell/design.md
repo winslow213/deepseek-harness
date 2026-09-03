@@ -233,17 +233,24 @@ TLS 长连接（中心主动连代理）或代理主动上报（代理在 NAT �
 
 | 文件 | 角色 |
 |---|---|
-| `protocol.ts` | 中心 ↔ 代理 wire：持久 TCP + 每行一个 JSON 帧（hello/ack、ping/pong、exec、fs:read、stream、exit） |
-| `hub.ts` | 代理拨号接入（`net` 监听 + token 鉴权 + 心跳 + 重复连接驱逐）+ loopback HTTP 控制 API（`/api/agents`、`/api/exec`、`/api/fs-read`，NDJSON 流式回传） |
-| `agent.ts` | 部署在用户 Linux 的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝、`fs:read` realpath 越界拒绝 |
-| `client.ts` | 控制端：CLI 与未来 dsh executor 共用 |
+| `protocol.ts` | 中心 ↔ 代理 wire：持久 TCP + 每行一个 JSON 帧（hello/ack、ping/pong、exec/kill、fs:read、stream、exit） |
+| `hub.ts` | 代理拨号接入（`net` 监听 + token 鉴权 + 心跳 + 重复连接驱逐）+ loopback HTTP 控制 API（`/api/agents`、`/api/exec`、`/api/kill`、`/api/fs-read`，NDJSON 流式回传；exec 接受客户端自带 id 以便静默命令仍可 kill） |
+| `agent.ts` | 部署在用户 Linux 的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝（shell `-c` 脚本体豁免）、`fs:read` realpath 越界拒绝、进程组 kill |
+| `executor.ts` | **远程 ShellExecutor**（实现 `ctx.shell` seam）：resolve 默认/封顶，run 把 `bash -c` 发到 hub 并流式回填 `CollectedOutput`，超时/abort 经 `/api/kill` SIGKILL 进程组并分类 `timedOut/aborted`，start 维持后台进程的增量读/kill/done |
+| `client.ts` | 控制端：CLI 与 executor 共用 |
+| `inject.ts` | 把 executor 源码副本拷进用户 profile 的 `plugins/remote`，写 `cordis.patch.yml`：disable 本地 sandbox executor、插入远程行（`sandboxMode` 声明 agent root 的权限意图） |
+
+执行模型：executor 以 `bash -c <command>` 作为唯一 exec 原语，故 agent 必须
+`--allow-command bash` 才能执行任意 shell 命令 —— 白名单 bash 即授权任意
+命令，与"bash 工具 = 本机全权"的语义一致；如需收紧用路径/命令细分白名单。
 
 验证通过：cat/exec 探针、命令白名单拒绝、绝对路径与 `..` 逃逸拒绝、
-`fs:read` 越界拒绝、错误 token 拒绝、hub 重启后代理自动拨回重连。
+`fs:read` 越界拒绝、错误 token 拒绝、hub 重启后代理自动拨回重连、exec
+静默命令经客户端自带 id kill、**真实 dsh web 实例装配远程 executor 启动**、
+executor run 超时（SIGKILL/timedOut 分类）与后台 start（增量读/done）。
 
-未做：TLS（当前明文 TCP，仅限内网/可信网络）、`exec` 的会话式
-`ShellProcess`（start/reads/kill）、代理侧命令黑名单（现用白名单）、
-dsh 实例内 executor/fs provider 注入（§7.5 的下一步）。
+未做：TLS（当前明文 TCP，仅限内网/可信网络）、远程 fs provider
+（fs 工具仍走本地；§7.5 的一半）、代理侧命令黑名单（现用白名单）。
 
 ## 8. 验证状态
 
@@ -253,7 +260,9 @@ dsh 实例内 executor/fs provider 注入（§7.5 的下一步）。
 - [x] 反代整链路（HTTP 页面/assets/plugins/鉴权，WebSocket 待真机验证）
 - [x] 路线 A：受信 host 放开 settings（trustedHosts 注入浏览器特权面）
 - [x] remote 桥：hub + 代理拨号 + exec/fs:read 流式回传 + 白名单/越界拒绝 + 断线重连
-- [ ] dsh executor 注入：per-user 实例的 shell/fs 能力替换为经 hub 的远程提供方
+- [x] dsh executor 注入：远程 ShellExecutor 装配进 per-user dsh web 实例
+  （run 前台/超时/后台 start 全语义验证）
+- [ ] 远程 fs provider：fs 工具经 hub 落到用户主机（fs:read 已有，写/搜待补）
 - [ ] 账号层
 - [ ] 空闲回收/健康检查
 - [ ] 多机路由

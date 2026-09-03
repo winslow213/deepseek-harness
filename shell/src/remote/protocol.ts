@@ -56,6 +56,12 @@ export interface ExecRequest {
   timeoutMs?: number
 }
 
+/** Kill an in-flight `exec`'s process group (agent no-ops for unknown ids). */
+export interface KillRequest {
+  type: 'kill'
+  id: string
+}
+
 /** Stream the content of one file (the `cat` primitive) to the hub. */
 export interface FsReadRequest {
   type: 'fs:read'
@@ -66,7 +72,7 @@ export interface FsReadRequest {
   maxBytes?: number
 }
 
-export type RequestFrame = ExecRequest | FsReadRequest
+export type RequestFrame = ExecRequest | KillRequest | FsReadRequest
 
 export interface StreamFrame {
   type: 'stream'

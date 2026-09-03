@@ -29,13 +29,21 @@ export type ResultFrame =
   | { type: 'exit'; code: number | null; signal: string | null }
   | { type: 'request-error'; message: string }
 
-function controlBase(controlPort: number): string {
-  return `http://127.0.0.1:${String(controlPort)}`
+/** Normalize a hub control base URL (trailing slash removed, validated). */
+export function hubControlBase(hubBase: string): string {
+  const base = hubBase.replace(/\/+$/, '')
+  if (!/^https?:\/\/./.test(base)) throw new Error(`invalid hub base URL: ${JSON.stringify(hubBase)}`)
+  return base
+}
+
+/** The loopback control base for a port (CLI default). */
+export function loopbackControlBase(controlPort: number): string {
+  return hubControlBase(`http://127.0.0.1:${String(controlPort)}`)
 }
 
 /** List connected agents (GET /api/agents). */
-export async function listAgents(controlPort: number): Promise<AgentRecord[]> {
-  const res = await fetch(`${controlBase(controlPort)}/api/agents`)
+export async function listAgents(hubBase: string): Promise<AgentRecord[]> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/agents`)
   if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
   return (await res.json()) as AgentRecord[]
 }
@@ -65,8 +73,8 @@ export async function readFrames(res: Response, onFrame: (frame: ResultFrame) =>
 }
 
 /** Run an `exec` request; `onFrame` receives every NDJSON frame. */
-export async function runExec(controlPort: number, spec: ExecSpec, onFrame: (frame: ResultFrame) => void): Promise<void> {
-  const res = await fetch(`${controlBase(controlPort)}/api/exec`, {
+export async function runExec(hubBase: string, spec: ExecSpec, onFrame: (frame: ResultFrame) => void): Promise<void> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/exec`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ user: spec.user, argv: spec.argv, cwd: spec.cwd, timeoutMs: spec.timeoutMs }),
@@ -74,9 +82,19 @@ export async function runExec(controlPort: number, spec: ExecSpec, onFrame: (fra
   await readFrames(res, onFrame)
 }
 
+/** Ask the agent to kill an in-flight exec by request id (fire-and-forget). */
+export async function runKill(hubBase: string, user: string, id: string): Promise<void> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/kill`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ user, id }),
+  })
+  if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
+}
+
 /** Stream a file via the agent's `fs:read` primitive (the `cat` probe). */
-export async function runFsRead(controlPort: number, spec: FsReadSpec, onFrame: (frame: ResultFrame) => void): Promise<void> {
-  const res = await fetch(`${controlBase(controlPort)}/api/fs-read`, {
+export async function runFsRead(hubBase: string, spec: FsReadSpec, onFrame: (frame: ResultFrame) => void): Promise<void> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/fs-read`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ user: spec.user, path: spec.path, maxBytes: spec.maxBytes }),
