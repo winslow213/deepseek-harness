@@ -3,13 +3,14 @@
  * @module dsh-team-shell/bin
  */
 
-import { spawnUserInstance } from './spawn-user.ts'
+import { readFileSync } from 'node:fs'
+import { spawnUserInstance, userHome } from './spawn-user.ts'
 import { startProxy } from './reverse-proxy.ts'
 import { join } from 'node:path'
-import { createHub, type TeamHub } from './remote/hub.ts'
+import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
-import { listAgents, loopbackControlBase, runExec, runFsRead, type ResultFrame } from './remote/client.ts'
-import { injectRemoteShell } from './remote/inject.ts'
+import { listAgents, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
+import { injectRemoteShell, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
 
 const [, , command, ...args] = process.argv
 
@@ -81,18 +82,22 @@ async function main(): Promise<void> {
         case 'cat':
           await remoteCat(rest)
           break
+        case 'pair':
+          await remotePair(rest)
+          break
         case 'inject':
           await remoteInject(rest)
           break
         default:
           console.error(
             [
-              'usage: dsh-shell remote <hub|agent|agents|exec|cat|inject> ...',
+              'usage: dsh-shell remote <hub|agent|agents|exec|cat|pair|inject> ...',
               '  hub      start the hub  (see remote hub --help)',
               '  agent    start an agent  (see remote agent --help)',
               '  agents   list connected agents',
               '  exec     run a command through a user\'s agent',
               '  cat      stream a file through a user\'s agent',
+              '  pair     mint a one-time pairing code for a user (and optionally wait)',
               '  inject   point a per-user profile\'s shell at the remote executor',
             ].join('\n'),
           )
@@ -149,7 +154,9 @@ function checkHelp(flags: Map<string, string>): void {
 async function remoteHub(args: readonly string[]): Promise<void> {
   const { flags, positionals } = parseFlags(args)
   if (flags.get('help') === 'true') {
-    console.error('usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N]')
+    console.error(
+      'usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N] [--no-auto-inject]',
+    )
     process.exit(0)
   }
   if (positionals.length > 0) {
@@ -158,6 +165,7 @@ async function remoteHub(args: readonly string[]): Promise<void> {
   }
   const agentPort = intFlag(flags, 'agent-port', 'DSH_HUB_AGENT_PORT', 7101)
   const control = controlPort(flags)
+  const autoInject = flags.get('no-auto-inject') !== 'true'
   const tokens = new Map<string, string>()
   const pairs = flags.get('user-token')
   if (pairs !== undefined) {
@@ -174,9 +182,47 @@ async function remoteHub(args: readonly string[]): Promise<void> {
     console.error('usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N]')
     process.exit(1)
   }
-  const hub = createHub({ agentPort, controlPort: control, tokens })
+
+  const onPaired = autoInject
+    ? (pairing: ConsumedPairing): void => {
+      // On a completed pairing, provision the user's profile with the remote
+      // executor. The injected cwd defaults to the agent's first served root.
+      // An existing non-generated patch file is left untouched (loud, not silent).
+      try {
+        const profileDir = join(userHome(pairing.user), 'profiles', 'web')
+        const patch = join(profileDir, PROFILE_PATCH_FILENAME)
+        let isOurs = false
+        let exists = false
+        try {
+          const text = readFileSync(patch, 'utf8')
+          exists = true
+          isOurs = text.includes('Injected by the team shell')
+        } catch {
+          exists = false
+        }
+        if (exists && !isOurs) {
+          console.error(`[hub] not auto-injecting ${pairing.user}: ${patch} exists and is not a generated patch; edit it manually`)
+          return
+        }
+        const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
+        const cwd = pairing.agent.roots[0] ?? pairing.user
+        const written = injectRemoteShell({
+          runtimeSourceDir,
+          hubUrl: loopbackControlBase(control),
+          user: pairing.user,
+          cwd,
+          profileDir,
+        })
+        console.log(`[hub] auto-injected remote executor for ${pairing.user} -> ${written} (cwd ${cwd})`)
+      } catch (error) {
+        console.error(`[hub] auto-inject failed for ${pairing.user}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    : undefined
+  const hub = createHub({ agentPort, controlPort: control, tokens, onPaired })
   console.log(`hub agent listener on 0.0.0.0:${String(agentPort)}`)
   console.log(`hub control API on http://127.0.0.1:${String(control)}`)
+  console.log(autoInject ? 'auto-inject: on (paired agents get remote providers injected)' : 'auto-inject: off')
   process.on('SIGINT', () => { void hub.close().then(() => process.exit(0)) })
   await keepAlive(hub)
 }
@@ -255,6 +301,44 @@ async function remoteCat(args: readonly string[]): Promise<void> {
     process.exit(1)
   }
   if (failed) process.exitCode = 1
+}
+
+/** Mint a one-time pairing code; with --wait, poll until the user's agent registers. */
+async function remotePair(args: readonly string[]): Promise<void> {
+  const { flags, positionals } = parseFlags(args)
+  checkHelp(flags)
+  const user = flags.get('user')
+  const secret = flags.get('secret')
+  if (user === undefined || secret === undefined) {
+    console.error('usage: dsh-shell remote pair --user <u> --secret <agent-token> [--control-port N] [--wait]')
+    process.exit(1)
+  }
+  if (positionals.length > 0) {
+    console.error(`unexpected positional ${positionals[0]}`)
+    process.exit(1)
+  }
+  const base = loopbackControlBase(controlPort(flags))
+  const pairing = await createPairing(base, user, secret)
+  const ttlMin = Math.round(pairing.ttlMs / 60_000)
+  console.log(`PAIRING UUID: ${pairing.uuid}`)
+  console.log(`user=${pairing.user} ttl=${String(ttlMin)}min`)
+  console.log(`on the target host run: dsh-shell remote agent --pair ${pairing.uuid} --hub <hub:${String(intFlag(flags, 'agent-port', 'DSH_HUB_AGENT_PORT', 7101))}> --root <dir> [--allow-command bash ...]`)
+  if (flags.get('wait') === 'true') {
+    const deadline = Date.now() + pairing.ttlMs
+    process.stdout.write('waiting for agent...')
+    for (;;) {
+      if (Date.now() > deadline) {
+        console.log('\nTIMEOUT: no agent claimed the pairing code before expiry')
+        process.exit(1)
+      }
+      const agents = await listAgents(base)
+      if (agents.some((a) => a.user === user)) {
+        console.log(`\nagent online for ${user}`)
+        break
+      }
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
 }
 
 /** Point a per-user profile's shell executor at the remote bridge. */

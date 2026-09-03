@@ -35,6 +35,8 @@ import {
 
 export interface AgentOptions {
   readonly user: string
+  /** One-time pairing code; when present the agent omits user/token in hello. */
+  readonly pairUuid: string
   readonly agentId: string
   readonly hubHost: string
   readonly hubPort: number
@@ -47,13 +49,15 @@ export interface AgentOptions {
 function usage(): never {
   console.error(
     [
-      'usage: remote-agent --user <user> --token <secret> --hub <host:port>',
+      'usage: remote-agent (--user <user> --token <secret> | --pair <code>) --hub <host:port>',
       '       [--name <agent-id>] [--root <dir>]... [--allow-command <cmd>]...',
       '',
+      '  --pair             one-time pairing code minted on the hub page/API; the',
+      '                     hub binds this agent to the code\'s user (no --user/--token)',
       '  --user             user id this agent represents (must match a hub token)',
       '  --token            secret the hub issued for this user',
       '  --hub              hub host:port the agent dials (outbound only)',
-      '  --name             agent id; defaults to <user>@<hostname>',
+      '  --name             agent id; defaults to <user>@<hostname> (pairing: pairing@<hostname>)',
       '  --root             real directory the agent may serve; repeatable, required',
       '  --allow-command    command basename exec may run; repeatable (empty = deny all exec)',
     ].join('\n'),
@@ -88,6 +92,7 @@ export function parseArgs(argv: readonly string[]): AgentOptions {
   }
   const user = typeof opts.user === 'string' ? opts.user : ''
   const token = typeof opts.token === 'string' ? opts.token : ''
+  const pairUuid = typeof opts.pair === 'string' ? opts.pair : ''
   const hub = typeof opts.hub === 'string' ? opts.hub : ''
   const hubSplit = hub.split(':')
   const hubPort = Number(hubSplit[hubSplit.length - 1])
@@ -97,12 +102,15 @@ export function parseArgs(argv: readonly string[]): AgentOptions {
     ? opts.allowCommand
     : opts.allowCommand === undefined ? [] : [opts.allowCommand]) as string[]
   const name = typeof opts.name === 'string' ? opts.name : ''
-  if (user === '' || token === '' || hubHost === '' || Number.isNaN(hubPort) || roots.length === 0) {
-    usage()
-  }
+  const pairing = pairUuid !== ''
+  const valid = pairing
+    ? hubHost !== '' && !Number.isNaN(hubPort) && roots.length > 0
+    : user !== '' && token !== '' && hubHost !== '' && !Number.isNaN(hubPort) && roots.length > 0
+  if (!valid) usage()
   return {
     user,
-    agentId: name === '' ? `${user}@${hostname()}` : name,
+    pairUuid,
+    agentId: name === '' ? `${pairing ? 'pairing' : user}@${hostname()}` : name,
     hubHost,
     hubPort,
     token,
@@ -341,8 +349,9 @@ function connectOnce(opts: AgentOptions, realRoots: string[], commands: Readonly
       send({
         type: 'hello',
         agentId: opts.agentId,
-        user: opts.user,
-        token: opts.token,
+        ...opts.pairUuid !== ''
+          ? { pairUuid: opts.pairUuid }
+          : { user: opts.user, token: opts.token },
         roots: realRoots,
         commands: [...commands],
       })

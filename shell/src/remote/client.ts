@@ -101,3 +101,19 @@ export async function runFsRead(hubBase: string, spec: FsReadSpec, onFrame: (fra
   })
   await readFrames(res, onFrame)
 }
+
+/** Mint a one-time pairing code for a user (proves the user's agent secret). */
+export async function createPairing(hubBase: string, user: string, secret: string): Promise<{
+  uuid: string
+  user: string
+  expiresAt: number
+  ttlMs: number
+}> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/pairings`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ user, secret }),
+  })
+  if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
+  return (await res.json()) as { uuid: string; user: string; expiresAt: number; ttlMs: number }
+}

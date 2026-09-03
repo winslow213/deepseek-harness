@@ -17,8 +17,11 @@ export const MAX_FRAME_BYTES = 1 << 20
 export interface HelloFrame {
   type: 'hello'
   agentId: string
-  user: string
-  token: string
+  /** Token mode: the hub looks up `user` and compares `token`. */
+  user?: string
+  token?: string
+  /** Pairing mode: the hub looks up a one-time pairing code bound to a user. */
+  pairUuid?: string
   /** Real directories the agent serves, advertised for diagnostics and early hub rejection. */
   roots: string[]
   /** Command basenames the agent will execute, advertised for diagnostics. */

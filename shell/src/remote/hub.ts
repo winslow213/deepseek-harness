@@ -33,6 +33,31 @@ export interface HubOptions {
   tokens: ReadonlyMap<string, string>
   /** Interval between hub heartbeat pings to each agent. */
   heartbeatMs?: number
+  /** Lifetime of an unconsumed pairing code in milliseconds. */
+  pairingTtlMs?: number
+  /**
+   * Fired when an agent completes a pairing handshake and registers. The hub
+   * deletes the code and binds the agent to the pairing's user before calling
+   * this; the caller (typically the shell CLI) may then auto-inject the
+   * remote providers into that user's profile.
+   */
+  onPaired?: (pairing: ConsumedPairing) => void
+}
+
+/** A pairing code awaiting an agent. */
+export interface PendingPairing {
+  uuid: string
+  user: string
+  createdAt: number
+  expiresAt: number
+}
+
+/** The pairing record handed to `onPaired` once an agent consumes a code. */
+export interface ConsumedPairing {
+  uuid: string
+  user: string
+  /** Agent details registered for the user after the pairing handshake. */
+  agent: AgentRecord
 }
 
 /** Public view of a connected agent (no socket). */
@@ -60,6 +85,8 @@ export interface TeamHub {
   controlPort: number
   /** Snapshot of connected agents, newest first. */
   agents(): AgentRecord[]
+  /** Pending (unconsumed) pairing codes, newest first. */
+  pairings(): PendingPairing[]
   /** Stop both listeners and terminate every agent channel. */
   close(): Promise<void>
 }
@@ -96,11 +123,18 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   })
 }
 
-/** Validate and authenticate an agent `hello`, registering it on success. */
+/**
+ * Validate and authenticate an agent `hello`, registering it on success.
+ * Two auth modes: token mode (`user`+`token` against the static table) and
+ * pairing mode (`pairUuid` against the one-time code table). A consumed
+ * pairing code is deleted and `onPaired` fired with the bound user.
+ */
 function authenticate(
   byUser: Map<string, AgentConn>,
   byAgentId: Map<string, AgentConn>,
   tokens: ReadonlyMap<string, string>,
+  pairings: Map<string, PendingPairing>,
+  onPaired: ((pairing: ConsumedPairing) => void) | undefined,
   socket: Socket,
   frame: unknown,
 ): AgentConn | null {
@@ -113,21 +147,56 @@ function authenticate(
     return null
   }
   const hello = frame as Partial<HelloFrame>
-  if (hello.type !== 'hello' || typeof hello.user !== 'string' || typeof hello.agentId !== 'string' || typeof hello.token !== 'string') {
+  if (hello.type !== 'hello' || typeof hello.agentId !== 'string' || !Array.isArray(hello.roots)) {
     sendError('malformed hello')
     socket.destroy()
     return null
   }
-  const expected = tokens.get(hello.user)
-  if (expected === undefined || expected !== hello.token) {
-    sendError('authentication failed')
+
+  let user: string | undefined
+  if (typeof hello.pairUuid === 'string' && hello.pairUuid !== '') {
+    const pairing = pairings.get(hello.pairUuid)
+    if (pairing === undefined) {
+      sendError('pairing code not found or already used')
+      socket.destroy()
+      return null
+    }
+    if (Date.now() > pairing.expiresAt) {
+      pairings.delete(hello.pairUuid)
+      sendError('pairing code expired')
+      socket.destroy()
+      return null
+    }
+    pairings.delete(hello.pairUuid)
+    user = pairing.user
+    if (onPaired !== undefined) {
+      const record: AgentRecord = {
+        agentId: hello.agentId,
+        user,
+        remote: `${socket.remoteAddress ?? '?'}:${String(socket.remotePort ?? '?')}`,
+        roots: hello.roots ?? [],
+        commands: hello.commands ?? [],
+        connectedAt: Date.now(),
+        lastSeen: Date.now(),
+      }
+      onPaired({ uuid: hello.pairUuid, user, agent: record })
+    }
+  } else if (typeof hello.user === 'string' && typeof hello.token === 'string') {    const expected = tokens.get(hello.user)
+    if (expected === undefined || expected !== hello.token) {
+      sendError('authentication failed')
+      socket.destroy()
+      return null
+    }
+    user = hello.user
+  } else {
+    sendError('hello must carry user+token or a pairing code')
     socket.destroy()
     return null
   }
 
   const conn: AgentConn = {
     agentId: hello.agentId,
-    user: hello.user,
+    user: user as string,
     remote: `${socket.remoteAddress ?? '?'}:${String(socket.remotePort ?? '?')}`,
     roots: hello.roots ?? [],
     commands: hello.commands ?? [],
@@ -165,8 +234,11 @@ function endPending(pending: Map<string, PendingRequest>, conn: AgentConn, frame
 export function createHub(options: HubOptions): TeamHub {
   const byUser = new Map<string, AgentConn>()
   const byAgentId = new Map<string, AgentConn>()
+  const pairings = new Map<string, PendingPairing>()
   const pending = new Map<string, PendingRequest>()
   const heartbeatMs = options.heartbeatMs ?? 15_000
+  const pairingTtlMs = options.pairingTtlMs ?? 10 * 60 * 1000
+  const onPaired = options.onPaired
 
   const agentServer = createNetServer((socket) => {
     socket.setKeepAlive(true, 30_000)
@@ -174,7 +246,7 @@ export function createHub(options: HubOptions): TeamHub {
     const reader = makeLineReader(
       (frame) => {
         if (conn === null) {
-          conn = authenticate(byUser, byAgentId, options.tokens, socket, frame)
+          conn = authenticate(byUser, byAgentId, options.tokens, pairings, onPaired, socket, frame)
           if (conn !== null) {
             console.log(`[hub] agent online user=${conn.user} agent=${conn.agentId} remote=${conn.remote}`)
           }
@@ -220,6 +292,10 @@ export function createHub(options: HubOptions): TeamHub {
 
   const heartbeat = setInterval(() => {
     const now = Date.now()
+    // Drop expired pairing codes alongside the liveness sweep.
+    for (const [uuid, pairing] of pairings) {
+      if (now > pairing.expiresAt) pairings.delete(uuid)
+    }
     for (const conn of byAgentId.values()) {
       if (now - conn.lastSeen > 2 * heartbeatMs) {
         conn.socket.destroy()
@@ -234,6 +310,11 @@ export function createHub(options: HubOptions): TeamHub {
     if (url.pathname === '/api/agents' && (req.method ?? 'GET') === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify(agents(), null, 2))
+      return
+    }
+    if (url.pathname === '/api/pairings' && (req.method ?? 'GET') === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(pairingList(), null, 2))
       return
     }
     if (req.method !== 'POST') {
@@ -255,6 +336,33 @@ export function createHub(options: HubOptions): TeamHub {
       res.end(JSON.stringify({ error: 'empty body' }))
       return
     }
+
+    // Create a one-time pairing code. The requester proves ownership of the
+    // user's agent token (the same secret the agent dials with), so anyone who
+    // can mint a code can already impersonate the user's agent.
+    if (url.pathname === '/api/pairings') {
+      const s = body as { user?: unknown; secret?: unknown }
+      const user = typeof s.user === 'string' ? s.user : ''
+      const secret = typeof s.secret === 'string' ? s.secret : ''
+      const expected = options.tokens.get(user)
+      if (expected === undefined || expected !== secret) {
+        res.writeHead(403, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'user/secret mismatch' }))
+        return
+      }
+      const now = Date.now()
+      const pairing: PendingPairing = {
+        uuid: randomUUID(),
+        user,
+        createdAt: now,
+        expiresAt: now + pairingTtlMs,
+      }
+      pairings.set(pairing.uuid, pairing)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ uuid: pairing.uuid, user, expiresAt: pairing.expiresAt, ttlMs: pairingTtlMs }))
+      return
+    }
+
     const user = (body as { user?: unknown }).user
     if (typeof user !== 'string') {
       res.writeHead(400, { 'content-type': 'application/json' })
@@ -339,6 +447,10 @@ export function createHub(options: HubOptions): TeamHub {
       .sort((a, b) => b.connectedAt - a.connectedAt)
   }
 
+  function pairingList(): PendingPairing[] {
+    return [...pairings.values()].sort((a, b) => b.createdAt - a.createdAt)
+  }
+
   agentServer.listen(options.agentPort, options.agentHost ?? '0.0.0.0')
   controlServer.listen(options.controlPort, options.controlHost ?? '127.0.0.1')
 
@@ -346,8 +458,10 @@ export function createHub(options: HubOptions): TeamHub {
     agentPort: options.agentPort,
     controlPort: options.controlPort,
     agents,
+    pairings: pairingList,
     close: () => new Promise<void>((resolveClose) => {
       clearInterval(heartbeat)
+      pairings.clear()
       for (const conn of byAgentId.values()) conn.socket.destroy()
       byAgentId.clear()
       byUser.clear()
