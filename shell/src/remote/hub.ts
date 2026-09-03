@@ -259,6 +259,7 @@ export function createHub(options: HubOptions): TeamHub {
           case 'stream':
             relayStream(pending, conn, frame as StreamFrame)
             return
+          case 'fs:result':
           case 'exit':
           case 'request-error':
             endPending(pending, conn, frame as { id: string })
@@ -410,6 +411,30 @@ export function createHub(options: HubOptions): TeamHub {
         id,
         path: s.path,
         ...(typeof s.maxBytes === 'number' ? { maxBytes: s.maxBytes } : {}),
+      }
+    } else if (url.pathname === '/api/fs') {
+      // One filesystem primitive: fs:op frames in the agent fs protocol.
+      const s = body as {
+        op?: unknown; path?: unknown; maxBytes?: unknown; content?: unknown
+        expected?: unknown; oldString?: unknown; newString?: unknown; replaceAll?: unknown
+      }
+      const fsOps = ['resolve', 'stat', 'lstat', 'list', 'readText', 'readBytes', 'write', 'edit']
+      if (typeof s.op !== 'string' || !fsOps.includes(s.op)) {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: `expected op in ${fsOps.join('|')}` }))
+        return
+      }
+      frame = {
+        type: 'fs:op',
+        id,
+        op: s.op as 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit' | 'resolve',
+        ...(typeof s.path === 'string' ? { path: s.path } : {}),
+        ...(typeof s.maxBytes === 'number' ? { maxBytes: s.maxBytes } : {}),
+        ...(typeof s.content === 'string' ? { content: s.content } : {}),
+        ...(typeof s.expected === 'object' && s.expected !== null ? { expected: s.expected as { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string } } : {}),
+        ...(typeof s.oldString === 'string' ? { oldString: s.oldString } : {}),
+        ...(typeof s.newString === 'string' ? { newString: s.newString } : {}),
+        ...(typeof s.replaceAll === 'boolean' ? { replaceAll: s.replaceAll } : {}),
       }
     } else {
       res.writeHead(404, { 'content-type': 'text/plain' })

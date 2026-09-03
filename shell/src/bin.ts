@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
 import { listAgents, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
-import { injectRemoteShell, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { injectRemoteProviders, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
 
 const [, , command, ...args] = process.argv
 
@@ -206,14 +206,16 @@ async function remoteHub(args: readonly string[]): Promise<void> {
         }
         const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
         const cwd = pairing.agent.roots[0] ?? pairing.user
-        const written = injectRemoteShell({
+        const written = injectRemoteProviders({
           runtimeSourceDir,
           hubUrl: loopbackControlBase(control),
           user: pairing.user,
-          cwd,
+          shellCwd: cwd,
+          fsCwd: cwd,
           profileDir,
+          includeFs: true,
         })
-        console.log(`[hub] auto-injected remote executor for ${pairing.user} -> ${written} (cwd ${cwd})`)
+        console.log(`[hub] auto-injected remote executor+fs for ${pairing.user} -> ${written} (root ${cwd})`)
       } catch (error) {
         console.error(`[hub] auto-inject failed for ${pairing.user}: ${error instanceof Error ? error.message : String(error)}`)
       }
@@ -341,12 +343,12 @@ async function remotePair(args: readonly string[]): Promise<void> {
   }
 }
 
-/** Point a per-user profile's shell executor at the remote bridge. */
+/** Point a per-user profile's shell (and fs) executor at the remote bridge. */
 async function remoteInject(args: readonly string[]): Promise<void> {
   const { flags, positionals } = parseFlags(args)
   if (flags.get('help') === 'true') {
     console.error(
-      'usage: dsh-shell remote inject --home <dsh-home> --hub <url> --user <u> --cwd <remote-dir> [--sandbox-mode <mode>]',
+      'usage: dsh-shell remote inject --home <dsh-home> --hub <url> --user <u> --cwd <remote-dir> [--no-fs] [--sandbox-mode <mode>]',
     )
     process.exit(0)
   }
@@ -370,8 +372,18 @@ async function remoteInject(args: readonly string[]): Promise<void> {
       : (console.error(`invalid --sandbox-mode ${JSON.stringify(modeFlag)}; expected read-only|workspace-write|danger-full-access`), process.exit(1), undefined)
   const profileDir = join(home, 'profiles', 'web')
   const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
-  const written = injectRemoteShell({ runtimeSourceDir, hubUrl: hub, user, cwd, profileDir, sandboxMode })
-  console.log(`injected remote shell for user ${user} into ${written}`)
+  const includeFs = flags.get('no-fs') !== 'true'
+  const written = injectRemoteProviders({
+    runtimeSourceDir,
+    hubUrl: hub,
+    user,
+    shellCwd: cwd,
+    fsCwd: cwd,
+    profileDir,
+    includeFs,
+    sandboxMode,
+  })
+  console.log(`injected remote ${includeFs ? 'executor+fs' : 'executor'} for user ${user} into ${written}`)
   console.log(`runtime modules: ${join(profileDir, 'plugins', 'remote')}`)
 }
 

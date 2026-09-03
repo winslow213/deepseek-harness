@@ -20,10 +20,11 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": [
-    // executor.ts imports @deepseek-ai/dsh-shell, which only resolves inside a
-    // dsh runtime (see tsconfig.executor.json); the standalone shell build
-    // excludes it.
+    // executor.ts and fs-provider.ts import @deepseek-ai/* packages that only
+    // resolve inside a dsh runtime (see tsconfig.executor.json); the standalone
+    // shell build excludes them.
     "src/remote/executor.ts",
+    "src/remote/fs-provider.ts",
     "tests",
     "node_modules",
     "lib"

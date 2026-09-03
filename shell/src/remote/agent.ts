@@ -25,10 +25,23 @@ import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from 'no
 import { hostname } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import {
+  editRemote,
+  fsError,
+  isRemoteFsError,
+  listRemote,
+  probe,
+  probeNoFollow,
+  readBytes,
+  readText,
+  writeRemote,
+  type RemoteFsError,
+} from './agent-fs.ts'
+import {
   makeLineReader,
   sendFrame,
   type AgentOutFrame,
   type ExecRequest,
+  type FsOpRequest,
   type FsReadRequest,
   type KillRequest,
 } from './protocol.ts'
@@ -306,6 +319,89 @@ async function runFsRead(session: Session, req: FsReadRequest): Promise<void> {
   stream.on('end', () => { send({ type: 'exit', id: req.id, code: 0, signal: null }) })
 }
 
+/** Dispatch one fs:op primitive, resolving the path under the root allowlist. */
+async function runFsOp(session: Session, req: FsOpRequest): Promise<void> {
+  const send = (frame: AgentOutFrame) => { sendFrame(session.socket, frame) }
+  const succeed = (value: unknown) => { send({ type: 'fs:result', id: req.id, value }) }
+  const fail = (message: string, code?: string) => { send({ type: 'request-error', id: req.id, message, code }) }
+  const failError = (error: unknown) => {
+    if (isRemoteFsError(error)) fail(error.message, error.code)
+    else if (error instanceof Error && (error as NodeJS.ErrnoException).code !== undefined) {
+      fail(error.message)
+    } else {
+      fail(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  try {
+    switch (req.op) {
+      case 'resolve': {
+        if (req.path === undefined) { fail('resolve: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        succeed({ displayPath: req.path, targetKey: key })
+        return
+      }
+      case 'stat': {
+        if (req.path === undefined) { fail('stat: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        succeed(await probe(key))
+        return
+      }
+      case 'lstat': {
+        if (req.path === undefined) { fail('lstat: path is required'); return }
+        // Whitelist-check the parent directory (realpath-resolved) but keep the
+        // final component literal so a symlink is reported, not followed.
+        const dirReal = await resolveUnderRoot(dirname(req.path), session.realRoots)
+        succeed(await probeNoFollow(join(dirReal, basename(req.path))))
+        return
+      }
+      case 'list': {
+        if (req.path === undefined) { fail('list: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        succeed(await listRemote(key))
+        return
+      }
+      case 'readText': {
+        if (req.path === undefined) { fail('readText: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        succeed(await readText(key))
+        return
+      }
+      case 'readBytes': {
+        if (req.path === undefined) { fail('readBytes: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        const maxBytes = req.maxBytes ?? 4 * 1024 * 1024
+        const { bytes } = await readBytes(key, maxBytes)
+        succeed({ base64: Buffer.from(bytes).toString('base64') })
+        return
+      }
+      case 'write': {
+        if (req.path === undefined) { fail('write: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        const content = typeof req.content === 'string' ? req.content : ''
+        if (typeof req.content !== 'string') { fail('write: content must be a string'); return }
+        succeed(await writeRemote(key, content, req.expected))
+        return
+      }
+      case 'edit': {
+        if (req.path === undefined) { fail('edit: path is required'); return }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        if (typeof req.oldString !== 'string' || typeof req.newString !== 'string') {
+          fail('edit: oldString and newString are required'); return
+        }
+        const editExpected = req.expected?.kind === 'replaceIfVersion' ? { version: req.expected.version } : undefined
+        succeed(await editRemote(key, req.oldString, req.newString, req.replaceAll ?? false, editExpected))
+        return
+      }
+      default:
+        fail(`unknown fs:op ${req.op}`)
+        return
+    }
+  } catch (error) {
+    failError(error)
+  }
+}
+
 /** Dispatch one hub frame to the matching handler. */
 function handleFrame(session: Session, frame: unknown): void {
   const send = (out: AgentOutFrame) => { sendFrame(session.socket, out) }
@@ -331,6 +427,9 @@ function handleFrame(session: Session, frame: unknown): void {
       break
     case 'fs:read':
       void runFsRead(session, frame as FsReadRequest)
+      break
+    case 'fs:op':
+      void runFsOp(session, frame as FsOpRequest)
       break
     default:
       break

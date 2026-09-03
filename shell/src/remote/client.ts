@@ -117,3 +117,68 @@ export async function createPairing(hubBase: string, user: string, secret: strin
   if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
   return (await res.json()) as { uuid: string; user: string; expiresAt: number; ttlMs: number }
 }
+
+/** A single-value request to the hub fs-primitive API (`/api/fs`). */
+export interface FsOpSpec {
+  op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit'
+  path?: string
+  maxBytes?: number
+  content?: string
+  expected?: { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string }
+  oldString?: string
+  newString?: string
+  replaceAll?: boolean
+}
+
+/** Structured failure surfaced from the agent fs primitives. */
+export class HubFsError extends Error {
+  readonly code: string | undefined
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'HubFsError'
+    this.code = code
+  }
+}
+
+/**
+ * Issue one fs primitive to a user's agent and resolve with its result value.
+ * The hub relays `request-error` frames as {@link HubFsError} carrying the
+ * agent's structured `FS_*` code.
+ */
+export async function fsOp(hubBase: string, user: string, spec: FsOpSpec): Promise<unknown> {
+  const res = await fetch(`${hubControlBase(hubBase)}/api/fs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ user, ...spec }),
+  })
+  if (!res.ok) {
+    let detail: string
+    try { detail = await res.text() } catch { detail = String(res.status) }
+    throw new Error(`hub returned ${String(res.status)}: ${detail}`)
+  }
+  const reader = res.body?.getReader()
+  if (reader === undefined) throw new Error('hub fs response has no body')
+  const decoder = new TextDecoder()
+  let pending = ''
+  let value: unknown
+  for (;;) {
+    const { done, value: chunk } = await reader.read()
+    if (done) break
+    pending += decoder.decode(chunk, { stream: true })
+    let nl: number
+    while ((nl = pending.indexOf('\n')) >= 0) {
+      const line = pending.slice(0, nl)
+      pending = pending.slice(nl + 1)
+      if (line.length === 0) continue
+      const frame = JSON.parse(line) as {
+        type?: string; value?: unknown; message?: string; code?: string
+      }
+      if (frame.type === 'fs:result') {
+        value = frame.value
+      } else if (frame.type === 'request-error') {
+        throw new HubFsError(frame.message ?? 'fs request failed', frame.code)
+      }
+    }
+  }
+  return value
+}

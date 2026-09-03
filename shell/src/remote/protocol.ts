@@ -75,7 +75,31 @@ export interface FsReadRequest {
   maxBytes?: number
 }
 
-export type RequestFrame = ExecRequest | KillRequest | FsReadRequest
+/** A filesystem primitive the agent executes under its `--root` allowlist. */
+export interface FsOpRequest {
+  type: 'fs:op'
+  id: string
+  op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit'
+  /** Absolute path; must resolve under an agent `--root`. */
+  path?: string
+  maxBytes?: number
+  content?: string
+  /** Write intent: `createIfAbsent` or `replaceIfVersion`. */
+  expected?: { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string }
+  /** Literal edit parameters (op = `edit`). */
+  oldString?: string
+  newString?: string
+  replaceAll?: boolean
+}
+
+/** Structured fs result; failures arrive as `request-error` with a code. */
+export interface FsResultFrame {
+  type: 'fs:result'
+  id: string
+  value: unknown
+}
+
+export type RequestFrame = ExecRequest | KillRequest | FsReadRequest | FsOpRequest
 
 export interface StreamFrame {
   type: 'stream'
@@ -96,10 +120,12 @@ export interface RequestErrorFrame {
   type: 'request-error'
   id: string
   message: string
+  /** Structured `FS_*` code from an agent fs primitive failure. */
+  code?: string
 }
 
 /** Frames an agent sends toward the hub. */
-export type AgentOutFrame = HelloFrame | PongFrame | StreamFrame | ExitFrame | RequestErrorFrame
+export type AgentOutFrame = HelloFrame | PongFrame | StreamFrame | ExitFrame | FsResultFrame | RequestErrorFrame
 
 /** Frames the hub sends toward an agent. */
 export type HubOutFrame = HelloAckFrame | ErrorFrame | PingFrame | RequestFrame

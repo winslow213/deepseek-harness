@@ -233,24 +233,34 @@ TLS 长连接（中心主动连代理）或代理主动上报（代理在 NAT �
 
 | 文件 | 角色 |
 |---|---|
-| `protocol.ts` | 中心 ↔ 代理 wire：持久 TCP + 每行一个 JSON 帧（hello/ack、ping/pong、exec/kill、fs:read、stream、exit） |
-| `hub.ts` | 代理拨号接入（`net` 监听 + token 鉴权 + 心跳 + 重复连接驱逐）+ loopback HTTP 控制 API（`/api/agents`、`/api/exec`、`/api/kill`、`/api/fs-read`，NDJSON 流式回传；exec 接受客户端自带 id 以便静默命令仍可 kill） |
-| `agent.ts` | 部署在用户 Linux 的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝（shell `-c` 脚本体豁免）、`fs:read` realpath 越界拒绝、进程组 kill |
+| `protocol.ts` | 中心 ↔ 代理 wire：持久 TCP + 每行一个 JSON 帧（hello/ack、ping/pong、exec/kill、fs:read、fs:op/fs:result、stream、exit） |
+| `hub.ts` | 代理拨号接入（`net` 监听 + token/pairing 鉴权 + 心跳 + 重复连接驱逐 + 配对码一次性消费）+ loopback HTTP 控制 API（`/api/agents`、`/api/pairings`、`/api/exec`、`/api/kill`、`/api/fs-read`、`/api/fs`，NDJSON 流式回传；exec 接受客户端自带 id 以便静默命令仍可 kill） |
+| `agent.ts` | 部署在用户 Linux 的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝（shell `-c` 脚本体豁免）、进程组 kill、fs 原语分发 |
+| `agent-fs.ts` | **零依赖 fs 语义移植**（fsio 核心）：probe/versionOf、regular/binary/UTF-8 拒绝、LF 归一化/恢复、字面编辑匹配、原子写发布、带版本守卫的 write/edit |
 | `executor.ts` | **远程 ShellExecutor**（实现 `ctx.shell` seam）：resolve 默认/封顶，run 把 `bash -c` 发到 hub 并流式回填 `CollectedOutput`，超时/abort 经 `/api/kill` SIGKILL 进程组并分类 `timedOut/aborted`，start 维持后台进程的增量读/kill/done |
-| `client.ts` | 控制端：CLI 与 executor 共用 |
-| `inject.ts` | 把 executor 源码副本拷进用户 profile 的 `plugins/remote`，写 `cordis.patch.yml`：disable 本地 sandbox executor、插入远程行（`sandboxMode` 声明 agent root 的权限意图） |
+| `fs-provider.ts` | **远程 FileSystem**（实现 `ctx.fs` seam）：resolve/processPath/fileUrl/contains/stat/lstat/readText/streamText/readBytes/listDir/writeText/editText 全经 `/api/fs` 落到 agent；`sandboxMode` 报 undefined（tool 层按非 confine 处理） |
+| `client.ts` | 控制端：CLI、executor、fs-provider 共用 |
+| `inject.ts` | 把 executor+fs-provider 源码副本拷进用户 profile 的 `plugins/remote`，写 `cordis.patch.yml`：disable 本地 bash/pwsh/fs-sandbox、插入远程行（`sandboxMode` 声明 agent root 的权限意图） |
 
 执行模型：executor 以 `bash -c <command>` 作为唯一 exec 原语，故 agent 必须
 `--allow-command bash` 才能执行任意 shell 命令 —— 白名单 bash 即授权任意
 命令，与"bash 工具 = 本机全权"的语义一致；如需收紧用路径/命令细分白名单。
+fs 原语全部在 agent 内做白名单 realpath 校验后执行，中心侧无从越界。
+
+配对流程（网页/CLI 生成一次性码 → 用户在目标主机 CLI 认领）：`remote pair`
+mint 码 → `remote agent --pair <uuid>` 拨号 → hub 校验、绑定该码的用户、
+触发 `onPaired` 自动注入远程 provider（可 `--no-auto-inject` 关闭）。
 
 验证通过：cat/exec 探针、命令白名单拒绝、绝对路径与 `..` 逃逸拒绝、
 `fs:read` 越界拒绝、错误 token 拒绝、hub 重启后代理自动拨回重连、exec
-静默命令经客户端自带 id kill、**真实 dsh web 实例装配远程 executor 启动**、
-executor run 超时（SIGKILL/timedOut 分类）与后台 start（增量读/done）。
+静默命令经客户端自带 id kill、真实 dsh web 实例装配远程 executor+fs
+启动、executor run 超时（SIGKILL/timedOut 分类）与后台 start、fs 原语
+stat/readText/listDir/write(带 before/版本守卫)/edit(字面匹配)/stale
+拒绝/二进制拒绝、ctx.fs 经 RemoteFileSystem 全语义 harness、配对码
+一次性消费与自动注入。
 
-未做：TLS（当前明文 TCP，仅限内网/可信网络）、远程 fs provider
-（fs 工具仍走本地；§7.5 的一半）、代理侧命令黑名单（现用白名单）。
+未做：TLS（当前明文 TCP，仅限内网/可信网络）、代理侧命令黑名单（现用
+白名单）、搜索工具（tool-fs-search 独立 spawn 化，未桥接）、配对网页页。
 
 ## 8. 验证状态
 
@@ -260,9 +270,10 @@ executor run 超时（SIGKILL/timedOut 分类）与后台 start（增量读/done
 - [x] 反代整链路（HTTP 页面/assets/plugins/鉴权，WebSocket 待真机验证）
 - [x] 路线 A：受信 host 放开 settings（trustedHosts 注入浏览器特权面）
 - [x] remote 桥：hub + 代理拨号 + exec/fs:read 流式回传 + 白名单/越界拒绝 + 断线重连
-- [x] dsh executor 注入：远程 ShellExecutor 装配进 per-user dsh web 实例
-  （run 前台/超时/后台 start 全语义验证）
-- [ ] 远程 fs provider：fs 工具经 hub 落到用户主机（fs:read 已有，写/搜待补）
+- [x] dsh executor + fs 注入：远程 ShellExecutor + RemoteFileSystem 装配进
+  per-user dsh web 实例（run/超时/后台 start + ctx.fs 全语义验证）
+- [x] 配对：一次性码 mint/认领/消费 + 自动注入远程 provider
+- [ ] 配对网页页（浏览器内 mint 码并展示认领指令）
 - [ ] 账号层
 - [ ] 空闲回收/健康检查
 - [ ] 多机路由
@@ -270,9 +281,9 @@ executor run 超时（SIGKILL/timedOut 分类）与后台 start（增量读/done
 ## 9. 后续里程碑
 
 1. **路线 A settings 放开**：受信 host 也允许 settings 读写（跨包改造）
-2. **dsh executor 注入**：把 per-user 实例的 shell executor / fs provider 换成
-   经 hub 控制 API 的远程实现（hub/agent 侧已验证，见 §7.7）
-3. **远程 fs**：文件读/写/搜索经代理
+2. **dsh executor + fs 注入**：远程 ShellExecutor + RemoteFileSystem 已装配
+   （§7.7）；剩余搜索工具桥接（tool-fs-search 独立 spawn 化）
+3. **配对网页页**：浏览器端生成配对码 + 展示认领指令，供跨设备挂载
 4. **黑白名单**：命令/路径策略中心下发 + 代理强制
 5. **账号层**：用户注册/登录、DSH_HOME 分配、token 管理
 6. **生命周期**：健康检查、崩溃重启、空闲回收、任务式 spawn
