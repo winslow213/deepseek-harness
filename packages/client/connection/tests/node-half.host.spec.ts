@@ -10,6 +10,7 @@ import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { WebServer, WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { API_PATH, RpcId, apply, inject, type ClientRequest, type HostConnectionHandle } from '../src/index.ts'
 import { DEFAULT_MAX_REQUEST_BODY_BYTES } from '../src/http-bridge.ts'
+import { TRUSTED_HOSTS_GLOBAL } from '../src/trusted-hostname.ts'
 import { provideBrowserCredentials } from './browser-credentials.ts'
 
 /** Structural webServer fake recording both route registries. */
@@ -520,6 +521,39 @@ describe('connection node half over a real HTTP server', () => {
     } finally {
       await close()
       await dispose()
+    }
+  })
+
+  it('publishes the deployment trusted hosts to the index injection table', async () => {
+    const ctx = new Context()
+    const routes: WebRoute[] = []
+    ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
+    provideBrowserCredentials(ctx)
+    const fiber = ctx.plugin({ inject: [...inject], apply }, { trustedHosts: ['10.33.2.56', 'dsh.test'] })
+    await fiber.await()
+    try {
+      const table: unknown[] = []
+      ;(ctx.emit as (name: string, table: unknown[]) => void)('webserver/index-inject', table)
+      const injected = table.find(row => (row as { name?: unknown }).name === TRUSTED_HOSTS_GLOBAL)
+      expect(injected).toEqual({ kind: 'global', name: TRUSTED_HOSTS_GLOBAL, value: ['10.33.2.56', 'dsh.test'] })
+    } finally {
+      await fiber.dispose()
+    }
+  })
+
+  it('publishes no trusted-host row when the list is empty', async () => {
+    const ctx = new Context()
+    const routes: WebRoute[] = []
+    ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
+    provideBrowserCredentials(ctx)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    try {
+      const table: unknown[] = []
+      ;(ctx.emit as (name: string, table: unknown[]) => void)('webserver/index-inject', table)
+      expect(table.some(row => (row as { name?: unknown }).name === TRUSTED_HOSTS_GLOBAL)).toBe(false)
+    } finally {
+      await fiber.dispose()
     }
   })
 })

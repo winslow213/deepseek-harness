@@ -4,10 +4,11 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-credentials'
 // Activates the webServer Context merge used below.
-import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
+import type { IndexInjection, WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import { API_PATH } from './api-path.ts'
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
 import { assertTrustedAuthority } from './api-request-trust.ts'
+import { TRUSTED_HOSTS_GLOBAL } from './trusted-hostname.ts'
 import { BrowserAuth } from './browser-auth.ts'
 import { HostConnectionService } from './rpc-host.ts'
 
@@ -125,6 +126,14 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
     },
   }
   ctx.effect(() => ctx.webServer.register(route), 'client-connection: /api route')
+  // Publish the deployment trusted authorities to the page so the browser can
+  // classify its own privileged surface (settings, file open) identically to
+  // the /api fence. The page already proved it reached this server through the
+  // authenticated /api channel; the global only mirrors the fence's own list.
+  ctx.on('webserver/index-inject', (table: IndexInjection[]) => {
+    if (trustedHosts.length === 0) return
+    table.push({ kind: 'global', name: TRUSTED_HOSTS_GLOBAL, value: trustedHosts })
+  })
   ctx.inject(['attachments'], (attachmentCtx) => {
     assertImageBodyCapacity(attachmentCtx, maxRequestBodyBytes)
   })

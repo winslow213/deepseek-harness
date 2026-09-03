@@ -14,6 +14,7 @@ import {
 import { createFixtureConnectionRpc } from './fixture.ts'
 import { createWebConnectionRpc, type RpcFetch, type RpcStreamOpen } from './rpc.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
+import { isTrustedPageAuthority, TRUSTED_HOSTS_GLOBAL } from '../trusted-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -106,6 +107,11 @@ interface ClientTransportGlobal {
   __DSH_TRANSPORT__?: ClientTransportHooks
 }
 
+/** Page global the Host injects the deployment trusted authorities under. */
+interface TrustedHostsGlobal {
+  readonly [TRUSTED_HOSTS_GLOBAL]?: readonly string[]
+}
+
 /**
  * The ctx.connection service API: the API client plus a one-shot controller
  * starter. API Gateway supplies generation readiness and reset callbacks;
@@ -114,8 +120,10 @@ interface ClientTransportGlobal {
 export interface ConnectionHandle {
   /**
    * Whether the privileged surface is reachable: the page authority is
-   * loopback, the transport declares the page owns the Host
-   * ({@link ClientTransportHooks.ownsHost}), or the context is not a browser.
+   * loopback, the page authority is one of the deployment's trusted hosts
+   * (the same list the /api Host fence admits), the transport declares the
+   * page owns the Host ({@link ClientTransportHooks.ownsHost}), or the
+   * context is not a browser.
    */
   readonly isLoopback: boolean
   /** Current Remote event generation and the Host facts carried by its opening frame. */
@@ -186,6 +194,7 @@ export function apply(ctx: Context): void {
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureRpc = fixture ? createFixtureConnectionRpc() : undefined
   const transport = (globalThis as ClientTransportGlobal).__DSH_TRANSPORT__
+  const trustedHosts = (globalThis as TrustedHostsGlobal)[TRUSTED_HOSTS_GLOBAL] ?? []
   const rpc = fixtureRpc ?? createWebConnectionRpc(transport?.fetch, transport?.openStream)
   let generationSource: ConnectionGenerationSource | undefined
   let owner: ConnectionOwner | undefined
@@ -224,8 +233,18 @@ export function apply(ctx: Context): void {
     publishGeneration(undefined)
     publishState(undefined)
   }
+  const trustedPage = ((): boolean => {
+    if (transport?.ownsHost === true || pageLocation === undefined) return true
+    if (isLoopbackHostname(pageLocation.hostname)) return true
+    if (trustedHosts.length === 0) return false
+    // Classify the page authority against the deployment's trusted hosts,
+    // mirroring the /api Host fence so the browser-side privileged surface
+    // (settings persistence, file open) matches what the fence already admits.
+    const pageUrl = new URL(`http://${pageLocation.hostname}`)
+    return isTrustedPageAuthority(pageUrl, trustedHosts)
+  })()
   const handle: ConnectionHandle = {
-    isLoopback: transport?.ownsHost === true || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    isLoopback: trustedPage,
     generation: {
       getSnapshot: () => generation,
       subscribe: (listener) => {

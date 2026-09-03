@@ -14,7 +14,8 @@
     "src/client/random-uuid.ts",
     "src/client/rpc.ts",
     "src/loopback-hostname.ts",
-    "src/rpc.ts"
+    "src/rpc.ts",
+    "src/trusted-hostname.ts"
   ],
   "references": [
     {
