@@ -1,0 +1,21 @@
+{
+  "name": "@deepseek-ai/dsh-team-shell",
+  "description": "Team shell over the DeepSeek Harness engine: account layer, per-user instance spawner, and lifecycle management. Self-contained and deliberately OUTSIDE the pnpm workspace so upstream master merges never touch this tree.",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "dsh-shell": "lib/bin.js"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "design.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --import tsx/esm src/bin.ts",
+    "spawn-user": "node --import tsx/esm src/spawn-user.ts"
+  }
+}
