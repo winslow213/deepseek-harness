@@ -246,7 +246,17 @@ function authenticate(
   byUser.set(conn.user, conn)
   byAgentId.set(conn.agentId, conn)
   if (!socket.destroyed) {
-    socket.write(encodeFrame({ type: 'hello_ack', agentId: conn.agentId, user: conn.user }))
+    // A pairing-proven agent receives the user's token so a later reconnect can
+    // authenticate with --user/--token (the one-time pairing code is spent).
+    const pairingToken = typeof hello.pairUuid === 'string' && hello.pairUuid !== ''
+      ? tokens.get(user as string)
+      : undefined
+    socket.write(encodeFrame({
+      type: 'hello_ack',
+      agentId: conn.agentId,
+      user: conn.user,
+      ...pairingToken === undefined ? {} : { token: pairingToken },
+    }))
   }
   return conn
 }
@@ -314,8 +324,12 @@ export function createHub(options: HubOptions): TeamHub {
     socket.on('error', () => { socket.destroy() })
     socket.on('close', () => {
       if (conn === null) return
-      byUser.delete(conn.user)
-      byAgentId.delete(conn.agentId)
+      // Remove only when this connection still owns the slot: a newer agent for
+      // the same user or id replaces the byUser/byAgentId entries without
+      // waiting for this socket's close, so an unconditional delete here would
+      // evict the replacement.
+      if (byUser.get(conn.user) === conn) byUser.delete(conn.user)
+      if (byAgentId.get(conn.agentId) === conn) byAgentId.delete(conn.agentId)
       console.log(`[hub] agent offline user=${conn.user} agent=${conn.agentId}`)
       // Fail open request streams still waiting on the dead channel.
       for (const [id, p] of pending) {

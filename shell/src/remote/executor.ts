@@ -1,12 +1,15 @@
 /**
  * Remote Service Provider for the bash capability seam over the team hub.
  *
- * Each foreground `run` relays `bash -c <command>` to the user's remote-agent
- * daemon and streams output back; the agent's command and path allowlists are
- * the enforcement point (design.md §7.4), so a compromised center still cannot
- * run binaries the operator did not allow or escape the user's `--root`.
- * Background `start` keeps the hub exec stream open for the process lifetime
- * and kills the remote process group through the hub `/api/kill` primitive.
+ * Each foreground `run` relays a single command string to the user's
+ * remote-agent daemon and streams output back. The command runs through the
+ * shell of the workdir's host platform — `bash -c` on POSIX agents, `cmd /c`
+ * on Windows agents (whose hosts have no bash) — and the agent's command and
+ * path allowlists are the enforcement point (design.md §7.4), so a
+ * compromised center still cannot run binaries the operator did not allow or
+ * escape the user's `--root`. Background `start` keeps the hub exec stream
+ * open for the process lifetime and kills the remote process group through
+ * the hub `/api/kill` primitive.
  *
  * @module dsh-team-shell/remote-executor
  */
@@ -90,6 +93,21 @@ export function resolveRemoteShellConfig(config: RemoteShellConfig): ResolvedRem
     maxOutputBytes,
     sandboxMode,
   }
+}
+
+/**
+ * Shell argv for a command that runs on a remote agent host.
+ *
+ * The remote agent is the operator's own host and its platform is not the
+ * server's: a paired Windows machine (agent root like `D:\work`) has no bash,
+ * so `bash -c` spawns nothing. The workdir the executor forwards is the
+ * translated agent-side path (see `translateShadowPath`), which carries the
+ * platform in its separators — drive letters/backslashes mean Windows.
+ * Windows commands run through `cmd /c`; everything else keeps `bash -c`.
+ */
+function shellArgvFor(workdir: string, command: string): string[] {
+  const isWindowsWorkdir = /^[A-Za-z]:[\\/]/.test(workdir) || workdir.includes('\\')
+  return isWindowsWorkdir ? ['cmd', '/c', command] : ['bash', '-c', command]
 }
 
 /** One frame of interest from a hub exec NDJSON stream. */
@@ -228,7 +246,7 @@ export class RemoteShellCore {
       body: JSON.stringify({
         id: requestId,
         user: this.config.user,
-        argv: ['bash', '-c', spec.command],
+        argv: shellArgvFor(spec.workdir, spec.command),
         cwd: spec.workdir,
         ...timeoutMs !== undefined ? { timeoutMs } : {},
       }),

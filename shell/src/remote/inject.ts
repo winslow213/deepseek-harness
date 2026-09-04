@@ -27,9 +27,23 @@ export const PROFILE_PATCH_FILENAME = 'cordis.patch.yml'
 /** Runtime modules copied into the profile plugins directory. */
 export const REMOTE_RUNTIME_FILES = ['executor.ts', 'fs-provider.ts', 'client.ts'] as const
 
+/**
+ * Name-less marker manifest isolating injected loose runtimes from their owning
+ * profile manifest. Plugin-package inventory treats a module whose nearest
+ * manifest has no name as anonymous and skips it; without this marker it would
+ * attribute these rows to the profile package.json (a name without a version),
+ * which the inventory rejects.
+ */
+const LOOSE_PLUGIN_MANIFEST = { type: 'module' } as const
+
 /** Profile plugin directory holding the copied remote provider runtime. */
 export function pluginsDirFor(profileDir: string): string {
   return join(profileDir, 'plugins', 'remote')
+}
+
+/** Mark a plugin runtime directory as holding loose, anonymous plugin modules. */
+export function writeLoosePluginManifest(pluginsDir: string): void {
+  writeFileSync(join(pluginsDir, 'package.json'), JSON.stringify(LOOSE_PLUGIN_MANIFEST, undefined, 2) + '\n')
 }
 
 /** Declared sandbox intent for the agent root (permission stack composition). */
@@ -108,6 +122,7 @@ export interface InjectRemoteProvidersOptions {
 export function injectRemoteProviders(options: InjectRemoteProvidersOptions): string {
   const pluginsDir = pluginsDirFor(options.profileDir)
   mkdirSync(pluginsDir, { recursive: true })
+  writeLoosePluginManifest(pluginsDir)
   for (const file of REMOTE_RUNTIME_FILES) {
     cpSync(join(options.runtimeSourceDir, file), join(pluginsDir, file), { force: true })
   }
@@ -265,6 +280,7 @@ export interface InjectRegionRouterOptions {
 export function injectRegionRouter(options: InjectRegionRouterOptions): string {
   const pluginsDir = pluginsDirFor(options.profileDir)
   mkdirSync(pluginsDir, { recursive: true })
+  writeLoosePluginManifest(pluginsDir)
   const files = ['region-router.ts', 'shadow.ts', 'client.ts']
   if (options.includeShell ?? false) files.push('region-shell.ts', 'executor.ts')
   if (options.syncMounts ?? false) files.push('mount-sync.ts')

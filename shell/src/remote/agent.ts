@@ -47,13 +47,13 @@ import {
 } from './protocol.ts'
 
 export interface AgentOptions {
-  readonly user: string
+  user: string
   /** One-time pairing code; when present the agent omits user/token in hello. */
-  readonly pairUuid: string
+  pairUuid: string
   readonly agentId: string
   readonly hubHost: string
   readonly hubPort: number
-  readonly token: string
+  token: string
   readonly roots: readonly string[]
   readonly allowCommands: readonly string[]
   readonly reconnectCapMs: number
@@ -210,10 +210,11 @@ function findUnsafePathArg(cwdReal: string, tokens: readonly string[], realRoots
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i]
     if (token === undefined || token === '-') continue
-    // A shell `-c` body is the command itself (arbitrary script text), not a
-    // path argument. The agent's command allowlist is the gate for shells:
-    // allowlisting `bash` deliberately grants arbitrary remote execution.
-    if (token === '-c') {
+    // A shell body (`bash -c`, Windows `cmd /c`) is the command itself
+    // (arbitrary script text), not a path argument. The agent's command
+    // allowlist is the gate for shells: allowlisting `bash` or `cmd`
+    // deliberately grants arbitrary remote execution on that platform.
+    if (token === '-c' || token.toLowerCase() === '/c') {
       i += 1
       continue
     }
@@ -408,10 +409,21 @@ function handleFrame(session: Session, frame: unknown): void {
   if (frame === null || typeof frame !== 'object') return
   const msg = frame as { type?: string }
   switch (msg.type) {
-    case 'hello_ack':
+    case 'hello_ack': {
+      const ack = frame as { agentId?: unknown; user?: unknown; token?: unknown }
       session.authed = true
+      // A pairing handshake spent the one-time code; adopt the hub-issued user
+      // token so later reconnects authenticate without a fresh pairing.
+      if (session.opts.pairUuid !== ''
+        && typeof ack.user === 'string' && ack.user !== ''
+        && typeof ack.token === 'string' && ack.token !== '') {
+        session.opts.user = ack.user
+        session.opts.token = ack.token
+        session.opts.pairUuid = ''
+      }
       console.error(`[agent] authenticated as ${session.opts.agentId}`)
       break
+    }
     case 'error':
       console.error(`[agent] hub error: ${String((frame as { message?: string }).message)}`)
       session.socket.destroy()

@@ -99,6 +99,17 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
     }
   }
 
+  /**
+   * Ensure the mount cache is warm for a shadow path before dispatch. The
+   * cache is pulled fire-and-forget at construction, so an access that arrives
+   * before the pull settles (or before a freshly paired agent registered)
+   * would otherwise fall through to the empty local shadow stub.
+   */
+  private async refreshFor(path: string): Promise<void> {
+    if (!this.isShadow(path) || this.remoteOf(path) !== undefined) return
+    await this.refreshMounts()
+  }
+
   /** Whether an absolute server path is inside the shadow root. */
   private isShadow(path: string): boolean {
     const root = this.region.shadowRoot
@@ -116,6 +127,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
     if (opts?.signal?.aborted) throw new FsError('resolve aborted', 'FS_ABORTED')
     const abs = isAbsolute(path) ? path : pathResolve(opts?.cwd ?? this.config.cwd, path)
     if (this.isShadow(abs)) {
+      await this.refreshFor(abs)
       const t = this.remoteOf(abs)
       if (t !== undefined) {
         const value = await this.fsRemote(t, { op: 'resolve', path: t.remotePath })

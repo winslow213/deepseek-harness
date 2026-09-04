@@ -235,15 +235,18 @@ TLS 长连接（中心主动连代理）或代理主动上报（代理在 NAT �
 |---|---|
 | `protocol.ts` | 中心 ↔ 代理 wire：持久 TCP + 每行一个 JSON 帧（hello/ack、ping/pong、exec/kill、fs:read、fs:op/fs:result、stream、exit） |
 | `hub.ts` | 代理拨号接入（`net` 监听 + token/pairing 鉴权 + 心跳 + 重复连接驱逐 + 配对码一次性消费）+ loopback HTTP 控制 API（`/api/agents`、`/api/pairings`、`/api/exec`、`/api/kill`、`/api/fs-read`、`/api/fs`，NDJSON 流式回传；exec 接受客户端自带 id 以便静默命令仍可 kill） |
-| `agent.ts` | 部署在用户 Linux 的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝（shell `-c` 脚本体豁免）、进程组 kill、fs 原语分发 |
+| `agent.ts` | 部署在用户主机（Linux 或 Windows）的 daemon：出站拨号 + 指数退避重连；`--root` 目录白名单、`--allow-command` 命令白名单、exec 路径参数越界拒绝（shell `bash -c` / Windows `cmd /c` 脚本体豁免）、进程组 kill、fs 原语分发 |
 | `agent-fs.ts` | **零依赖 fs 语义移植**（fsio 核心）：probe/versionOf、regular/binary/UTF-8 拒绝、LF 归一化/恢复、字面编辑匹配、原子写发布、带版本守卫的 write/edit |
-| `executor.ts` | **远程 ShellExecutor**（实现 `ctx.shell` seam）：resolve 默认/封顶，run 把 `bash -c` 发到 hub 并流式回填 `CollectedOutput`，超时/abort 经 `/api/kill` SIGKILL 进程组并分类 `timedOut/aborted`，start 维持后台进程的增量读/kill/done |
+| `executor.ts` | **远程 ShellExecutor**（实现 `ctx.shell` seam）：resolve 默认/封顶，run 按工作目录平台选 shell —— Windows 目录（盘符/反斜杠，如 `D:\work`）走 `cmd /c`、其余 `bash -c` —— 发到 hub 并流式回填 `CollectedOutput`，超时/abort 经 `/api/kill` SIGKILL 进程组并分类 `timedOut/aborted`，start 维持后台进程的增量读/kill/done |
 | `fs-provider.ts` | **远程 FileSystem**（实现 `ctx.fs` seam）：resolve/processPath/fileUrl/contains/stat/lstat/readText/streamText/readBytes/listDir/writeText/editText 全经 `/api/fs` 落到 agent；`sandboxMode` 报 undefined（tool 层按非 confine 处理） |
 | `client.ts` | 控制端：CLI、executor、fs-provider 共用 |
 | `inject.ts` | 把 executor+fs-provider 源码副本拷进用户 profile 的 `plugins/remote`，写 `cordis.patch.yml`：disable 本地 bash/pwsh/fs-sandbox、插入远程行（`sandboxMode` 声明 agent root 的权限意图） |
 
-执行模型：executor 以 `bash -c <command>` 作为唯一 exec 原语，故 agent 必须
-`--allow-command bash` 才能执行任意 shell 命令 —— 白名单 bash 即授权任意
+执行模型：executor 以 `bash -c <command>`（POSIX 目录）或 `cmd /c <command>`
+（Windows 目录）作为 exec 原语 —— 平台由工作目录承载：影子翻译保真了
+agent root 的路径风格（`D:\...` 盘符/反斜杠 = Windows），executor 据此选
+shell。故 POSIX agent 必须 `--allow-command bash`、Windows agent 必须
+`--allow-command cmd` 才能执行任意 shell 命令 —— 白名单 shell 即授权任意
 命令，与"bash 工具 = 本机全权"的语义一致；如需收紧用路径/命令细分白名单。
 fs 原语全部在 agent 内做白名单 realpath 校验后执行，中心侧无从越界。
 

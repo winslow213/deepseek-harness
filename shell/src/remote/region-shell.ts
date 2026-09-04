@@ -84,6 +84,24 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
     return path === this.shadowRoot || path.startsWith(this.shadowRoot + '/')
   }
 
+  /** True when a shadow path maps to one of this user's online mounts. */
+  private coversShadow(path: string): boolean {
+    const t = translateShadowPath(path, this.mountsCache ?? [])
+    return t !== undefined && t.user === this.user
+  }
+
+  /**
+   * Ensure the mount cache is warm for a shadow workdir before dispatch. The
+   * cache is pulled fire-and-forget on construction and resolve, so a command
+   * that arrives before the pull settles (or before a freshly paired agent
+   * registered) would otherwise fall back to local execution on the empty
+   * shadow stub.
+   */
+  private async refreshFor(path: string | undefined): Promise<void> {
+    if (path === undefined || !this.isShadow(path) || this.coversShadow(path)) return
+    await this.refreshMounts()
+  }
+
   /** Rewrite a shadow workdir into the agent's real path, when it is our mount. */
   private remoteSpec(spec: ShellExecSpec): ShellExecSpec | undefined {
     if (spec.workdir === undefined || !this.isShadow(spec.workdir)) return undefined
@@ -98,6 +116,7 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
   }
 
   override async run(spec: ShellExecSpec): Promise<ShellRunResult> {
+    await this.refreshFor(spec.workdir)
     const remote = this.remoteSpec(spec)
     if (remote === undefined) return super.run(spec)
     return this.remote.run(remote)
