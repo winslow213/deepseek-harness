@@ -178,21 +178,16 @@ async function readExecStream(
  * user's own Linux host through the hub. Registering it in a per-user
  * instance replaces the local executor for that instance only (design.md §7.5).
  */
-export class RemoteShellExecutor extends ShellExecutor {
+/**
+ * A registration-free remote bash runner. Holds no cordis Service identity, so
+ * a {@link RegionRouterShellExecutor} (which must register as ctx.shell itself)
+ * can compose it without a duplicate-service collision.
+ */
+export class RemoteShellCore {
   readonly config: ResolvedRemoteShellConfig
 
-  constructor(ctx: Context, config: RemoteShellConfig) {
-    super(ctx)
+  constructor(config: RemoteShellConfig) {
     this.config = resolveRemoteShellConfig(config)
-  }
-
-  /**
-   * The declared sandbox mode the permission stack composes against. This
-   * executor never confines locally (the agent's allowlists are the fence),
-   * so the mode is the deployment's declared intent for the agent root.
-   */
-  override get sandboxMode(): SandboxMode {
-    return this.config.sandboxMode
   }
 
   resolve(request: ShellExecRequest): ShellExecSpec {
@@ -267,8 +262,6 @@ export class RemoteShellExecutor extends ShellExecutor {
     try {
       const started = await this.execFetch(spec, spec.timeoutMs)
       requestId = started.requestId
-      // Arm the deadline once the request is in flight so a slow hub response
-      // still kills a remote command that starts late.
       deadlineTimer = setTimeout(() => {
         timedOut = true
         killRemote()
@@ -292,8 +285,6 @@ export class RemoteShellExecutor extends ShellExecutor {
         code = null
         sig = null
       }
-      // The agent's own deadline can win the race against ours: a SIGKILL
-      // close at/after the timeout and without an abort counts as a timeout.
       if (!aborted && !timedOut && sig === 'SIGKILL' && Date.now() - startedAt >= spec.timeoutMs) {
         timedOut = true
       }
@@ -391,7 +382,6 @@ export class RemoteShellExecutor extends ShellExecutor {
               return
           }
         })
-        // Channel closed before a terminal frame: the process outlived the stream.
         if (status === 'running') {
           status = 'killed'
           spawnError = 'remote channel closed before the process exited'
@@ -405,6 +395,33 @@ export class RemoteShellExecutor extends ShellExecutor {
     })()
 
     return proc
+  }
+}
+
+/** Remote shell Service provider: registers as ctx.shell and delegates to a core. */
+export class RemoteShellExecutor extends ShellExecutor {
+  readonly core: RemoteShellCore
+
+  constructor(ctx: Context, config: RemoteShellConfig) {
+    super(ctx)
+    this.core = new RemoteShellCore(config)
+  }
+
+  /** The declared sandbox mode — the agent root intent. */
+  override get sandboxMode(): SandboxMode {
+    return this.core.config.sandboxMode
+  }
+
+  override resolve(request: ShellExecRequest): ShellExecSpec {
+    return this.core.resolve(request)
+  }
+
+  override run(spec: ShellExecSpec): Promise<ShellRunResult> {
+    return this.core.run(spec)
+  }
+
+  override start(spec: ShellExecSpec): ShellProcess {
+    return this.core.start(spec)
   }
 }
 

@@ -186,14 +186,16 @@ export function regionRouterPatchYaml(config: {
   user: string
   shadowRoot?: string
   routerFileUrl: string
+  shellRouterFileUrl?: string
   fsCwd?: string
+  includeShell?: boolean
 }): string {
   const lines = [
-    '# Injected by the team shell (region router): one ctx.fs serving both the',
-    '# local server disk and every paired agent\'s mounted root under the shadow',
-    '# tree. The router extends the sandboxed local filesystem, so local paths',
-    '# keep full local + sandbox semantics; shadow-tree paths reach the agent.',
-    '# Delete this file to fall back to the local providers.',
+    '# Injected by the team shell (region routers): one ctx.fs and one ctx.shell',
+    '# serving both the local server world and every paired agent\'s mounted root',
+    '# under the shadow tree. Each router extends its sandboxed local provider, so',
+    '# local paths/workdirs keep full local + sandbox semantics; shadow-tree paths',
+    '# reach the owning agent. Delete this file to fall back to local providers.',
     '- id: fs-sandbox',
     '  disabled: true',
     '- insert:',
@@ -204,8 +206,25 @@ export function regionRouterPatchYaml(config: {
     `        user: ${JSON.stringify(config.user)}`,
     `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
     ...config.fsCwd === undefined ? [] : [`        cwd: ${JSON.stringify(config.fsCwd)}`],
-    '',
   ]
+  if (config.includeShell && config.shellRouterFileUrl !== undefined) {
+    lines.push(
+      '',
+      '- id: bash-sandbox',
+      '  disabled: true',
+      '- id: pwsh-sandbox',
+      '  disabled: true',
+      '- insert:',
+      '    - id: region-shell',
+      `      name: ${JSON.stringify(config.shellRouterFileUrl)}`,
+      '      config:',
+      `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
+      `        user: ${JSON.stringify(config.user)}`,
+      `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+      ...config.fsCwd === undefined ? [] : [`        cwd: ${JSON.stringify(config.fsCwd)}`],
+    )
+  }
+  lines.push('')
   return lines.join('\n')
 }
 
@@ -218,27 +237,34 @@ export interface InjectRegionRouterOptions {
   user: string
   /** Root holding every mount\'s shadow directory. */
   shadowRoot?: string
-  /** Local working directory for relative local fs operations. */
+  /** Local working directory for relative local fs/shell operations. */
   fsCwd?: string
+  /** Also route ctx.shell through the remote agent (default false). */
+  includeShell?: boolean
   /** Profile directory to patch (`<DSH_HOME>/profiles/web`). */
   profileDir: string
 }
 
-/** Copy the region-router runtime and write the router patch into a profile. */
+/** Copy the region-router runtimes and write the router patch into a profile. */
 export function injectRegionRouter(options: InjectRegionRouterOptions): string {
   const pluginsDir = pluginsDirFor(options.profileDir)
   mkdirSync(pluginsDir, { recursive: true })
-  for (const file of ['region-router.ts', 'shadow.ts', 'client.ts'] as const) {
+  const files = ['region-router.ts', 'shadow.ts', 'client.ts']
+  if (options.includeShell ?? false) files.push('region-shell.ts', 'executor.ts')
+  for (const file of files) {
     cpSync(join(options.runtimeSourceDir, file), join(pluginsDir, file), { force: true })
   }
   const routerFileUrl = pathToFileURL(join(pluginsDir, 'region-router.ts')).href
+  const shellFileUrl = pathToFileURL(join(pluginsDir, 'region-shell.ts')).href
   const patch = join(options.profileDir, PROFILE_PATCH_FILENAME)
   writeFileSync(patch, regionRouterPatchYaml({
     hubUrl: options.hubUrl,
     user: options.user,
     shadowRoot: options.shadowRoot,
     routerFileUrl,
+    shellRouterFileUrl: shellFileUrl,
     fsCwd: options.fsCwd,
+    includeShell: options.includeShell ?? false,
   }))
   return patch
 }
