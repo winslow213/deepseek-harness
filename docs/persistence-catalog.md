@@ -905,7 +905,7 @@ Source: [`packages/core/session/src/types.ts:308`](../packages/core/session/src/
 'tool/code-dispatch': PtcDispatchEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:64`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:67`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -928,7 +928,7 @@ Source: [`packages/core/tools/src/types.ts:64`](../packages/core/tools/src/types
 'tool/code-dispatch-start': PtcDispatchStartEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:48`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:51`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

@@ -907,7 +907,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/code-dispatch': PtcDispatchEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:64`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:67`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -930,7 +930,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/code-dispatch-start': PtcDispatchStartEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:48`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:51`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

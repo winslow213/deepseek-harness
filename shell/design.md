@@ -370,4 +370,46 @@ UI 工作区 = 影子路径（dsh 无感知：存在、可 stat、可绑定 sess
 4. profile 装配 + 双 delegate
 5. UI 挂载分区（picker/browser 第二来源）
 
+## 10. 上游 master 同步对照（2026-09-04 合并 #3427→#3481）
+
+本节记录把上游 master 前移 107 commits 后对壳子设计的影响审计结果：
+**无功能重复**、三项可借鉴、一项需警惕。合并本身（类型适配与
+catalog 重生成）不改变本节结论。
+
+### 10.1 无功能重复
+
+| 上游功能 | 与壳子的关系 |
+|---|---|
+| `packages/util/http-proxy`（出站代理策略） | 方向相反：上游管 harness **出站**按 `HTTP(S)_PROXY` 路由；本壳 `reverse-proxy.ts` 管**入站** LAN→loopback 转发。互补，不重叠 |
+| `web-app` startup 阻止 `--host 0.0.0.0` | 未变——reverse-proxy 仍是 LAN 暴露的唯一途径 |
+| agent-team steer / mailbox | 上游是单实例内的会话消息改造；本壳的多用户实例层在其上层，不重复 |
+| 账号 / 多租户 / 实例孵化 | 上游无此方向——本壳仍是唯一实现 |
+| `workflow-worker-thread/src/host.ts` | 上游只加了 proxy 依赖注入；node-profile / `agent({ profile })` 扩展保留完好 |
+
+### 10.2 上游可借鉴的实现
+
+1. **`util/http-proxy` 的 `egress.spec.ts` 验证法**：用 fake proxy 驱动真实
+   代码路径并断言请求真经代理——壳子的 hub/agent 若加"企业代理出站"
+   支持，照此方法写验证。shell/ 不在 pnpm workspace，无法 import 该库，
+   但可移植其验证模式。
+2. **session-persistence handle seam + storage 跨版本读兼容**：上游把持久化
+   收敛到 handle seam 并支持升级后仍可读 + 损坏时备份-跳过。壳子的挂载
+    workspace 记录在 `workspace.json`，若演进需版本化，套用这套范式。
+3. **`util/http-proxy` 的 dispatcher 语义**：进程级 transport 策略一进程
+   一个答案——壳子若做类似进程级策略，先想清"是否每个进程唯一"。
+
+### 10.3 需警惕
+
+上游 proxy 策略门 `verify-no-bare-dispatcher` 拒绝绕过代理的自建
+`new Agent()` dispatcher。壳子 hub/agent 的出站 fetch 若自建 dispatcher
+需防此门（shell/ 当前不在该门扫描范围；agent 的 agent↔hub 通道是纯
+`net` TCP socket，不受影响）。
+
+### 10.4 维护含义
+
+- 上游每次前移都用 `git merge`（shell/ 不进 workspace，理论上零冲突，
+  实际仅 `pnpm-lock.yaml` 与跨两边的自研改动需要人工）。
+- 上游若新增账号/远程方向，优先看它是否替代壳子的 region/影子桥，再
+  决定 shell 层去留。
+
 ## 8. 验证状态

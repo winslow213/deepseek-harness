@@ -2614,6 +2614,27 @@ export type TokenMeterConfig = Record<string, never>
 
 来源：[`packages/llm/token-meter/src/types.ts:13`](../packages/llm/token-meter/src/types.ts)
 
+<a id="deepseek-aidsh-tool-a2ui-surface"></a>
+
+## `@deepseek-ai/dsh-tool-a2ui-surface`
+
+需要：`tools`
+
+```ts config-catalog
+/** Model-facing A2UI surface tool configuration. */
+export interface Config {
+  /**
+   * Required deployment choice for whether the model may pass an explicit
+   * `surfaceId` to REPLACE an existing surface. True suits flows where the
+   * model refines a page after the user submits; false always mints a fresh
+   * surface per call and makes every call open-only.
+   */
+  allowUpdate: boolean
+}
+```
+
+来源：[`packages/web/tool-a2ui-surface/src/index.ts:38`](../packages/web/tool-a2ui-surface/src/index.ts)
+
 <a id="deepseek-aidsh-tool-bash"></a>
 
 ## `@deepseek-ai/dsh-tool-bash`
@@ -3341,6 +3362,7 @@ export interface Config {
 - `@deepseek-ai/dsh-authorization` — 需要 `credentials`（[`packages/credentials/authorization/src/index.ts`](../packages/credentials/authorization/src/index.ts)）
 - `@deepseek-ai/dsh-client-locale`（[`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts)）
 - `@deepseek-ai/dsh-client-modules` — 需要 `webServer` · `loader`（[`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-a2ui`（[`packages/client/ui-a2ui/src/index.ts`](../packages/client/ui-a2ui/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-agent-preset`（[`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-approval`（[`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-attachment`（[`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts)）
