@@ -464,6 +464,7 @@ function panelProps(
     openFile: () => {},
     inspectCall: () => {},
     forkAt: () => {},
+    loadImage: vi.fn(() => Promise.resolve('blob:unused')),
     renderMessageImages: () => null,
     fileMentions: () => undefined,
     t: makeTranslate(zh),
