@@ -30,6 +30,7 @@
     "src/remote/fs-provider.ts",
     "src/remote/region-router.ts",
     "src/remote/region-shell.ts",
+    "src/remote/mount-sync.ts",
     "src/remote/client.ts"
   ]
 }
