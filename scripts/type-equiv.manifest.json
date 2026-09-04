@@ -824,7 +824,7 @@
     {
       "doc": "docs/subsystems/tools.md",
       "symbol": "ToolRestriction",
-      "source": "packages/core/tools/src/index.ts"
+      "source": "packages/core/tools/src/types.ts"
     },
     {
       "doc": "docs/subsystems/tools.md",

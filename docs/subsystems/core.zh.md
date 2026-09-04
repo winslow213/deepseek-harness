@@ -453,6 +453,22 @@ async compositionInventory(): Promise<AgentPresetComposition[]>
 async resolve(id?: string): Promise<AgentPreset>
 
 /**
+ * Resolve one preset's node profile for a workflow `agent({ profile })`.
+ *
+ * The profile is the preset's standalone persona/toolFilter bundle, read at
+ * discovery like the composition. A preset that carries no `profile.yml`
+ * resolves to no profile — the workflow caller named a preset that declared
+ * none — and a preset whose profile file is malformed is refused with the
+ * discovery-reported reason. Both fail loud here rather than leaving the
+ * child to silently run without the persona/toolFilter the script asked for.
+ * @param id - the preset id whose node profile is requested.
+ * @returns the preset's node profile.
+ * @throws when the preset is unknown, declares no node profile, or its
+ *   profile file is unusable.
+ */
+async resolveNodeProfile(id: string): Promise<NodeProfile>
+
+/**
  * Compose one agent from a preset: ensure the preset's standing mount, then
  * parent the agent's scope key to it so the mount's registrations and
  * listeners cover this agent.

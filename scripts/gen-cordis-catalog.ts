@@ -666,6 +666,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   AgentPresetRoster: 'path-free preset roster is owned by packages/preset/agent-presets/README.md',
   AgentPresetDocument: 'preset composition view is owned by packages/preset/agent-presets/README.md',
   AgentPresetComposition: 'flattened composition rows are owned by packages/preset/agent-presets/README.md',
+  NodeProfile: 'node-profile per-preset scope defaults are owned by packages/preset/agent-presets/README.md',
+  NodeProfileError: 'node-profile per-preset scope failures are owned by packages/preset/agent-presets/README.md',
   PresetMetadata: 'preset display text is owned by packages/preset/agent-presets/README.md',
   BashEnvContributor: 'service-local extension type is owned by packages/shell/tool-bash/src/index.ts',
   BashEnvVariableInfo: 'service-local metadata type is owned by packages/shell/tool-bash/src/index.ts',

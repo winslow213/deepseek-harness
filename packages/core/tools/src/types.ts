@@ -7,7 +7,10 @@
 import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
 
-/** Per-scope filter over global tools. Restrictions intersect and do not affect scoped registrations or the reserved PTC mode transport. */
+/**
+ * Per-scope filter over global tools. Restrictions intersect and do not affect
+ * scoped registrations or the reserved PTC mode transport.
+ */
 export interface ToolRestriction {
   /** Global tool names that stay visible; everything else is removed. */
   readonly allow?: readonly string[]
