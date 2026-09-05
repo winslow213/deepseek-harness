@@ -156,10 +156,26 @@ function proxyHttp(req: IncomingMessage, res: ServerResponse, upstream: Upstream
 
 
 /**
- * Proxy one request to the upstream, injecting the team logout overlay into
- * HTML documents. Non-HTML responses and everything after a page's first byte
- * stream through unchanged; an HTML body is buffered so the badge can be
- * inserted before </body>.
+ * The marker the proxy injects into served HTML so browser-side client
+ * plugins (the General "sign out" row) know this deployment is behind the
+ * team shell. Without it the row would render in plain single-user dsh too.
+ */
+const TEAM_SHELL_META = '<meta name="team-shell" content="1">'
+
+/** Inject the team-shell marker into the document head (or document start). */
+function injectTeamShellMeta(body: string): string {
+  if (body.includes('name="team-shell"')) return body
+  const headEnd = body.indexOf('</head>')
+  if (headEnd === -1) return TEAM_SHELL_META + body
+  return body.slice(0, headEnd) + TEAM_SHELL_META + body.slice(headEnd)
+}
+
+/**
+ * Proxy one request to the upstream, injecting the team-shell marker into HTML
+ * documents. Non-HTML responses stream through unchanged; an HTML body is
+ * buffered, decoded (it may be gzip/deflate/br from the instance), marked, and
+ * re-sent identity-encoded so the browser never sees corrupted compressed
+ * bytes.
  */
 function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream, prefix: string): void {
   const pathname = req.url ?? '/'
@@ -178,15 +194,12 @@ function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream
       upstreamRes.pipe(res)
       return
     }
-    // Buffer HTML so the badge can be injected; page documents are small and
-    // the product streams its app assets as separate non-HTML requests.
     const chunks: Buffer[] = []
     let total = 0
     const cap = 8 * 1024 * 1024
     upstreamRes.on('data', (chunk: Buffer) => {
       total += chunk.length
       if (total > cap) {
-        // Oversized document: stream what we buffered plus the rest unchanged.
         res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
         res.end(Buffer.concat(chunks))
         upstreamRes.pipe(res)
@@ -206,23 +219,20 @@ function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream
         else if (encoding === 'br') body = brotliDecompressSync(raw).toString('utf8')
         else body = raw.toString('utf8')
       } catch {
-        // Undecodable body (binary masquerading as html): pass the original through.
         res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
         res.end(Buffer.concat(chunks))
         return
       }
-      const injected = injectLogoutBadge(body)
-      // The injected body is re-sent identity-encoded; drop the compression
-      // headers so the browser does not try to inflate uncompressed bytes.
+      const marked = injectTeamShellMeta(body)
       delete headers['content-length']
       delete headers['content-encoding']
       delete headers['transfer-encoding']
       res.writeHead(upstreamRes.statusCode ?? 200, {
         ...headers,
         'content-type': type ?? 'text/html; charset=utf-8',
-        'content-length': String(Buffer.byteLength(injected, 'utf8')),
+        'content-length': String(Buffer.byteLength(marked, 'utf8')),
       })
-      res.end(injected)
+      res.end(marked)
     })
   })
   forward.on('error', (error: Error) => {
@@ -408,30 +418,6 @@ function requestAuthority(req: IncomingMessage): string {
  * clears both the team session and the dsh instance session, then reloads to
  * the (now unauthenticated) login page.
  */
-const LOGOUT_BADGE = `<div id="dsh-team-logout" title="退出登录"
-  style="position:fixed;top:12px;right:12px;z-index:2147483000;
-         background:rgba(10,18,40,.72);color:#dfe7ff;border:1px solid rgba(120,160,255,.35);
-         padding:6px 14px;border-radius:999px;font:12px/1.6 system-ui,sans-serif;
-         cursor:pointer;user-select:none;backdrop-filter:blur(6px);">退出登录</div>
-<script>
-(() => {
-  const el = document.getElementById('dsh-team-logout')
-  if (!el) return
-  el.addEventListener('click', async () => {
-    try { await fetch('/api/logout', { method: 'POST' }) } catch {}
-    window.location.href = '/'
-  })
-})()
-</script>`
-
-/** Inject the logout overlay before the closing body tag of an HTML document. */
-function injectLogoutBadge(body: string): string {
-  if (body.includes('dsh-team-logout')) return body
-  const idx = body.lastIndexOf('</body>')
-  if (idx === -1) return body
-  return body.slice(0, idx) + LOGOUT_BADGE + body.slice(idx)
-}
-
 /**
  * Complete a logout locally: forward to the account service to destroy the
  * team session (and its Redis record), then clear the dsh instance browser
