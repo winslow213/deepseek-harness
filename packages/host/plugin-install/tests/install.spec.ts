@@ -432,6 +432,39 @@ describe('PluginInstallGateway', () => {
     })
   })
 
+  it('approves a git-hosted dependency prepare script and retries once', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: `dsh-profile-${basename(profileDir)}`, dependencies: {} })
+
+    const gitKey = 'dsh-git-remotes@https://codeload.github.com/yq04/dsh-git-remotes/tar.gz/a9f1729b96e42e38555ddf6042482df8d220453b'
+    let calls = 0
+    vi.mocked(spawnSync).mockImplementation((_command, _args, options) => {
+      calls += 1
+      if (calls === 1) {
+        // pnpm refuses the git-hosted prepare script and prints the exact key to allow.
+        return {
+          status: 1,
+          signal: null,
+          pid: 1,
+          output: [],
+          stdout: '',
+          stderr: `[ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED] Failed to prepare git-hosted package\nAdd the package to "allowBuilds" in your project's pnpm-workspace.yaml to allow it to run scripts. For example: allowBuilds: ${gitKey}: true`,
+        }
+      }
+      const dir = (options as { cwd: string }).cwd
+      writeProfileManifest(dir, { name: `dsh-profile-${basename(dir)}`, dependencies: { external: '0.0.0' } })
+      stageBundle(dir, 'external')
+      return { status: 0, signal: null, pid: 1, output: [], stdout: '', stderr: '' }
+    })
+
+    const result = gateway.installPlugin({ form: 'npm-bundle', spec: 'dsh-git-remotes' })
+    expect(calls).toBe(2)
+    expect(result).toEqual({ form: 'npm-bundle', profileDir, bundlesAdded: ['external'] })
+    const workspace = readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')
+    expect(workspace).toContain(`'${gitKey}': true`)
+  })
+
   it('reports a non-zero pnpm add exit with pnpm diagnostic output', async () => {
     const { gateway } = await harness(tmp())
     vi.mocked(spawnSync).mockReturnValue({
@@ -632,6 +665,43 @@ describe('PluginInstallGateway', () => {
     expect(result).toEqual({ form: 'npm-register', profileDir, pluginId: 'scoped' })
     const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
     expect(patch).toContain("name: '@scope/demo/plugin'")
+  })
+
+  it('requests a supervisor restart after a successful install when supervised', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    const previous = process.env.DSH_SUPERVISED
+    process.env.DSH_SUPERVISED = '1'
+    try {
+      gateway.installPlugin({ form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin' })
+      // The marker lands in the profile so a supervisor can see it after exit.
+      expect(existsSync(join(profileDir, '.dsh-restart-requested'))).toBe(true)
+      // The self-SIGTERM is scheduled (not fired synchronously, so the Remote
+      // response can flush first); the timer is unref'd and never runs here.
+      expect(kill).not.toHaveBeenCalled()
+    } finally {
+      process.env.DSH_SUPERVISED = previous
+      kill.mockRestore()
+    }
+  })
+
+  it('does not request a restart when not supervised', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+    delete process.env.DSH_SUPERVISED
+    gateway.installPlugin({ form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin' })
+    expect(existsSync(join(profileDir, '.dsh-restart-requested'))).toBe(false)
   })
 
   it('self-locates the profile directory from the bootstrap include entry', async () => {

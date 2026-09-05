@@ -55,6 +55,21 @@ const LOOSE_PLUGIN_MANIFEST = { type: 'module' } as const
 const PLUGIN_ID_PATTERN = /^[A-Za-z0-9._-]+$/
 
 /**
+ * The restart-marker filename a supervised instance writes before exiting so
+ * its supervisor (shell's spawn-user loop) relaunches it on the same port.
+ * Kept in sync with `RESTART_MARKER` in shell/src/spawn-user.ts — the shell is
+ * a standalone tree that cannot import from packages, so the name is a shared
+ * literal protocol between the two.
+ */
+export const RESTART_MARKER = '.dsh-restart-requested'
+
+/** Environment variable a supervisor sets so the instance knows it may restart. */
+export const DSH_SUPERVISED_ENV = 'DSH_SUPERVISED'
+
+/** How long to wait after a successful install before self-exiting, so the Remote response reaches the browser first. */
+const RESTART_GRACE_MS = 800
+
+/**
  * Directory-upload ceilings. Security invariants, not tunables: they bound
  * how much operator-triggered base64 a running instance decodes and writes.
  */
@@ -270,6 +285,9 @@ function pnpmDiagnostics(output: readonly (string | Buffer | null)[]): string {
 /** The line pnpm's ERR_PNPM_IGNORED_BUILDS marker appears on. */
 const IGNORED_BUILDS_MARKER = 'ERR_PNPM_IGNORED_BUILDS'
 
+/** pnpm's refusal marker when a git-hosted dependency's prepare script needs approval. */
+const GIT_PREPARE_MARKER = 'ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED'
+
 /**
  * The packages a pnpm diagnostic names as having an ignored build script,
  * stripped to bare names (`node-pty@1.1.0` → `node-pty`; scoped names keep
@@ -287,6 +305,27 @@ function ignoredBuildNames(output: string): readonly string[] {
     }
   }
   return [...names]
+}
+
+/**
+ * The allowBuilds keys pnpm's diagnostic suggests for a refused git-hosted
+ * dependency. pnpm prints the exact key to copy — `allowBuilds: <key>: true`
+ * on the `For example:` line — where the key is the full pinned specifier
+ * (`dsh-git-remotes@https://codeload.github.com/.../tar.gz/<sha>`), never a
+ * bare package name, because a git dependency's prepare script is bound to its
+ * exact resolved source.
+ * @param output - a pnpm diagnostic tail.
+ * @returns the suggested allowBuilds keys, empty when none is named.
+ */
+function gitPrepareKeys(output: string): readonly string[] {
+  const keys = new Set<string>()
+  for (const line of output.split('\n')) {
+    const match = /\b(?:allowBuilds|"allowBuilds"):\s*(\S+):\s*true\b/.exec(line)
+    if (match === null) continue
+    const key = match[1]
+    if (key !== undefined) keys.add(key)
+  }
+  return [...keys]
 }
 
 /**
@@ -460,15 +499,19 @@ function installNpmBundle(profileDir: string, spec: NpmBundleInstallSpec): Plugi
   // `pnpm add` writes the dependency and materializes the package; the profile
   // workspace already links the healed node_modules, so resolution is local.
   let run = runPnpm(profileDir, ['add', pkg])
-  if (run.exitCode !== 0 && run.output.includes(IGNORED_BUILDS_MARKER)) {
+  if (run.exitCode !== 0 && (run.output.includes(IGNORED_BUILDS_MARKER) || run.output.includes(GIT_PREPARE_MARKER))) {
     // pnpm ≥10 refuses a dependency's build script until allowlisted, and on a
     // profile without an `allowBuilds` map it writes an invalid placeholder
     // that keeps failing every later run. Approve exactly the flagged packages
-    // and retry once, so a native-dep plugin installs without a manual edit.
+    // and retry once, so a native-dep or git-hosted plugin installs without a
+    // manual edit. Native-dep refusals name bare packages; git-hosted prepare
+    // refusals name their full pinned specifier.
     const names = ignoredBuildNames(run.output)
-    if (names.length > 0) {
-      console.warn(`[${NAME}] approving build scripts pnpm refused: ${names.join(', ')}`)
-      approveBuildScripts(join(profileDir, 'pnpm-workspace.yaml'), names)
+    const gitKeys = gitPrepareKeys(run.output)
+    const approvals = [...names, ...gitKeys]
+    if (approvals.length > 0) {
+      console.warn(`[${NAME}] approving build scripts pnpm refused: ${approvals.join(', ')}`)
+      approveBuildScripts(join(profileDir, 'pnpm-workspace.yaml'), approvals)
       run = runPnpm(profileDir, ['add', pkg])
     }
   }
@@ -605,6 +648,27 @@ function installNpmRegister(profileDir: string, spec: NpmRegisterInstallSpec): P
   return { form: 'npm-register', profileDir, pluginId: spec.id }
 }
 
+/**
+ * When a supervisor runs this instance (env `DSH_SUPERVISED=1`), request a
+ * process restart after a successful install so the new plugin activates. The
+ * marker protocol matches the shell supervisor's `spawn-user` loop: write
+ * `RESTART_MARKER` in the profile directory, then self-SIGTERM after a grace
+ * period so the Remote response reaches the browser before the process exits.
+ * Without the env var the process stays up — a bare `dsh` run has no
+ * supervisor to relaunch it, and killing it would strand the terminal.
+ * @param profileDir - the profile that received the install.
+ */
+function requestRestartIfSupervised(profileDir: string): void {
+  if (process.env[DSH_SUPERVISED_ENV] !== '1') return
+  writeFileSync(join(profileDir, RESTART_MARKER), `${new Date().toISOString()}\n`)
+  console.warn(`[${NAME}] install complete; requesting supervisor restart in ${String(RESTART_GRACE_MS)}ms`)
+  setTimeout(() => {
+    // SIGTERM is the supervisor's ordinary stop request and exits 0; the
+    // marker left above is what tells spawn-user to relaunch rather than stop.
+    process.kill(process.pid, 'SIGTERM')
+  }, RESTART_GRACE_MS).unref()
+}
+
 /** Operator-gated Remote service installing external plugins into the profile. */
 export class PluginInstallGateway extends TypertRemoteService {
   static inject = ['loader']
@@ -655,10 +719,17 @@ export class PluginInstallGateway extends TypertRemoteService {
   @Remote('installPlugin')
   installPlugin(spec: PluginInstallSpec): PluginInstallResult {
     const profileDir = this.resolveProfileDir()
-    if (spec.form === 'file-dir') return installFileDir(profileDir, spec)
-    if (spec.form === 'upload-directory') return this.uploadDirectory(spec)
-    if (spec.form === 'npm-register') return installNpmRegister(profileDir, spec)
-    return installNpmBundle(profileDir, spec)
+    const result = spec.form === 'file-dir'
+      ? installFileDir(profileDir, spec)
+      : spec.form === 'upload-directory'
+        ? this.uploadDirectory(spec)
+        : spec.form === 'npm-register'
+          ? installNpmRegister(profileDir, spec)
+          : installNpmBundle(profileDir, spec)
+    // A supervised instance exits after a successful install so the supervisor
+    // relaunches it with the new plugin active.
+    requestRestartIfSupervised(result.profileDir)
+    return result
   }
 
   /**

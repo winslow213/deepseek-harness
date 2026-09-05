@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { spawnUserInstance, userHome } from './spawn-user.ts'
+import { spawnUserInstance, superviseUserInstance, userHome } from './spawn-user.ts'
 import { startProxy } from './reverse-proxy.ts'
 import { join } from 'node:path'
 import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
@@ -23,14 +23,23 @@ async function main(): Promise<void> {
         console.error('usage: dsh-shell spawn-user <user> <port>')
         process.exit(1)
       }
-      const instance = spawnUserInstance(user, port)
+      // Supervision is the default: the child inherits DSH_SUPERVISED=1 so an
+      // in-process install can write the restart marker and exit; the loop
+      // relaunches a fresh generation. Pass `--once` to keep the old one-shot
+      // behavior (no auto-restart on a marker).
+      const once = args.includes('--once')
+      const supervised = !once
+      if (supervised) process.env.DSH_SUPERVISED = '1'
+      const instance = supervised ? superviseUserInstance(user, port) : spawnUserInstance(user, port)
       instance.url.then((url) => {
         console.log(`USER URL: ${url}`)
       }).catch((error: unknown) => {
         console.error(`spawn failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       })
-      process.on('SIGINT', () => { void instance.dispose().then(() => process.exit(0)) })
+      process.on('SIGINT', () => {
+        void instance.stop().then(() => process.exit(0))
+      })
       break
     }
     case 'proxy': {

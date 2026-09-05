@@ -33,11 +33,18 @@ node --import tsx/esm shell/src/bin.ts spawn-user alice 32001
   `--trusted-host <IP>`，实例的 browser-trust fence 才接受 proxy 转发的非 loopback
   Host。否则浏览器经 LAN proxy 会被 fence 拒绝（HTTP 401/拦截）。
 - 打印 `USER URL: http://127.0.0.1:<port>/?token=...`。
-- **前台进程**：SIGINT（Ctrl-C）→ dispose（SIGTERM 子 dsh）。要后台长驻用
+- **默认 supervised**：spawn-user 进入监督循环，子 dsh 带 `DSH_SUPERVISED=1`。
+  实例内插件安装完成后会写 `.dsh-restart-requested` marker 并自退出，监督循环
+  看到 marker 后自动同端口重启（新插件生效）。其它退出（崩溃、无 marker）或
+  SIGINT（Ctrl-C → stop）则终止循环。要保留旧一次性行为加 `--once`。
+- **前台进程**：SIGINT（Ctrl-C）→ stop（SIGTERM 子 dsh）。要后台长驻用
   `setsid ... &` / nohup，别裸 detach 丢日志。
 - 每用户隔离：alice 的 DSH_HOME 在 `/home/winslow/.dsh-users/alice`
   （`DSH_USERS_ROOT=/home/winslow/.dsh-users`）。别再手写
   `--profile web --port 32001`（裸 `--profile web` 会掉进默认 `$HOME/.dsh`）。
+- **WebUI 安装插件后自动重启**：host 的 plugin-install 在 `DSH_SUPERVISED=1` 时
+  装完写 restart marker 并自退出；supervisor 看到后自动拉新代次。未 supervised
+  的实例（`--once` 或手动裸跑）装完不退出。
 
 ## 访问方式（浏览器 / CLI）
 
