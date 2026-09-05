@@ -511,6 +511,129 @@ describe('PluginInstallGateway', () => {
     expect(readFileSync(workspaceYaml, 'utf8')).toContain('  node-pty: true')
   })
 
+  it('registers a startup row for an installed npm plugin without config', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+
+    const result = gateway.installPlugin({ form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin' })
+    expect(result).toEqual({ form: 'npm-register', profileDir, pluginId: 'demo' })
+    const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
+    expect(patch).toContain('# >>> dsh-plugin-install demo')
+    expect(patch).toContain('- insert:')
+    expect(patch).toContain('- id: demo')
+    expect(patch).toContain('name: dsh-demo-plugin')
+    expect(patch).not.toContain('config:')
+    expect(patch).toContain('# <<< dsh-plugin-install demo')
+  })
+
+  it('registers a startup row with JSON config rendered as YAML', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+
+    const result = gateway.installPlugin({
+      form: 'npm-register',
+      id: 'demo',
+      packageName: 'dsh-demo-plugin',
+      configJson: '{ "region": "cn-east", "count": 3, "nested": { "flag": true } }',
+    })
+    expect(result).toEqual({ form: 'npm-register', profileDir, pluginId: 'demo' })
+    const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
+    expect(patch).toContain('- id: demo')
+    expect(patch).toContain('name: dsh-demo-plugin')
+    expect(patch).toContain('config:')
+    expect(patch).toContain('region: cn-east')
+    expect(patch).toContain('count: 3')
+    expect(patch).toContain('flag: true')
+  })
+
+  it('replaces the prior register row on re-register without duplicating', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+    gateway.installPlugin({ form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin', configJson: '{ "v": 1 }' })
+
+    gateway.installPlugin({ form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin', configJson: '{ "v": 2 }' })
+
+    const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
+    expect(patch.match(/- id: demo/g)).toHaveLength(1)
+    expect(patch).toContain('v: 2')
+    expect(patch).not.toContain('v: 1')
+  })
+
+  it('rejects a register request for a package that is not installed', async () => {
+    const { gateway } = await harness(tmp())
+    expect(installError(gateway, { form: 'npm-register', id: 'demo', packageName: 'dsh-missing-plugin' })).toMatchObject({
+      code: 'plugin-install/unresolved-package',
+    })
+  })
+
+  it('rejects a register request with invalid or non-object JSON config', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+
+    const bad = (configJson: string): unknown => installError(gateway, {
+      form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin', configJson,
+    })
+    expect(bad('{ nope')).toMatchObject({ code: 'plugin-install/invalid-spec' })
+    expect(bad('[1, 2]')).toMatchObject({ code: 'plugin-install/invalid-spec' })
+    expect(bad('42')).toMatchObject({ code: 'plugin-install/invalid-spec' })
+    // Blank config is accepted: it registers the row without a config key.
+    expect(bad('  ')).toBeUndefined()
+  })
+
+  it('rejects a register request whose id or package name is empty', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+    expect(installError(gateway, { form: 'npm-register', id: '../escape', packageName: 'dsh-demo-plugin' })).toMatchObject({
+      code: 'plugin-install/invalid-spec',
+    })
+    expect(installError(gateway, { form: 'npm-register', id: 'demo', packageName: '  ' })).toMatchObject({
+      code: 'plugin-install/invalid-spec',
+    })
+  })
+
+  it('registers a scoped subpath specifier that resolves', async () => {
+    const profileDir = tmp()
+    const { gateway } = await harness(profileDir)
+    writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { '@scope/demo': '1.0.0' } })
+    const pkgDir = join(profileDir, 'node_modules', '@scope', 'demo')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
+      name: '@scope/demo', version: '1.0.0', main: './index.js',
+      exports: { './plugin': './plugin.js', '.': './index.js' },
+    }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+    writeFileSync(join(pkgDir, 'plugin.js'), 'export const apply = () => {}\n')
+
+    const result = gateway.installPlugin({ form: 'npm-register', id: 'scoped', packageName: '@scope/demo/plugin' })
+    expect(result).toEqual({ form: 'npm-register', profileDir, pluginId: 'scoped' })
+    const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
+    expect(patch).toContain("name: '@scope/demo/plugin'")
+  })
+
   it('self-locates the profile directory from the bootstrap include entry', async () => {
     const profileDir = tmp()
     writeFileSync(join(profileDir, 'noop.mjs'), 'export function apply() {}\n')

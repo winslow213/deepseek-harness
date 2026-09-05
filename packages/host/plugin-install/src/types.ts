@@ -11,12 +11,14 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** No bootstrap include entry and no configured override: the target profile cannot be located. */
     'plugin-install/unknown-profile': { readonly reason: string }
-    /** The request names an id or path the service refuses to write. */
+    /** The request names an id, specifier, or config the service refuses to write. */
     'plugin-install/invalid-spec': { readonly reason: string }
     /** `pnpm` is not installed on PATH. */
     'plugin-install/pnpm-missing': { readonly profileDir: string }
     /** `pnpm add` exited non-zero or could not run. `output` carries pnpm's own diagnostic tail. */
     'plugin-install/pnpm-failed': { readonly profileDir: string; readonly exitCode: number; readonly output: string }
+    /** A registered package specifier cannot be resolved from the profile's installed dependencies. */
+    'plugin-install/unresolved-package': { readonly profileDir: string; readonly packageName: string }
     /** A directory upload exceeds the per-file or total byte ceiling. */
     'plugin-install/upload-too-large': { readonly maxBytes: number; readonly actualBytes: number }
     /** A directory upload carries more files than the service accepts. */
@@ -38,7 +40,7 @@ export interface Config {
 }
 
 /** The install forms an operator can request. */
-export type PluginInstallForm = 'file-dir' | 'upload-directory' | 'npm-bundle'
+export type PluginInstallForm = 'file-dir' | 'upload-directory' | 'npm-bundle' | 'npm-register'
 
 /** Copy a source directory into the profile's `plugins/` dir and register its patch row. */
 export interface FileDirInstallSpec {
@@ -54,6 +56,29 @@ export interface NpmBundleInstallSpec {
   readonly form: 'npm-bundle'
   /** npm package spec forwarded to `pnpm add` (name, version range, git, path, ...). */
   readonly spec: string
+}
+
+/**
+ * Register an installed Cordis npm plugin's startup row: the package is
+ * already present (npm-bundle form, or a plain dependency), and this names it
+ * in the profile patch layer so the Loader starts it. The row is idempotent
+ * under the plugin id, replacing any prior row for the same id.
+ */
+export interface NpmRegisterInstallSpec {
+  readonly form: 'npm-register'
+  /** Stable plugin id: the patch row id and the idempotency key. */
+  readonly id: string
+  /**
+   * The Loader entry specifier — the npm package name, optionally with a
+   * subpath (e.g. `dsh-some-plugin` or `@scope/pkg/lib/index.js`). Resolved
+   * against the profile's installed dependencies at startup.
+   */
+  readonly packageName: string
+  /**
+   * Optional plugin config as a JSON object. An empty or whitespace value
+   * registers the row without a `config` key.
+   */
+  readonly configJson?: string
 }
 
 /** One file of a browser-picked directory, carried over the Remote channel as base64. */
@@ -74,7 +99,11 @@ export interface UploadDirectorySpec {
 }
 
 /** One install request, discriminated by form. */
-export type PluginInstallSpec = FileDirInstallSpec | UploadDirectorySpec | NpmBundleInstallSpec
+export type PluginInstallSpec =
+  | FileDirInstallSpec
+  | UploadDirectorySpec
+  | NpmBundleInstallSpec
+  | NpmRegisterInstallSpec
 
 /** Outcome of a completed plugin install. */
 export interface PluginInstallResult {
@@ -82,7 +111,7 @@ export interface PluginInstallResult {
   readonly form: PluginInstallForm
   /** Absolute profile directory that received the install. */
   readonly profileDir: string
-  /** Plugin id written under `plugins/` and named by the patch row (file-dir and upload-directory forms). */
+  /** Plugin id written under `plugins/` and named by the patch row (file-dir, upload-directory, and npm-register forms). */
   readonly pluginId?: string
   /** Bundle names promoted into `dsh.profile.bundles` (npm-bundle form). */
   readonly bundlesAdded?: readonly string[]

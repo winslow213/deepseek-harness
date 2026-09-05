@@ -10,7 +10,9 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join } from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { dump } from 'js-yaml'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the install surface reads `ctx.loader.entries()` to self-locate
 // the running instance's profile directory.
@@ -32,6 +34,7 @@ import type {
   DirectoryUploadFile,
   FileDirInstallSpec,
   NpmBundleInstallSpec,
+  NpmRegisterInstallSpec,
   PluginInstallResult,
   PluginInstallSpec,
   UploadDirectorySpec,
@@ -95,7 +98,18 @@ function selfLocatedProfileDir(ctx: Context): string | undefined {
  * @param moduleFileUrl - the file URL the inserted entry loads.
  */
 function upsertPluginPatchRow(profileDir: string, id: string, moduleFileUrl: string): void {
-  const patchPath = join(profileDir, PROFILE_PATCH_FILENAME)
+  const block = `${rowMarkers(id)[0]}- insert:\n    - id: ${id}\n      name: ${JSON.stringify(moduleFileUrl)}\n${rowMarkers(id)[1]}`
+  upsertMarkedBlock(join(profileDir, PROFILE_PATCH_FILENAME), block, id)
+}
+
+/**
+ * Replace (or append) one id-delimited block inside a patch-layer file,
+ * preserving every byte outside the block.
+ * @param patchPath - the profile's cordis.patch.yml path.
+ * @param block - the full replacement text, delimited by the id markers.
+ * @param id - the plugin id whose markers delimit the block.
+ */
+function upsertMarkedBlock(patchPath: string, block: string, id: string): void {
   let content: string
   try {
     content = readFileSync(patchPath, 'utf8')
@@ -104,7 +118,6 @@ function upsertPluginPatchRow(profileDir: string, id: string, moduleFileUrl: str
     content = ''
   }
   const [start, end] = rowMarkers(id)
-  const block = `${start}- insert:\n    - id: ${id}\n      name: ${JSON.stringify(moduleFileUrl)}\n${end}`
   const open = content.indexOf(start)
   const close = content.indexOf(end)
   const next = open >= 0 && close >= open
@@ -494,6 +507,104 @@ function installNpmBundle(profileDir: string, spec: NpmBundleInstallSpec): Plugi
   return { form: 'npm-bundle', profileDir, bundlesAdded: added }
 }
 
+/** A registered entry config must be a plain JSON object, never an array or scalar. */
+interface RegisterConfig {
+  readonly value: Record<string, unknown>
+}
+
+/**
+ * Parse and validate the optional JSON config an operator pasted into the
+ * register form. A blank value means "no config"; anything parseable must be a
+ * plain object (the Loader's plugin config is always a mapping), so an array
+ * or scalar is refused here rather than written as a patch row that would
+ * fail the Loader later.
+ * @param configJson - the raw JSON text from the form, or undefined.
+ * @returns the parsed object, or undefined when the field was blank.
+ */
+function parseRegisterConfig(configJson: string | undefined): RegisterConfig | undefined {
+  if (configJson === undefined || configJson.trim() === '') return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(configJson)
+  } catch (error) {
+    throw new RemoteError(
+      'plugin-install/invalid-spec',
+      `plugin config is not valid JSON: ${String(error instanceof Error ? error.message : error)}`,
+      { reason: `config is not valid JSON: ${String(error instanceof Error ? error.message : error)}` },
+      { cause: error },
+    )
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new RemoteError(
+      'plugin-install/invalid-spec',
+      'plugin config must be a JSON object (key/value mapping), not an array or scalar',
+      { reason: 'config must be a JSON object' },
+    )
+  }
+  return { value: parsed as Record<string, unknown> }
+}
+
+/**
+ * Verify a package specifier resolves from the profile's installed
+ * dependencies, mirroring the Loader's own resolution. A specifier naming a
+ * package (or a subpath within one) that is not installed must fail here with
+ * an actionable message instead of surfacing as a startup error after the
+ * operator restarts the instance.
+ * @param profileDir - the profile whose dependency graph is the resolution root.
+ * @param packageName - the registered specifier.
+ */
+function assertPackageResolvable(profileDir: string, packageName: string): void {
+  const requireFromProfile = createRequire(join(profileDir, 'package.json'))
+  try {
+    requireFromProfile.resolve(packageName)
+  } catch (error) {
+    throw new RemoteError(
+      'plugin-install/unresolved-package',
+      `cannot resolve ${JSON.stringify(packageName)} from the profile's installed dependencies — install it first (npm-bundle form) or check the package name`,
+      { profileDir, packageName },
+      { cause: error },
+    )
+  }
+}
+
+/**
+ * Install the npm-register form: register a startup row for an already
+ * installed Cordis npm plugin (the plain-dependency case the npm-bundle form's
+ * reconcile does not promote). The row is idempotent under the plugin id.
+ * @param profileDir - the profile whose patch layer edits.
+ * @param spec - the register request.
+ * @returns the form that ran and the id it registered.
+ */
+function installNpmRegister(profileDir: string, spec: NpmRegisterInstallSpec): PluginInstallResult {
+  assertPluginId(spec.id)
+  const packageName = spec.packageName.trim()
+  if (packageName === '') {
+    throw new RemoteError(
+      'plugin-install/invalid-spec',
+      'the package name must be non-empty',
+      { reason: 'empty package name' },
+    )
+  }
+  assertPackageResolvable(profileDir, packageName)
+  const config = parseRegisterConfig(spec.configJson)
+  const entry = config === undefined ? { id: spec.id, name: packageName } : { id: spec.id, name: packageName, config: config.value }
+  // The patch layer is a top-level list whose element is `- insert:` carrying
+  // the registered entry; js-yaml renders the nested config mapping correctly.
+  const [start, end] = rowMarkers(spec.id)
+  const block = `${start}${dump([{ insert: [entry] }])}${end}`
+  try {
+    upsertMarkedBlock(join(profileDir, PROFILE_PATCH_FILENAME), block, spec.id)
+  } catch (error) {
+    throw new RemoteError(
+      'plugin-install/write-failed',
+      `failed to register plugin ${spec.id} into ${profileDir}: ${String(error)}`,
+      { reason: String(error) },
+      { cause: error },
+    )
+  }
+  return { form: 'npm-register', profileDir, pluginId: spec.id }
+}
+
 /** Operator-gated Remote service installing external plugins into the profile. */
 export class PluginInstallGateway extends TypertRemoteService {
   static inject = ['loader']
@@ -536,7 +647,8 @@ export class PluginInstallGateway extends TypertRemoteService {
    * directory under `plugins/` and registers its patch row; `upload-directory`
    * materializes a browser-picked directory carried over the Remote channel;
    * `npm-bundle` forwards `pnpm add` in the profile directory and promotes
-   * bundles into the `dsh.profile.bundles` layer list.
+   * bundles into the `dsh.profile.bundles` layer list; `npm-register` writes
+   * a startup row for an already-installed Cordis npm plugin.
    * @param spec - the install request, discriminated by form.
    * @returns the form that ran and what it wrote.
    */
@@ -545,6 +657,7 @@ export class PluginInstallGateway extends TypertRemoteService {
     const profileDir = this.resolveProfileDir()
     if (spec.form === 'file-dir') return installFileDir(profileDir, spec)
     if (spec.form === 'upload-directory') return this.uploadDirectory(spec)
+    if (spec.form === 'npm-register') return installNpmRegister(profileDir, spec)
     return installNpmBundle(profileDir, spec)
   }
 
