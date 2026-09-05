@@ -20,6 +20,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 
@@ -195,14 +196,31 @@ function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream
     })
     upstreamRes.on('end', () => {
       if (res.headersSent) return
-      const body = Buffer.concat(chunks).toString('utf8')
       const headers = { ...upstreamRes.headers }
-      delete headers['content-length']
+      const encoding = (upstreamRes.headers['content-encoding'] ?? '').toLowerCase()
+      let body: string
+      try {
+        const raw = Buffer.concat(chunks)
+        if (encoding === 'gzip') body = gunzipSync(raw).toString('utf8')
+        else if (encoding === 'deflate') body = inflateSync(raw).toString('utf8')
+        else if (encoding === 'br') body = brotliDecompressSync(raw).toString('utf8')
+        else body = raw.toString('utf8')
+      } catch {
+        // Undecodable body (binary masquerading as html): pass the original through.
+        res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
+        res.end(Buffer.concat(chunks))
+        return
+      }
       const injected = injectLogoutBadge(body)
+      // The injected body is re-sent identity-encoded; drop the compression
+      // headers so the browser does not try to inflate uncompressed bytes.
+      delete headers['content-length']
+      delete headers['content-encoding']
+      delete headers['transfer-encoding']
       res.writeHead(upstreamRes.statusCode ?? 200, {
         ...headers,
         'content-type': type ?? 'text/html; charset=utf-8',
-        'content-length': String(Buffer.byteLength(injected)),
+        'content-length': String(Buffer.byteLength(injected, 'utf8')),
       })
       res.end(injected)
     })
