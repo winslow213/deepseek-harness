@@ -63,15 +63,25 @@ export interface DshInstance {
 
 /**
  * Spawn one user's dsh web instance on a loopback port.
+ * `DSH_ENTRY_HOST` (the shell entry host browsers reach, e.g. the proxy's LAN
+ * address) is forwarded as `--trusted-host` so the instance's browser-trust
+ * fence accepts the non-loopback Host the reverse proxy forwards; spawns
+ * without it stay loopback-only, matching the proxy-less single-machine form.
  * @param user - account/user id whose DSH_HOME is provisioned.
  * @param port - loopback port to bind.
  * @returns the running instance handle.
  */
 export function spawnUserInstance(user: string, port: number): DshInstance {
   const home = provisionUserHome(user)
+  const entryHost = process.env.DSH_ENTRY_HOST
+  const args = [
+    '--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'),
+    '--profile', 'web', '--port', String(port), '--no-open',
+    ...(entryHost === undefined || entryHost === '' ? [] : ['--trusted-host', entryHost]),
+  ]
   const child = spawn(
     process.execPath,
-    ['--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'), '--profile', 'web', '--port', String(port), '--no-open'],
+    args,
     {
       env: { ...process.env, [DSH_HOME_ENV]: home },
       cwd: REPO_ROOT,
