@@ -205,3 +205,37 @@ host remote 包 + client 包：
 - plugin-install 已建立 host（self-locate profile + operator 开关 + typert remote）+
   client（settings tab）完整模式，本方案 S4 复用。
 - 本机 Postgres 127.0.0.1:5432、Redis 6380/15 均在跑（wiki-server 弃用后库可复用）。
+
+## 10. 实例生命周期管理（S6：空闲回收 + 按需冷启动）
+
+> 容量分析（2026-09-05 实测）驱动本阶段：**单机同时在线上限 ~70 常驻实例**（内存
+> 39GiB 可用 ÷ 每实例 ~435MB：dsh web 360MB 实测 + supervisor 75MB）。空闲回收是
+> 从 70 → 200 注册用户的关键。design 假设单实例 270MB 已过时（实测 360MB，含插件）。
+
+### 目标形态（full-spawn-on-demand）
+
+- 用户无活跃会话时**零进程**（supervisor + dsh web 一起回收，释放 ~435MB/用户）
+- 用户经 proxy 访问 → 冷启动 spawn（~2-5s）→ 路由转发
+- 空闲 N 分钟 → 回收。**端口经 account 分配**(可复用),DSH_HOME 落盘保证会话恢复
+
+### 实现要点（归 team 侧，依赖 team 已有 Postgres+Redis+ioredis）
+
+1. **端口分配(account)**：新增 `POST /api/instances/allocate` → 从空闲端口池分配
+   （或固定 user→port 映射），避免回收后冲突。实例登记已有 `upsert`。
+2. **活跃追踪**：proxy 每次请求 → account `/api/touch`（记 redis `active:<user>` TTL）；
+   proxy 保持无 redis 依赖（连 account HTTP API）。
+3. **回收仲裁(account)**：定时扫描 redis 超时 key → 对对应 supervisor 发回收信号
+   （redis pub/sub 频道 `dsh-reclaim:<user>`），落库 instance removed。
+4. **spawn-user 订阅回收**：supervisor 订阅频道 → `stop()` + unregister + 退出；
+   `unregisterInstance` 已存在。
+5. **proxy 冷启动**：route 返回 `instance:null` 时（需 route 增返 user_id）→
+   spawn `spawn-user <user> <port>` → 轮询 route 至就绪 → 转发。NOT_READY_PAGE
+   保留为冷启动失败兜底。
+6. **route 响应扩展**：`/api/session/route` 无实例时返回 `user_id`（proxy 才能 spawn），
+   否则 proxy 无从知道为谁拉起。
+
+### 待 team agent 决策
+
+- 空闲判定时长 N（建议默认 15-30 分钟；与 Redis 会话 TTL 30 天解耦）
+- 端口池范围（design §77：内部段 32768-60999 有 2.8 万个，瓶颈是内存非端口）
+- 冷启动并发互斥（同一用户多请求同时触发 spawn → 需幂等/单飞）

@@ -131,6 +131,10 @@ message + `details.output`。
 
 ## 本次产物状态
 
-- shell 部署拓扑三个进程运行中（proxy / hub / alice 32001）。
-- alice 32001 带 `DSH_PLUGIN_INSTALL=true` + `--trusted-host 10.33.2.56` + 自愈 lib。
-- 残留单机 3080 已停；以后只跑团队形式。
+- 部署演进到 team access 形态（S1/S2 已落地，见 `team-access-design.md`）：
+  account 服务（127.0.0.1:3900，Postgres 5432 + Redis 6380）+ account 模式 proxy
+  （`proxy 3999 --account http://127.0.0.1:3900`，登录路由 + dsh token swap）。
+- 实例生命周期管理（S6：空闲回收 + 按需冷启动）**设计已定、实现归 team 侧**：
+  当前无回收，实例常驻；容量上限 ~70 同时在线的分析记录在 design §10。
+- 插件安装已具备：4 表单 + pnpm 自愈 + 监督重启 + 装完自动刷新（见上文）。
+- alice 32001 带 `DSH_PLUGIN_INSTALL=true` + `--trusted-host` + 自愈 lib。
