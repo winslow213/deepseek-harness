@@ -21,7 +21,11 @@ async function main(): Promise<void> {
   const sessions = new SessionStore(redis, env.sessionTtlSecs)
   const auth = new AuthService(users, sessions)
 
-  const server = createAccountServer({ auth, sessions, users, instances, sessionTtlSecs: env.sessionTtlSecs })
+  const server = createAccountServer({
+    auth, sessions, users, instances,
+    sessionTtlSecs: env.sessionTtlSecs,
+    adminSecret: env.adminSecret,
+  })
   server.listen(env.httpPort, '127.0.0.1', () => {
     console.log(`[team-account] listening on http://127.0.0.1:${String(env.httpPort)}`)
   })

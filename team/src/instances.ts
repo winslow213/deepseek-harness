@@ -1,4 +1,4 @@
-/** Spawned-instance registration (user → loopback port). */
+/** Spawned-instance registration (user → loopback port + launch token). */
 
 import type { Db } from './db.ts'
 
@@ -6,19 +6,22 @@ export interface InstanceRow {
   user_id: string
   port: number
   pid: number | null
+  launch_token: string | null
   launched_at: string
 }
 
 export class InstanceStore {
   constructor(private readonly db: Db) {}
 
-  /** Register (or refresh) the loopback port of a user's spawned dsh instance. */
-  async upsert(userId: string, port: number, pid?: number): Promise<void> {
+  /** Register (or refresh) the loopback port and launch token of a user's spawned dsh instance. */
+  async upsert(userId: string, port: number, launchToken?: string, pid?: number): Promise<void> {
     await this.db.query(
-      `INSERT INTO dsh_instances (user_id, port, pid, launched_at, updated_at)
-       VALUES ($1, $2, $3, now(), now())
-       ON CONFLICT (user_id) DO UPDATE SET port = EXCLUDED.port, pid = EXCLUDED.pid, updated_at = now()`,
-      [userId, port, pid ?? null],
+      `INSERT INTO dsh_instances (user_id, port, launch_token, pid, launched_at, updated_at)
+       VALUES ($1, $2, $3, $4, now(), now())
+       ON CONFLICT (user_id) DO UPDATE
+         SET port = EXCLUDED.port, launch_token = COALESCE(EXCLUDED.launch_token, dsh_instances.launch_token),
+             pid = EXCLUDED.pid, updated_at = now()`,
+      [userId, port, launchToken ?? null, pid ?? null],
     )
   }
 
@@ -27,6 +30,14 @@ export class InstanceStore {
     const result = await this.db.query('SELECT port FROM dsh_instances WHERE user_id = $1', [userId])
     const row = result.rows[0] as { port?: unknown } | undefined
     return row === undefined || typeof row.port !== 'number' ? undefined : row.port
+  }
+
+  /** Look up the running port and launch token for one user. */
+  async routeFor(userId: string): Promise<{ port: number; launchToken: string | undefined } | undefined> {
+    const result = await this.db.query('SELECT port, launch_token FROM dsh_instances WHERE user_id = $1', [userId])
+    const row = result.rows[0] as { port?: unknown; launch_token?: unknown } | undefined
+    if (row === undefined || typeof row.port !== 'number') return undefined
+    return { port: row.port, launchToken: typeof row.launch_token === 'string' && row.launch_token !== '' ? row.launch_token : undefined }
   }
 
   /** Remove the registration (instance stopped). */
@@ -40,6 +51,7 @@ export class InstanceStore {
       user_id: String((row as Record<string, unknown>).user_id),
       port: Number((row as Record<string, unknown>).port),
       pid: (row as Record<string, unknown>).pid === null ? null : Number((row as Record<string, unknown>).pid),
+      launch_token: (row as Record<string, unknown>).launch_token === null ? null : String((row as Record<string, unknown>).launch_token),
       launched_at: String((row as Record<string, unknown>).launched_at),
     }))
   }

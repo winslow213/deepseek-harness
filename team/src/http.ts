@@ -17,6 +17,8 @@ interface HttpServices {
   users: UserStore
   instances: InstanceStore
   sessionTtlSecs: number
+  /** Shared secret operator-side services present on instance-registration calls. */
+  adminSecret?: string
 }
 
 function parseCookies(header: string | undefined): Map<string, string> {
@@ -111,6 +113,63 @@ async function handleLogout(req: IncomingMessage, res: ServerResponse, s: HttpSe
   sendJson(res, 200, { loggedOut: true })
 }
 
+/** Route decision for the shell proxy: cookie -> user -> instance port. */
+function authorized(req: IncomingMessage, s: HttpServices): boolean {
+  if (s.adminSecret === undefined) return true // no secret configured: loopback-only trust
+  const header = req.headers['x-team-admin-secret']
+  return typeof header === 'string' && header === s.adminSecret
+}
+
+/** Register or refresh one user's spawned instance (operator-side). */
+async function handleUpsertInstance(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  if (!authorized(req, s)) { sendJson(res, 403, { error: 'forbidden' }); return }
+  let body: unknown
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'invalid body' }); return }
+  const b = body as { user_id?: unknown; port?: unknown; pid?: unknown; launch_token?: unknown }
+  if (typeof b.user_id !== 'string' || b.user_id === '' || typeof b.port !== 'number') {
+    sendJson(res, 400, { error: 'user_id (string) and port (number) are required' })
+    return
+  }
+  const launchToken = typeof b.launch_token === 'string' && b.launch_token !== '' ? b.launch_token : undefined
+  await s.instances.upsert(b.user_id, b.port, launchToken, typeof b.pid === 'number' ? b.pid : undefined)
+  sendJson(res, 200, { registered: true, user_id: b.user_id, port: b.port })
+}
+
+/** Remove a user's spawned-instance registration (operator-side). */
+async function handleDeleteInstance(req: IncomingMessage, res: ServerResponse, s: HttpServices, userId: string): Promise<void> {
+  if (!authorized(req, s)) { sendJson(res, 403, { error: 'forbidden' }); return }
+  await s.instances.remove(userId)
+  sendJson(res, 200, { removed: true, user_id: userId })
+}
+
+async function handleSessionRoute(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const cookies = parseCookies(req.headers.cookie)
+  const sessionId = cookies.get(COOKIE_NAME)
+  if (sessionId === undefined) {
+    sendJson(res, 401, { authenticated: false, error: 'no session' })
+    return
+  }
+  const userId = await s.sessions.lookup(sessionId)
+  if (userId === undefined) {
+    sendJson(res, 401, { authenticated: false, error: 'invalid or expired session' })
+    return
+  }
+  const user = await s.users.findByUsername(userId)
+  if (user === undefined || user.status !== 'active') {
+    sendJson(res, 401, { authenticated: false, error: 'account unavailable' })
+    return
+  }
+  const route = await s.instances.routeFor(user.user_id)
+  if (route === undefined) {
+    sendJson(res, 200, { authenticated: true, instance: null })
+    return
+  }
+  sendJson(res, 200, {
+    authenticated: true,
+    instance: { port: route.port, launchToken: route.launchToken },
+  })
+}
+
 async function handleMe(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
   const cookies = parseCookies(req.headers.cookie)
   const sessionId = cookies.get(COOKIE_NAME)
@@ -167,6 +226,12 @@ export function createAccountServer(s: HttpServices) {
           await handleLogout(req, res, s)
         } else if (path === '/api/me' && method === 'GET') {
           await handleMe(req, res, s)
+        } else if (path === '/api/session/route' && method === 'GET') {
+          await handleSessionRoute(req, res, s)
+        } else if (path === '/api/instances' && method === 'POST') {
+          await handleUpsertInstance(req, res, s)
+        } else if (path.startsWith('/api/instances/') && method === 'DELETE') {
+          await handleDeleteInstance(req, res, s, decodeURIComponent(path.slice('/api/instances/'.length)))
         } else {
           sendJson(res, 404, { error: `no route for ${method} ${path}` })
         }

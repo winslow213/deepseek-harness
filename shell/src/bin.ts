@@ -4,13 +4,14 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { spawnUserInstance, superviseUserInstance, userHome } from './spawn-user.ts'
-import { startProxy } from './reverse-proxy.ts'
+import { registerOnReady, spawnUserInstance, superviseUserInstance, userHome } from './spawn-user.ts'
+import { startProxy, startAccountProxy } from './reverse-proxy.ts'
 import { join } from 'node:path'
 import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
 import { listAgents, listMounts, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
 import { injectRemoteProviders, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { accountBaseUrl, adminSecret, unregisterInstance } from './instance-register.ts'
 
 const [, , command, ...args] = process.argv
 
@@ -31,23 +32,46 @@ async function main(): Promise<void> {
       const supervised = !once
       if (supervised) process.env.DSH_SUPERVISED = '1'
       const instance = supervised ? superviseUserInstance(user, port) : spawnUserInstance(user, port)
+      const account = accountBaseUrl()
+      const secret = adminSecret()
+      // A supervised spawn registers itself (every generation, with the launch
+      // token) inside the supervision loop; a one-shot spawn registers here.
+      if (account !== undefined && !supervised) {
+        void registerOnReady(user, port, instance)
+      }
       instance.url.then((url) => {
         console.log(`USER URL: ${url}`)
       }).catch((error: unknown) => {
         console.error(`spawn failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       })
-      process.on('SIGINT', () => {
-        void instance.stop().then(() => process.exit(0))
+      process.on('SIGINT', async () => {
+        await instance.stop()
+        if (account !== undefined) await unregisterInstance(account, user, secret)
+        process.exit(0)
       })
       break
     }
     case 'proxy': {
-      // usage: dsh-shell proxy <entryPort> <userA:portA> [userB:portB ...]
+      // Account mode: dsh-shell proxy <entryPort> --account <accountUrl>
+      // Static mode: dsh-shell proxy <entryPort> <userA:portA> [userB:portB ...]
       const entryPort = Number(args[0])
-      const upstreams = args.slice(1)
+      const accountIndex = args.indexOf('--account')
+      if (!Number.isNaN(entryPort) && accountIndex >= 0) {
+        const accountUrl = args[accountIndex + 1]
+        if (accountUrl === undefined || accountUrl === '') {
+          console.error('usage: dsh-shell proxy <entryPort> --account <accountUrl>')
+          process.exit(1)
+        }
+        const server = startAccountProxy({ port: entryPort, accountUrl })
+        console.log(`account proxy listening on http://0.0.0.0:${String(entryPort)} (account ${accountUrl})`)
+        process.on('SIGINT', () => { server.close(() => process.exit(0)) })
+        break
+      }
+      const upstreams = accountIndex >= 0 ? args.slice(1, accountIndex) : args.slice(1)
       if (Number.isNaN(entryPort) || upstreams.length === 0) {
         console.error('usage: dsh-shell proxy <entryPort> <user:port> [user:port ...]')
+        console.error('       dsh-shell proxy <entryPort> --account <accountUrl>')
         process.exit(1)
       }
       const routes = new Map<string, { user: string; port: number }>()

@@ -13,6 +13,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
 
 /** Repository root; resolves the source-launch dsh CLI. */
 const REPO_ROOT = new URL('../..', import.meta.url).pathname
@@ -86,6 +87,8 @@ export interface DshInstance {
 export interface SupervisedInstance {
   /** Resolves to the authenticated URL (with token) of the current generation once printed. */
   readonly url: Promise<string>
+  /** The child process of the current generation (the supervisor swaps it on restart). */
+  readonly child: ChildProcess
   /** Stop the loop for good: dispose the current child and never relaunch. */
   stop(): Promise<void>
 }
@@ -164,6 +167,30 @@ export function spawnUserInstance(user: string, port: number): DshInstance {
 }
 
 /**
+ * Register one generation's loopback port and launch token with the team
+ * account service once its URL is announced. Best-effort: no account layer is
+ * configured (TEAM_ACCOUNT_URL unset) the spawn still works in the static form.
+ * @param user - the account whose instance registers.
+ * @param port - the loopback port the instance listens on.
+ * @param instance - a handle whose `url` resolves to the authenticated URL.
+ */
+export async function registerOnReady(user: string, port: number, instance: { url: Promise<string> }): Promise<void> {
+  const account = accountBaseUrl()
+  if (account === undefined) return
+  try {
+    const url = await instance.url
+    const token = launchTokenFromUrl(url)
+    const ok = await registerInstance(account, user, port, {
+      launchToken: token,
+      secret: adminSecret(),
+    })
+    console.log(`[spawn-user] instance registration for ${user}:${String(port)} ${ok ? 'ok' : 'FAILED'}`)
+  } catch (error) {
+    console.error(`[spawn-user] registration skipped: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/**
  * Run one user's web instance under a supervision loop. The child is spawned
  * on the port; when it exits carrying {@link RESTART_MARKER} in its profile
  * (an operator install asked for a restart), the marker is removed and a fresh
@@ -181,6 +208,7 @@ export function superviseUserInstance(user: string, port: number): SupervisedIns
   let current: DshInstance = spawnUserInstance(user, port)
   let generation = 0
   const url = current.url
+  void registerOnReady(user, port, current)
 
   const loop = (async () => {
     while (!stopRequested) {
@@ -199,6 +227,7 @@ export function superviseUserInstance(user: string, port: number): SupervisedIns
       if (stopRequested) return
       console.log(`[spawn-user] ${user} requested a restart; spawning generation ${String(generation)}`)
       current = spawnUserInstance(user, port)
+      void registerOnReady(user, port, current)
       current.url.then((u) => {
         console.log(`[spawn-user] generation ${String(next)} URL: ${u}`)
       }).catch(() => {})
@@ -207,6 +236,7 @@ export function superviseUserInstance(user: string, port: number): SupervisedIns
 
   return {
     url,
+    child: current.child,
     stop: async () => {
       stopRequested = true
       await current.stop()

@@ -11,6 +11,8 @@ export interface EnvConfig {
   sessionTtlSecs: number
   /** Base64url length of the issued agent token (256 bits). */
   agentTokenBytes: number
+  /** Shared secret operator-side services present on instance-registration calls. */
+  adminSecret?: string
 }
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
@@ -37,5 +39,6 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   if (Number.isNaN(agentTokenBytes) || agentTokenBytes < 16) {
     throw new Error(`TEAM_AGENT_TOKEN_BYTES must be >= 16; got ${JSON.stringify(rawBytes)}`)
   }
-  return { dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes }
+  const adminSecret = env.TEAM_ADMIN_SECRET
+  return { dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes, adminSecret: adminSecret === '' ? undefined : adminSecret }
 }

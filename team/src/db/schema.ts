@@ -21,7 +21,11 @@ CREATE TABLE IF NOT EXISTS dsh_instances (
   user_id      TEXT PRIMARY KEY REFERENCES dsh_users(user_id) ON DELETE CASCADE,
   port         INTEGER NOT NULL,
   pid          INTEGER,
+  launch_token TEXT,
   launched_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Keep an existing table (created before launch_token existed) in sync.
+ALTER TABLE dsh_instances ADD COLUMN IF NOT EXISTS launch_token TEXT;
 `
