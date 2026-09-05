@@ -29,6 +29,12 @@ const UPLOAD_RESULT: PluginInstallResult = {
   pluginId: 'region-router',
 }
 
+const REGISTER_RESULT: PluginInstallResult = {
+  form: 'npm-register',
+  profileDir: '/tmp/profile',
+  pluginId: 'demo',
+}
+
 function mount(installPlugin: (spec: PluginInstallSpec) => Promise<PluginInstallResult>) {
   const t = (key: PluginInstallLocaleKey, params?: Record<string, string | number>): string => {
     const template = en[key]
@@ -70,6 +76,43 @@ describe('PluginInstallSettingsTab', () => {
     expect(screen.queryByPlaceholderText(en.idPlaceholder)).toBeNull()
     expect(screen.queryByPlaceholderText(en.sourcePathPlaceholder)).toBeNull()
     expect(screen.getByRole('button', { name: en.install })).toHaveProperty('disabled', true)
+  })
+
+  it('switches to the npm-register form, which demands id and package name', () => {
+    mount(vi.fn())
+
+    fireEvent.click(screen.getByText(en.formNpmRegister))
+    expect(screen.getByPlaceholderText(en.packageNamePlaceholder)).toBeTruthy()
+    expect(screen.getByPlaceholderText(en.configJsonPlaceholder)).toBeTruthy()
+    expect(screen.getByPlaceholderText(en.idPlaceholder)).toBeTruthy()
+    expect(screen.queryByPlaceholderText(en.npmSpecPlaceholder)).toBeNull()
+    expect(screen.getByRole('button', { name: en.install })).toHaveProperty('disabled', true)
+  })
+
+  it('submits a trimmed npm-register spec with its JSON config and reports the id', async () => {
+    const install = vi.fn(() => Promise.resolve(REGISTER_RESULT))
+    mount(install)
+
+    fireEvent.click(screen.getByText(en.formNpmRegister))
+    fireEvent.change(screen.getByPlaceholderText(en.idPlaceholder), { target: { value: '  demo  ' } })
+    fireEvent.change(screen.getByPlaceholderText(en.packageNamePlaceholder), {
+      target: { value: ' dsh-demo-plugin ' },
+    })
+    fireEvent.change(screen.getByPlaceholderText(en.configJsonPlaceholder), {
+      target: { value: ' { "region": "cn-east" } ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: en.install }))
+
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({
+        form: 'npm-register',
+        id: 'demo',
+        packageName: 'dsh-demo-plugin',
+        configJson: '{ "region": "cn-east" }',
+      })
+      expect(screen.getByText(en.successTitle)).toBeTruthy()
+    })
+    expect(screen.getByText('demo')).toBeTruthy()
   })
 
   it('switches to the upload-directory form, which shows the directory picker', () => {

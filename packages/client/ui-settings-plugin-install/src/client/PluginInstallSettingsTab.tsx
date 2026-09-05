@@ -31,10 +31,15 @@ function buildSpec(
   id: string,
   sourcePath: string,
   npmSpec: string,
+  packageName: string,
+  configJson: string,
   files: readonly DirectoryUploadFile[],
 ): PluginInstallSpec {
   if (form === 'file-dir') return { form: 'file-dir', id: id.trim(), sourcePath: sourcePath.trim() }
   if (form === 'upload-directory') return { form: 'upload-directory', id: id.trim(), files }
+  if (form === 'npm-register') {
+    return { form: 'npm-register', id: id.trim(), packageName: packageName.trim(), configJson: configJson.trim() }
+  }
   return { form: 'npm-bundle', spec: npmSpec.trim() }
 }
 
@@ -60,6 +65,8 @@ export function PluginInstallSettingsTab({
   const [id, setId] = useState('')
   const [sourcePath, setSourcePath] = useState('')
   const [npmSpec, setNpmSpec] = useState('')
+  const [packageName, setPackageName] = useState('')
+  const [configJson, setConfigJson] = useState('')
   const [files, setFiles] = useState<DirectoryUploadFile[]>([])
   const [state, setState] = useState<ViewState>({ status: 'idle' })
 
@@ -68,7 +75,9 @@ export function PluginInstallSettingsTab({
     ? id.trim() !== '' && sourcePath.trim() !== ''
     : form === 'upload-directory'
       ? id.trim() !== '' && files.length > 0
-      : npmSpec.trim() !== ''
+      : form === 'npm-register'
+        ? id.trim() !== '' && packageName.trim() !== ''
+        : npmSpec.trim() !== ''
 
   const pickDirectory = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const picked = event.target.files
@@ -90,7 +99,7 @@ export function PluginInstallSettingsTab({
     event.preventDefault()
     if (!ready || running) return
     setState({ status: 'running' })
-    void installPlugin(buildSpec(form, id, sourcePath, npmSpec, files)).then(
+    void installPlugin(buildSpec(form, id, sourcePath, npmSpec, packageName, configJson, files)).then(
       (result) => { setState({ status: 'success', result }) },
       (error: unknown) => {
         const code = error instanceof Error
@@ -148,6 +157,19 @@ export function PluginInstallSettingsTab({
             <span>
               <strong>{t('formUploadDirectory')}</strong>
               <small>{t('formUploadDirectoryHint')}</small>
+            </span>
+          </label>
+          <label className={css.formOption}>
+            <input
+              type="radio"
+              name="form"
+              value="npm-register"
+              checked={form === 'npm-register'}
+              onChange={() => { setForm('npm-register') }}
+            />
+            <span>
+              <strong>{t('formNpmRegister')}</strong>
+              <small>{t('formNpmRegisterHint')}</small>
             </span>
           </label>
         </fieldset>
@@ -213,6 +235,52 @@ export function PluginInstallSettingsTab({
               {files.length > 0 ? (
                 <small className={css.fileCount}>{t('filesSelected', { count: files.length })}</small>
               ) : null}
+            </label>
+          </div>
+        ) : form === 'npm-register' ? (
+          <div className={css.fields} key={form}>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>
+                {t('idLabel')}
+                <em className={css.required}>{t('required')}</em>
+              </span>
+              <input
+                value={id}
+                onChange={(event) => { setId(event.target.value) }}
+                placeholder={t('idPlaceholder')}
+                disabled={running}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <small className={css.fieldHint}>{t('idDescription')}</small>
+            </label>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>
+                {t('packageNameLabel')}
+                <em className={css.required}>{t('required')}</em>
+              </span>
+              <input
+                value={packageName}
+                onChange={(event) => { setPackageName(event.target.value) }}
+                placeholder={t('packageNamePlaceholder')}
+                disabled={running}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <small className={css.fieldHint}>{t('packageNameDescription')}</small>
+            </label>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>{t('configJsonLabel')}</span>
+              <textarea
+                value={configJson}
+                onChange={(event) => { setConfigJson(event.target.value) }}
+                placeholder={t('configJsonPlaceholder')}
+                disabled={running}
+                spellCheck={false}
+                autoComplete="off"
+                rows={3}
+              />
+              <small className={css.fieldHint}>{t('configJsonDescription')}</small>
             </label>
           </div>
         ) : (

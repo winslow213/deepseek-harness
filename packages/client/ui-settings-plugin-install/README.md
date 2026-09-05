@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-settings-plugin-install` contributes the **Install plugin** tab to the Web Settings Plugins section. The tab offers two install forms — copying a local plugin directory into the profile, or running `pnpm add` on an npm package — and submits the chosen one to `ctx.remote.pluginInstall.installPlugin()`. While an install runs the form is locked and the submit button shows progress; on success the tab reports the written profile directory plus the installed plugin id or the promoted bundles, and on failure it shows the Remote error message and code. The change takes effect only after the Web instance restarts, which the tab states in both states. The tab registers only when the operator gate `DSH_PLUGIN_INSTALL=true` is set, matching the Host-side install Remote.
+`dsh-client-ui-settings-plugin-install` contributes the **Install plugin** tab to the Web Settings Plugins section. The tab offers four install forms — copying a local plugin directory into the profile, running `pnpm add` on an npm package, uploading a picked directory, or registering an installed npm plugin's startup row — and submits the chosen one to `ctx.remote.pluginInstall.installPlugin()`. While an install runs the form is locked and the submit button shows progress; on success the tab reports the written profile directory plus the installed plugin id or the promoted bundles, and on failure it shows the Remote error message and code. The change takes effect only after the Web instance restarts, which the tab states in both states. The tab registers only when the operator gate `DSH_PLUGIN_INSTALL=true` is set, matching the Host-side install Remote.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Open the Plugins section in Settings and select the **Install plugin** tab. The 
 
 ### Choosing an install form
 
-The **Copy a local directory** form takes a plugin id and the absolute path of a directory containing an `index.ts` entry; it copies the directory under the profile's `plugins/<id>/` and registers the startup row. The **Install an npm package** form takes a package spec forwarded to `pnpm add` as-is; packages declaring `dsh.bundle` are promoted into the profile's bundle list. Both forms require their fields before the submit button enables, and trim submitted values.
+The **Copy a local directory** form takes a plugin id and the absolute path of a directory containing an `index.ts` entry; it copies the directory under the profile's `plugins/<id>/` and registers the startup row. The **Install an npm package** form takes a package spec forwarded to `pnpm add` as-is; packages declaring `dsh.bundle` are promoted into the profile's bundle list. The **Register an installed npm plugin** form takes a plugin id, a Loader entry specifier that resolves from the profile's installed dependencies, and an optional JSON config object written into the startup row's `config` key. Every form requires its fields before the submit button enables, and trims submitted values.
 
 ### Reading the outcome
 
@@ -99,3 +99,5 @@ These limits define the freshness and restart coupling of the install flow; they
 None.
 
 </details>
+
+**Runtime invariant:** No invariant companion is published because this package owns no diverging runtime observations; it only renders a form over the Host install Remote.

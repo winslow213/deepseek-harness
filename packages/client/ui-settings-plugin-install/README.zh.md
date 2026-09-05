@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端设置中的操作员门控插件安装标签页：把本地插件目录复制进当前配置目录，或安装 npm 包，带进度、结果事实与重启指引。"
+description: "dsh Web 客户端设置中的操作员门控插件安装标签页：把本地插件目录复制进当前配置目录、安装 npm 包、上传目录或为已安装插件注册启动行，带进度、结果事实与重启指引。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-settings-plugin-install` 向 Web 设置的「插件」分区贡献**安装插件**标签页。标签页提供两种安装方式——把本地插件目录复制进 profile，或对 npm 包执行 `pnpm add`——并把所选方式提交给 `ctx.remote.pluginInstall.installPlugin()`。安装运行期间表单被锁定、提交按钮显示进度；成功后标签页报告写入的配置目录以及安装的插件 id 或被提升的 bundle，失败时显示 Remote 错误消息与错误码。改动只在 Web 实例重启后生效，两种状态下标签页都会说明这一点。只有设置操作员开关 `DSH_PLUGIN_INSTALL=true` 时标签页才注册，与宿主侧安装 Remote 一致。
+`dsh-client-ui-settings-plugin-install` 向 Web 设置的「插件」分区贡献**安装插件**标签页。标签页提供四种安装方式——把本地插件目录复制进 profile、对 npm 包执行 `pnpm add`、上传所选目录、或为已安装的 npm 插件注册启动行——并把所选方式提交给 `ctx.remote.pluginInstall.installPlugin()`。安装运行期间表单被锁定、提交按钮显示进度；成功后标签页报告写入的配置目录以及安装的插件 id 或被提升的 bundle，失败时显示 Remote 错误消息与错误码。改动只在 Web 实例重启后生效，两种状态下标签页都会说明这一点。只有设置操作员开关 `DSH_PLUGIN_INSTALL=true` 时标签页才注册，与宿主侧安装 Remote 一致。
 
 ## 目录
 
@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 选择安装方式
 
-**复制本地目录**方式需要插件 id 与含 `index.ts` 入口的目录的绝对路径；它把目录复制到 profile 的 `plugins/<id>/` 下并注册启动行。**安装 npm 包**方式需要一个原样转发给 `pnpm add` 的包标识；声明 `dsh.bundle` 的包会被纳入 profile 的 bundle 列表。两种方式都先填满必填字段才能启用提交按钮，并会去除提交值的首尾空白。
+**复制本地目录**方式需要插件 id 与含 `index.ts` 入口的目录的绝对路径；它把目录复制到 profile 的 `plugins/<id>`/ 下并注册启动行。**安装 npm 包**方式需要一个原样转发给 `pnpm add` 的包标识；声明 `dsh.bundle` 的包会被纳入 profile 的 bundle 列表。**注册已安装的 npm 插件**方式需要插件 id、一个能从 profile 已安装依赖解析的 Loader 入口解析符，以及可选、写入启动行 `config` 键的 JSON 配置对象。每种方式都先填满必填字段才能启用提交按钮，并会去除提交值的首尾空白。
 
 ### 阅读结果
 
@@ -99,3 +99,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+**运行时不变式：** 不发布不变式伴生包，因为本包没有可分歧的运行时观测；它只在宿主安装 Remote 之上渲染表单。
