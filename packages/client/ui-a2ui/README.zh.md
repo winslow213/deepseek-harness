@@ -80,7 +80,6 @@ kind: "package-reference"
 | [`src/client/A2uiFormPanel.tsx`](src/client/A2uiFormPanel.tsx) | 表单渲染器：按类型的字段控件、必填校验、载荷转换 |
 | [`src/client/A2uiCanvasPanel.tsx`](src/client/A2uiCanvasPanel.tsx) | canvas 渲染器：React Flow 节点、可弯折边、连接/重连、提交投影 |
 | [`src/client/locales.ts`](src/client/locales.ts) | `a2ui` 中英文词典 |
-| [`src/invariant.ts`](src/invariant.ts) | 注册包所有权的不变式伴生插件；无运行时不变式（宿主工具包拥有持久记录不变式） |
 
 </details>
 
@@ -130,3 +129,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+**运行时不变式：** 不发布不变式伴生包，因为本包没有任何可能与独立观测产生分歧的运行时状态；持久 `a2ui/surface` 事件不变式由记录它的宿主工具包拥有。

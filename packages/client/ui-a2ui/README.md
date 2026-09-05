@@ -80,7 +80,6 @@ The package is one deterministic projection plus one keyed renderer, registered 
 | [`src/client/A2uiFormPanel.tsx`](src/client/A2uiFormPanel.tsx) | Form renderer: per-kind field controls, required validation, payload coercion |
 | [`src/client/A2uiCanvasPanel.tsx`](src/client/A2uiCanvasPanel.tsx) | Canvas renderer: React Flow nodes, bendable edges, connect/reconnect, submit projection |
 | [`src/client/locales.ts`](src/client/locales.ts) | The `a2ui` zh/en dictionaries |
-| [`src/invariant.ts`](src/invariant.ts) | Invariant companion registering package ownership; no runtime invariant (the host tool package owns the durable-record invariant) |
 
 </details>
 
@@ -130,3 +129,5 @@ These limits define what the renderer can draw and how far user work survives; t
 None.
 
 </details>
+
+**Runtime invariant:** No invariant companion is published because this package owns no runtime state that could diverge from an independent observation; the durable `a2ui/surface` event invariant lives in the Host tool package that records it.

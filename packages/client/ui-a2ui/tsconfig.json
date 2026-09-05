@@ -31,9 +31,6 @@
     },
     {
       "path": "../../web/tool-a2ui-surface"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }
