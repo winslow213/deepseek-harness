@@ -657,9 +657,10 @@ function installNpmRegister(profileDir: string, spec: NpmRegisterInstallSpec): P
  * Without the env var the process stays up — a bare `dsh` run has no
  * supervisor to relaunch it, and killing it would strand the terminal.
  * @param profileDir - the profile that received the install.
+ * @returns whether a supervised restart was requested.
  */
-function requestRestartIfSupervised(profileDir: string): void {
-  if (process.env[DSH_SUPERVISED_ENV] !== '1') return
+function requestRestartIfSupervised(profileDir: string): boolean {
+  if (process.env[DSH_SUPERVISED_ENV] !== '1') return false
   writeFileSync(join(profileDir, RESTART_MARKER), `${new Date().toISOString()}\n`)
   console.warn(`[${NAME}] install complete; requesting supervisor restart in ${String(RESTART_GRACE_MS)}ms`)
   setTimeout(() => {
@@ -667,6 +668,7 @@ function requestRestartIfSupervised(profileDir: string): void {
     // marker left above is what tells spawn-user to relaunch rather than stop.
     process.kill(process.pid, 'SIGTERM')
   }, RESTART_GRACE_MS).unref()
+  return true
 }
 
 /** Operator-gated Remote service installing external plugins into the profile. */
@@ -727,9 +729,10 @@ export class PluginInstallGateway extends TypertRemoteService {
           ? installNpmRegister(profileDir, spec)
           : installNpmBundle(profileDir, spec)
     // A supervised instance exits after a successful install so the supervisor
-    // relaunches it with the new plugin active.
-    requestRestartIfSupervised(result.profileDir)
-    return result
+    // relaunches it with the new plugin active; tell the caller so the browser
+    // can schedule a reconnect.
+    const restartRequested = requestRestartIfSupervised(result.profileDir)
+    return restartRequested ? { ...result, restartRequested: true } : result
   }
 
   /**

@@ -115,4 +115,10 @@ export interface PluginInstallResult {
   readonly pluginId?: string
   /** Bundle names promoted into `dsh.profile.bundles` (npm-bundle form). */
   readonly bundlesAdded?: readonly string[]
+  /**
+   * Whether the install requested a supervised process restart (the instance
+   * runs under a supervisor and self-exited so it relaunches with the new
+   * plugin active). Present only when the request actually triggered one.
+   */
+  readonly restartRequested?: boolean
 }
