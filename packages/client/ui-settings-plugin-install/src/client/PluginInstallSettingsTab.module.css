@@ -1,0 +1,218 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 760px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.intro,
+.fieldHint,
+.fileCount {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formKind {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.formOption {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+}
+
+.formOption:has(input:checked) {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
+}
+
+.formOption:has(input:focus-visible) {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.formOption:has(input:disabled) {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.formOption > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.formOption strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.formOption small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.required {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.field input {
+  width: 100%;
+  height: 36px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  padding: 0 12px;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.field input::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.field input:focus-visible {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
+}
+
+.submit {
+  align-self: flex-start;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 18px;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-on-color);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.result,
+.failure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.result {
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.failure {
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+}
+
+.resultTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.facts > div {
+  display: flex;
+  gap: 8px;
+}
+
+.facts dt {
+  min-width: 96px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.errorMessage,
+.errorCode {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.errorCode {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.restartNote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
