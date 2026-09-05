@@ -87,6 +87,15 @@
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
+    # Operator-gated plugin install into the running profile. Off by default;
+    # set DSH_PLUGIN_INSTALL=true to expose the install Remote. The row is
+    # disabled at composition so a default deploy never mounts the namespace.
+    - id: plugin-install
+      name: '@deepseek-ai/dsh-host-plugin-install'
+      disabled: !!js process.env.DSH_PLUGIN_INSTALL !== 'true'
+      config:
+        enabled: true
+
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
@@ -203,6 +212,13 @@
 
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+
+    # Operator-gated install tab beside the inventory read-only list; its
+    # Remote requires the plugin-install host row above (DSH_PLUGIN_INSTALL),
+    # so the tab registers only when that switch is on.
+    - id: ui-settings-plugin-install
+      name: '@deepseek-ai/dsh-client-ui-settings-plugin-install'
+      disabled: !!js process.env.DSH_PLUGIN_INSTALL !== 'true'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'

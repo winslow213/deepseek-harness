@@ -40,6 +40,10 @@ export function dependencyIsBundle(
   return manifest.dsh?.bundle?.patch !== undefined
 }
 
+/**
+ * The outcome of a bundle reconcile: what changed on `dsh.profile.bundles`
+ * and whether the manifest was rewritten at all.
+ */
 export interface ReconcileProfileBundlesResult {
   /** Whether the manifest changed (bundles added or removed). */
   readonly changed: boolean
@@ -49,6 +53,10 @@ export interface ReconcileProfileBundlesResult {
   readonly removed: readonly string[]
 }
 
+/**
+ * What the reconciler needs to identify the profile, its pre-pnpm manifest,
+ * and how to report diagnostics.
+ */
 export interface ReconcileProfileBundlesOptions {
   /** Diagnostic prefix used on manifest and resolution errors. */
   binName: string
