@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** Plugin-install tab behavior over a scripted install face. */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PluginInstallResult, PluginInstallSpec } from '@deepseek-ai/dsh-api-remotes/client'
 import {
@@ -10,6 +10,7 @@ import {
 import { en, type PluginInstallLocaleKey } from '../src/client/locales.ts'
 
 afterEach(cleanup)
+afterEach(() => { vi.useRealTimers() })
 
 const FILE_DIR_RESULT: PluginInstallResult = {
   form: 'file-dir',
@@ -209,6 +210,36 @@ describe('PluginInstallSettingsTab', () => {
 
     resolve(FILE_DIR_RESULT)
     await waitFor(() => { expect(screen.getByText(en.successTitle)).toBeTruthy() })
+  })
+
+  it('shows the restarting state and reloads the page after the countdown when the install requested a restart', async () => {
+    vi.useFakeTimers()
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', {
+      value: { reload },
+      configurable: true,
+      writable: true,
+    })
+    const install = vi.fn(() => Promise.resolve({ ...FILE_DIR_RESULT, restartRequested: true }))
+    mount(install)
+
+    fireEvent.change(screen.getByPlaceholderText(en.idPlaceholder), { target: { value: 'my-plugin' } })
+    fireEvent.change(screen.getByPlaceholderText(en.sourcePathPlaceholder), { target: { value: '/tmp/plugin' } })
+    fireEvent.click(screen.getByRole('button', { name: en.install }))
+
+    // Flush the resolved install promise (microtask, not a timer).
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText(en.restartingTitle)).toBeTruthy()
+    expect(screen.getByText(en.reloadInSeconds.replace('{seconds}', String(10)))).toBeTruthy()
+
+    // Step one second at a time inside act so each state update renders and
+    // schedules the next tick; the reload fires once the counter hits zero.
+    for (let second = 0; second <= 10 && reload.mock.calls.length === 0; second += 1) {
+      await act(async () => { vi.advanceTimersByTime(1_000) })
+    }
+    expect(reload).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
   })
 
   it('surfaces the Remote failure message and code', async () => {

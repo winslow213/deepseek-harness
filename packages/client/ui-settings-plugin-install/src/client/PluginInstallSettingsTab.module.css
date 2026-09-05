@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  max-width: 760px;
+  max-width: 480px;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -84,8 +84,8 @@
 }
 
 .fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -94,11 +94,6 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-}
-
-/* A field that should span the full row (the config textarea, the directory picker). */
-.fieldWide {
-  grid-column: 1 / -1;
 }
 
 .fieldLabel {

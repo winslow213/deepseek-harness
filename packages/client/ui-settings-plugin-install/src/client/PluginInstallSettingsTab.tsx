@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import type {
   DirectoryUploadFile,
   PluginInstallForm,
@@ -24,7 +24,14 @@ type ViewState =
   | { readonly status: 'idle' }
   | { readonly status: 'running' }
   | { readonly status: 'success'; readonly result: PluginInstallResult }
+  | { readonly status: 'restarting'; readonly result: PluginInstallResult; readonly secondsLeft: number }
   | { readonly status: 'error'; readonly message: string; readonly code: string | undefined }
+
+/** Seconds to wait after a supervised install before reloading the page. The
+ * host gives the Remote response ~0.8s to flush, then exits; the supervisor
+ * waits 0.5s and relaunches; the new web process takes a few seconds to boot.
+ * Ten seconds lands the reload on the fresh generation in practice. */
+const RELOAD_DELAY_SECONDS = 10
 
 function buildSpec(
   form: PluginInstallForm,
@@ -70,7 +77,24 @@ export function PluginInstallSettingsTab({
   const [files, setFiles] = useState<DirectoryUploadFile[]>([])
   const [state, setState] = useState<ViewState>({ status: 'idle' })
 
-  const running = state.status === 'running'
+  const running = state.status === 'running' || state.status === 'restarting'
+
+  // When the install triggered a supervised restart, count down then reload
+  // the page: the running process self-exits, the supervisor relaunches a new
+  // generation on the same port, and this reload reconnects through the
+  // persisted browser session.
+  useEffect(() => {
+    if (state.status !== 'restarting') return
+    if (state.secondsLeft <= 0) {
+      window.location.reload()
+      return
+    }
+    const timer = setTimeout(() => {
+      setState({ status: 'restarting', result: state.result, secondsLeft: state.secondsLeft - 1 })
+    }, 1000)
+    return () => { clearTimeout(timer) }
+  }, [state])
+
   const ready = form === 'file-dir'
     ? id.trim() !== '' && sourcePath.trim() !== ''
     : form === 'upload-directory'
@@ -100,7 +124,15 @@ export function PluginInstallSettingsTab({
     if (!ready || running) return
     setState({ status: 'running' })
     void installPlugin(buildSpec(form, id, sourcePath, npmSpec, packageName, configJson, files)).then(
-      (result) => { setState({ status: 'success', result }) },
+      (result) => {
+        if (result.restartRequested === true) {
+          // The supervised process will exit momentarily; reload after a grace
+          // period that covers the restart so the page lands on the new gen.
+          setState({ status: 'restarting', result, secondsLeft: RELOAD_DELAY_SECONDS })
+          return
+        }
+        setState({ status: 'success', result })
+      },
       (error: unknown) => {
         const code = error instanceof Error
           ? (error as { code?: unknown }).code
@@ -223,7 +255,7 @@ export function PluginInstallSettingsTab({
               />
               <small className={css.fieldHint}>{t('idDescription')}</small>
             </label>
-            <label className={`${css.field} ${css.fieldWide}`}>
+            <label className={css.field}>
               <span className={css.fieldLabel}>{t('directoryLabel')}</span>
               <input
                 type="file"
@@ -269,7 +301,7 @@ export function PluginInstallSettingsTab({
               />
               <small className={css.fieldHint}>{t('packageNameDescription')}</small>
             </label>
-            <label className={`${css.field} ${css.fieldWide}`}>
+            <label className={css.field}>
               <span className={css.fieldLabel}>{t('configJsonLabel')}</span>
               <textarea
                 value={configJson}
@@ -285,7 +317,7 @@ export function PluginInstallSettingsTab({
           </div>
         ) : (
           <div className={css.fields} key={form}>
-            <label className={`${css.field} ${css.fieldWide}`}>
+            <label className={css.field}>
               <span className={css.fieldLabel}>
                 {t('npmSpecLabel')}
                 <em className={css.required}>{t('required')}</em>
@@ -303,9 +335,29 @@ export function PluginInstallSettingsTab({
           </div>
         )}
         <button type="submit" className={css.submit} disabled={!ready || running}>
-          {running ? t('installing') : t('install')}
+          {state.status === 'restarting' ? t('restarting') : running ? t('installing') : t('install')}
         </button>
       </form>
+      {state.status === 'restarting' ? (
+        <div className={css.result} aria-live="polite">
+          <h3 className={css.resultTitle}>{t('restartingTitle')}</h3>
+          <dl className={css.facts}>
+            <div>
+              <dt>{t('profileDirLabel')}</dt>
+              <dd><code>{state.result.profileDir}</code></dd>
+            </div>
+            {state.result.pluginId !== undefined ? (
+              <div>
+                <dt>{t('pluginIdLabel')}</dt>
+                <dd><code>{state.result.pluginId}</code></dd>
+              </div>
+            ) : null}
+          </dl>
+          <p className={css.restartNote}>
+            {t('reloadInSeconds', { seconds: state.secondsLeft })}
+          </p>
+        </div>
+      ) : null}
       {state.status === 'success' ? (
         <div className={css.result} aria-live="polite">
           <h3 className={css.resultTitle}>{t('successTitle')}</h3>
