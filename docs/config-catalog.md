@@ -878,6 +878,27 @@ export interface Config {
 
 Source: [`packages/host/frontend-static/src/index.ts:30`](../packages/host/frontend-static/src/index.ts)
 
+<a id="deepseek-aidsh-host-plugin-install"></a>
+
+## `@deepseek-ai/dsh-host-plugin-install`
+
+Requires: `loader`
+
+```ts config-catalog
+/** Operator switch gating the plugin install Remote namespace. */
+export interface Config {
+  /** Mount only with `enabled: true`; deployments that omit it never expose the namespace. */
+  readonly enabled: boolean
+  /**
+   * Explicit profile directory override for tests and embedders; the running
+   * instance self-locates its profile when this is absent.
+   */
+  readonly profileDir?: string
+}
+```
+
+Source: [`packages/host/plugin-install/src/types.ts:30`](../packages/host/plugin-install/src/types.ts)
+
 <a id="deepseek-aidsh-host-webserver"></a>
 
 ## `@deepseek-ai/dsh-host-webserver`
@@ -3387,6 +3408,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-settings` ([`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-general` ([`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-models` ([`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-settings-plugin-install` ([`packages/client/ui-settings-plugin-install/src/index.ts`](../packages/client/ui-settings-plugin-install/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` ([`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugins` ([`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
