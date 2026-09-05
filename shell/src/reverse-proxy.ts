@@ -19,6 +19,7 @@
  * @module dsh-team-shell/reverse-proxy
  */
 
+import { createHash } from 'node:crypto'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 
@@ -42,23 +43,62 @@ export const TEAM_SESSION_COOKIE = 'dsh_team_session'
 
 /** Minimal login page served when a request carries no valid session. */
 const LOGIN_PAGE = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Team sign in</title>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>天问星 · 登录</title>
 <style>
-  body { font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #f6f7f9; }
-  .card { background: #fff; border: 1px solid #d9dee3; border-radius: 12px; padding: 2rem; width: 20rem; box-shadow: 0 4px 12px rgba(0,0,0,.06); }
-  h1 { font-size: 1.2rem; margin: 0 0 1rem; }
-  label { display: block; margin: .6rem 0 .2rem; font-size: .85rem; }
-  input { width: 100%; box-sizing: border-box; padding: .5rem; border: 1px solid #c4cad1; border-radius: 6px; }
-  button { width: 100%; margin-top: 1rem; padding: .55rem; border: 0; border-radius: 6px; background: #1e6fd9; color: #fff; cursor: pointer; }
-  #err { color: #c0392b; min-height: 1em; font-size: .85rem; margin-top: .6rem; }
+  :root { color-scheme: dark; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    margin: 0; min-height: 100vh; color: #e8edf7;
+    background: radial-gradient(ellipse at 50% 120%, #0b1e3f 0%, #060a18 60%, #04060f 100%);
+    display: grid; place-items: center; overflow: hidden;
+  }
+  /* star field */
+  .stars { position: fixed; inset: 0; background-image:
+      radial-gradient(1px 1px at 20% 30%, #fff8, transparent),
+      radial-gradient(1px 1px at 70% 20%, #fff6, transparent),
+      radial-gradient(1.5px 1.5px at 40% 70%, #aebfff, transparent),
+      radial-gradient(1px 1px at 85% 60%, #fff9, transparent),
+      radial-gradient(1px 1px at 10% 85%, #fff5, transparent),
+      radial-gradient(1.5px 1.5px at 60% 90%, #8fa8ff, transparent),
+      radial-gradient(1px 1px at 30% 45%, #ffffff88, transparent),
+      radial-gradient(1px 1px at 90% 15%, #ffffff66, transparent);
+    pointer-events: none; }
+  .card {
+    position: relative; z-index: 1; width: 22rem; text-align: center;
+    background: rgba(13, 24, 54, .55); border: 1px solid rgba(120, 160, 255, .25);
+    border-radius: 16px; padding: 2.6rem 2.2rem 2.2rem; backdrop-filter: blur(8px);
+    box-shadow: 0 0 60px rgba(30, 70, 200, .25);
+  }
+  .brand { font-size: 2.1rem; font-weight: 700; letter-spacing: .3em; margin: 0 0 .3rem;
+    background: linear-gradient(120deg, #8ab6ff, #dfe9ff, #7fa0ff);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tagline { font-size: .82rem; color: #93a4cc; margin: 0 0 2rem; letter-spacing: .08em; }
+  form { text-align: left; }
+  label { display: block; margin: .9rem 0 .3rem; font-size: .85rem; color: #b8c6e2; }
+  input {
+    width: 100%; box-sizing: border-box; padding: .65rem .8rem;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(140,170,255,.3);
+    border-radius: 8px; color: #eef2fb; font-size: .95rem; outline: none;
+  }
+  input:focus { border-color: #6f9bff; box-shadow: 0 0 0 3px rgba(111,155,255,.15); }
+  button {
+    width: 100%; margin-top: 1.6rem; padding: .7rem; border: 0; border-radius: 8px;
+    background: linear-gradient(120deg, #2f6bff, #5b8cff); color: #fff;
+    font-size: .98rem; letter-spacing: .2em; cursor: pointer; transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.12); }
+  #err { color: #ff7d7d; min-height: 1em; font-size: .85rem; margin-top: .8rem; text-align: center; }
 </style></head>
-<body><div class="card">
-  <h1>dsh Team</h1>
+<body>
+<div class="stars"></div>
+<div class="card">
+  <h1 class="brand">天问星</h1>
+  <p class="tagline">鸿蒙科专用 Agent 赋能研发平台</p>
   <form id="f">
-    <label for="u">Username</label><input id="u" autocomplete="username" required>
-    <label for="p">Password</label><input id="p" type="password" autocomplete="current-password" required>
-    <button type="submit">Sign in</button>
+    <label for="u">用户名</label><input id="u" autocomplete="username" required>
+    <label for="p">密码</label><input id="p" type="password" autocomplete="current-password" required>
+    <button type="submit">登 录</button>
     <div id="err"></div>
   </form>
 </div>
@@ -73,9 +113,9 @@ f.addEventListener('submit', async (e) => {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value }),
     })
-    if (!r.ok) { err.textContent = 'Invalid username or password'; return }
+    if (!r.ok) { err.textContent = '用户名或密码错误'; return }
     window.location.href = '/'
-  } catch { err.textContent = 'Network error' }
+  } catch { err.textContent = '网络错误' }
 })
 </script></body></html>`
 
@@ -109,6 +149,66 @@ function proxyHttp(req: IncomingMessage, res: ServerResponse, upstream: Upstream
   forward.on('error', (error: Error) => {
     if (!res.headersSent) res.writeHead(502)
     res.end(`proxy error: ${error.message}`)
+  })
+  req.pipe(forward)
+}
+
+
+/**
+ * Proxy one request to the upstream, injecting the team logout overlay into
+ * HTML documents. Non-HTML responses and everything after a page's first byte
+ * stream through unchanged; an HTML body is buffered so the badge can be
+ * inserted before </body>.
+ */
+function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream, prefix: string): void {
+  const pathname = req.url ?? '/'
+  const stripped = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : pathname
+  const forward = httpRequest({
+    hostname: '127.0.0.1',
+    port: upstream.port,
+    method: req.method ?? 'GET',
+    path: stripped === '' ? '/' : stripped,
+    headers: req.headers,
+  }, (upstreamRes) => {
+    const type = upstreamRes.headers['content-type']
+    const isHtml = typeof type === 'string' && type.includes('text/html')
+    if (!isHtml) {
+      res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
+      upstreamRes.pipe(res)
+      return
+    }
+    // Buffer HTML so the badge can be injected; page documents are small and
+    // the product streams its app assets as separate non-HTML requests.
+    const chunks: Buffer[] = []
+    let total = 0
+    const cap = 8 * 1024 * 1024
+    upstreamRes.on('data', (chunk: Buffer) => {
+      total += chunk.length
+      if (total > cap) {
+        // Oversized document: stream what we buffered plus the rest unchanged.
+        res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
+        res.end(Buffer.concat(chunks))
+        upstreamRes.pipe(res)
+        return
+      }
+      chunks.push(chunk)
+    })
+    upstreamRes.on('end', () => {
+      if (res.headersSent) return
+      const body = Buffer.concat(chunks).toString('utf8')
+      const headers = { ...upstreamRes.headers }
+      delete headers['content-length']
+      const injected = injectLogoutBadge(body)
+      res.writeHead(upstreamRes.statusCode ?? 200, {
+        ...headers,
+        'content-type': type ?? 'text/html; charset=utf-8',
+        'content-length': String(Buffer.byteLength(injected)),
+      })
+      res.end(injected)
+    })
+  })
+  forward.on('error', (error: Error) => {
+    if (!res.headersSent) { res.writeHead(502); res.end(`proxy error: ${error.message}`) }
   })
   req.pipe(forward)
 }
@@ -268,6 +368,88 @@ export interface AccountProxyOptions {
   readonly staticRoutes?: ReadonlyMap<string, number>
 }
 
+/**
+ * The name of the dsh instance's browser-session cookie for one authority
+ * (mirrors `browser-auth.ts`: `dsh-auth-` + base64url(sha256(authority))). The
+ * proxy computes it from the forwarded Host so logout can clear the instance
+ * session too, not only the team session.
+ */
+function dshAuthCookieName(authority: string): string {
+  const digest = createHash('sha256').update(authority).digest()
+  return 'dsh-auth-' + digest.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
+}
+
+/** The request authority used for cookie naming (host, including port). */
+function requestAuthority(req: IncomingMessage): string {
+  const host = req.headers.host ?? ''
+  return host
+}
+
+/**
+ * The fixed logout overlay injected into every served HTML page. Clicking it
+ * clears both the team session and the dsh instance session, then reloads to
+ * the (now unauthenticated) login page.
+ */
+const LOGOUT_BADGE = `<div id="dsh-team-logout" title="退出登录"
+  style="position:fixed;top:12px;right:12px;z-index:2147483000;
+         background:rgba(10,18,40,.72);color:#dfe7ff;border:1px solid rgba(120,160,255,.35);
+         padding:6px 14px;border-radius:999px;font:12px/1.6 system-ui,sans-serif;
+         cursor:pointer;user-select:none;backdrop-filter:blur(6px);">退出登录</div>
+<script>
+(() => {
+  const el = document.getElementById('dsh-team-logout')
+  if (!el) return
+  el.addEventListener('click', async () => {
+    try { await fetch('/api/logout', { method: 'POST' }) } catch {}
+    window.location.href = '/'
+  })
+})()
+</script>`
+
+/** Inject the logout overlay before the closing body tag of an HTML document. */
+function injectLogoutBadge(body: string): string {
+  if (body.includes('dsh-team-logout')) return body
+  const idx = body.lastIndexOf('</body>')
+  if (idx === -1) return body
+  return body.slice(0, idx) + LOGOUT_BADGE + body.slice(idx)
+}
+
+/**
+ * Complete a logout locally: forward to the account service to destroy the
+ * team session (and its Redis record), then clear the dsh instance browser
+ * cookie for this authority so the browser is fully signed out.
+ */
+function handleTeamLogout(req: IncomingMessage, res: ServerResponse, accountUrl: string): void {
+  const authority = requestAuthority(req)
+  const account = httpRequest(accountUrl, {
+    method: 'POST',
+    path: '/api/logout',
+    headers: { cookie: req.headers.cookie ?? '' },
+  }, (upstreamRes) => {
+    const setCookies: string[] = []
+    const upstream = upstreamRes.headers['set-cookie']
+    if (Array.isArray(upstream)) setCookies.push(...upstream)
+    else if (typeof upstream === 'string') setCookies.push(upstream)
+    // Clear the dsh instance session cookie for this authority too.
+    const clear = `${dshAuthCookieName(authority)}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict`
+    setCookies.push(clear)
+    upstreamRes.resume()
+    if (!res.headersSent) {
+      res.setHeader('set-cookie', setCookies)
+      res.writeHead(302, { location: '/' })
+    }
+    res.end()
+  })
+  account.on('error', () => {
+    if (!res.headersSent) {
+      res.setHeader('set-cookie', `${dshAuthCookieName(authority)}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict`)
+      res.writeHead(302, { location: '/' })
+    }
+    res.end()
+  })
+  account.end()
+}
+
 /** Account-service route decision for the current session. */
 interface RouteDecision {
   authenticated: boolean
@@ -299,13 +481,17 @@ async function accountRouteDecision(accountUrl: string, cookieHeader: string | u
  * spawned instance receive a "not ready" page.
  */
 export function startAccountProxy(options: AccountProxyOptions): ReturnType<typeof createServer> {
-  const ACCOUNT_PATHS = new Set(['/api/login', '/api/logout', '/api/me'])
-
   const server = createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://proxy.invalid').pathname
-    // Public account endpoints proxy straight to the account service (it owns
-    // cookie issuance and the login/logout state).
-    if (ACCOUNT_PATHS.has(pathname)) {
+    // Logout is handled locally so both the team session (via the account
+    // service) and this authority's dsh instance cookie are cleared.
+    if (pathname === '/api/logout') {
+      handleTeamLogout(req, res, options.accountUrl)
+      return
+    }
+    // The other public account endpoints proxy straight to the account service
+    // (it owns cookie issuance and login state).
+    if (pathname === '/api/login' || pathname === '/api/me') {
       proxyAccount(req, res, options.accountUrl)
       return
     }
@@ -343,7 +529,7 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
             return
           }
         }
-        proxyHttp(req, res, { user: '', port }, '')
+        proxyHtml(req, res, { user: '', port }, '')
       } catch (error) {
         if (!res.headersSent) json(res, 502, { error: error instanceof Error ? error.message : String(error) })
       }
