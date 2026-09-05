@@ -223,7 +223,7 @@ export function PluginInstallSettingsTab({
               />
               <small className={css.fieldHint}>{t('idDescription')}</small>
             </label>
-            <label className={css.field}>
+            <label className={`${css.field} ${css.fieldWide}`}>
               <span className={css.fieldLabel}>{t('directoryLabel')}</span>
               <input
                 type="file"
@@ -269,7 +269,7 @@ export function PluginInstallSettingsTab({
               />
               <small className={css.fieldHint}>{t('packageNameDescription')}</small>
             </label>
-            <label className={css.field}>
+            <label className={`${css.field} ${css.fieldWide}`}>
               <span className={css.fieldLabel}>{t('configJsonLabel')}</span>
               <textarea
                 value={configJson}
@@ -285,7 +285,7 @@ export function PluginInstallSettingsTab({
           </div>
         ) : (
           <div className={css.fields} key={form}>
-            <label className={css.field}>
+            <label className={`${css.field} ${css.fieldWide}`}>
               <span className={css.fieldLabel}>
                 {t('npmSpecLabel')}
                 <em className={css.required}>{t('required')}</em>
