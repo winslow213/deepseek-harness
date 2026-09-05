@@ -157,9 +157,49 @@ the full doc/catalog gate surface. File plan:
   e2e (`anchors a relative add spec`, `activates a dependency that gained
   dsh.bundle`) passes, apps/cli + app-boot typecheck clean, lib bundles
   rebuilt.
-- [ ] New host package skeleton (`packages/host/plugin-install`).
-- [ ] Service implementation + gate.
-- [ ] Wiring (web-app bundle + remotes assembly).
-- [ ] Tests (real composition + fixtures).
-- [ ] Bilingual README + catalog/doc-sync.
-- [ ] Agent note.
+- [x] New host package skeleton (`packages/host/plugin-install`).
+- [x] Service implementation + gate.
+- [x] Wiring (web-app bundle + remotes assembly).
+- [x] Tests (real composition + fixtures).
+- [x] Bilingual README + catalog/doc-sync.
+- [x] Agent note.
+
+### Phase B (Phase 4 of the phased plan) execution status
+
+- [x] New client package skeleton (`packages/client/ui-settings-plugin-install`).
+- [x] Tab component + bilingual dictionaries + registration (`settings.plugins.tab`,
+      id `plugin-install`, order 20, next to the read-only inventory tab).
+- [x] Wiring: web-app browser roster row gated by the same
+      `DSH_PLUGIN_INSTALL=true` switch (UI + Remote register together), bundle
+      dependency, `tsconfig.client.json` reference.
+- [x] Tests: jsdom component spec (submit trim, running lock, success facts,
+      error rendering) + browser-plugin spec (registration, label, Remote
+      failure mapping).
+- [x] Bilingual README trio + model-experience audit entry.
+- [x] Agent note.
+
+Phase B 追加能力（operator 在在线验证阶段提出，随 Phase B 一并落地）：
+
+- [x] npm 完整命令安装：npm-bundle 表单接受 `dsh plugin --profile web add <spec>` /
+      `pnpm add <spec>` 完整命令（`parseNpmSpec` 提取 `add` 后的尾部 spec 并剥引号，
+      无 `add` 时原样转发），宿主与组件测试覆盖。
+- [x] upload-directory 目录上传表单：`<input type="file" webkitdirectory>` 选择本地目录，
+      文件按相对路径 base64 经 Remote 通道落盘 `plugins/<id>/` 后登记同一 patch 行；
+      安全上限 512 文件 / 单文件 1 MiB / 总计 10 MiB，路径校验拒绝绝对路径、`..` 逃逸、
+      非普通文件（`plugin-install/invalid-spec`）。
+- [x] Remote 方法名修复：`pluginInstall/install` 与客户端命名空间服务的内部方法冲突
+      （`client api: method "pluginInstall/install" conflicts with its namespace service`），
+      改名为 `installPlugin`，调用、测试、README、Agent Note 全量同步。
+
+### Phase B 验证记录（全部通过）
+
+- `pnpm run typecheck` ✅
+- `pnpm exec vitest run packages/host/plugin-install/tests/install.spec.ts
+  packages/client/ui-settings-plugin-install/tests/components.client.spec.tsx
+  packages/client/ui-settings-plugin-install/tests/browser-plugin.client.spec.ts` — 40 tests ✅
+- `pnpm run lint` — 0 warnings / 0 errors ✅
+- `pnpm run build:lib` — typert host/remote-client 产物重建，lib 含新 `parseNpmSpec` ✅
+- `pnpm run doc-sync` — 32/32 ✅（重录 3 对 i18n hash、重新生成 config-catalog）
+- 在线验证：`DSH_PLUGIN_INSTALL=true pnpm dsh --profile web`
+  → http://127.0.0.1:3080，Settings → Plugins → Install plugin 标签页正常注册，
+  无插件加载错误（命名冲突已消除）。
