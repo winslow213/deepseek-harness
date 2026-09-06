@@ -201,19 +201,28 @@ function writeTeamLlmPatch(home: string): void {
 }
 
 /**
- * Build the child environment for a spawned instance, layering the team's LLM
- * facts (`TEAM_LLM_API_KEY` / `TEAM_LLM_BASE_URL`) over the inherited
- * environment under the reference names the home patch reads. Omitted facts
- * stay omitted, so the adapter falls back to its public defaults.
+ * Build the child environment for a spawned instance, layering the team-wide
+ * facts over the inherited environment:
+ *
+ * - `DSH_LLM_API_KEY` / `DSH_LLM_BASE_URL` (from `TEAM_LLM_API_KEY` /
+ *   `TEAM_LLM_BASE_URL`) under the reference names the home patch reads.
+ * - `DSH_PLUGIN_INSTALL` (from `TEAM_PLUGIN_INSTALL`, default `true`), the
+ *   operator switch that mounts the plugin-install host + settings UI rows.
+ *
+ * Omitted facts stay omitted so each surface falls back to its own default.
  * @param home - the user's DSH_HOME (set as `DSH_HOME`).
  * @returns the child process environment.
  */
-function teamLlmChildEnv(home: string): NodeJS.ProcessEnv {
+function teamChildEnv(home: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, [DSH_HOME_ENV]: home }
   const apiKey = process.env[TEAM_LLM_API_KEY_ENV]
   const baseUrl = process.env[TEAM_LLM_BASE_URL_ENV]
   if (apiKey !== undefined && apiKey !== '') env[LLM_KEY_REF] = apiKey
   if (baseUrl !== undefined && baseUrl !== '') env[LLM_BASE_URL_ENV] = baseUrl
+  // Plugin install is account-provisioning surface, not a per-deployment opt
+  // out: every member can install into their own profile. The operator can
+  // still set TEAM_PLUGIN_INSTALL=false to turn it off fleet-wide.
+  env.DSH_PLUGIN_INSTALL = process.env.TEAM_PLUGIN_INSTALL ?? 'true'
   return env
 }
 
@@ -274,7 +283,7 @@ export function spawnUserInstance(user: string, port: number): DshInstance {
     process.execPath,
     args,
     {
-      env: teamLlmChildEnv(home),
+      env: teamChildEnv(home),
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
