@@ -28,6 +28,7 @@ export async function main(): Promise<void> {
     instances,
     portStart: env.portStart,
     portEnd: env.portEnd,
+    idleTimeoutSecs: env.idleTimeoutSecs,
   })
 
   const server = createAccountServer({

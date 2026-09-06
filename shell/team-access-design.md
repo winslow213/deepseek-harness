@@ -253,3 +253,16 @@ stdout `USER URL` 解析）。
 - 空闲判定时长 N（建议默认 15-30 分钟；与 Redis 会话 TTL 30 天解耦）
 - 端口池范围（design §77：内部段 32768-60999 有 2.8 万个，瓶颈是内存非端口）
 - 冷启动并发互斥（同一用户多请求同时触发 spawn → 需幂等/单飞）
+
+### 实现现状（2026-09-06）
+
+- **空闲回收已落地**（简化版）：`dsh_instances` 增 `last_seen_at` 列；proxy 每次
+  `/api/session/route` 决策时 account 内联刷新该列（`InstanceStore.touch`，无需独立
+  `/api/touch`，proxy 保持无 redis 依赖）；`InstanceManager` 每 60s 扫描
+  `idleUsers(idleTimeoutSecs)` 并对空闲实例 `stop()`。阈值 `TEAM_IDLE_TIMEOUT_SECS`
+  （默认 30 分钟）。
+- **logout 主动回收已落地**：`/api/logout` 销毁 session 后 `lifecycle.stop(userId)`，
+  回收 supervisor + dsh web。
+- **冷启动（第 5/6 点）未实现**：route 返回 `instance:null` 时 proxy 仍只显示
+  NOT_READY_PAGE，需在下次登录时由 account `ensure` 拉起。若要 full-spawn-on-demand，
+  需按第 5/6 点扩展 route 响应并让 proxy 触发 spawn。

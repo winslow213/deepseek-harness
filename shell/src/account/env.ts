@@ -18,6 +18,8 @@ export interface EnvConfig {
   portEnd: number
   /** Lifetime of a minted pairing code, in seconds (default 30 minutes). */
   pairingTtlSecs: number
+  /** Idle timeout after which a member's instance is reclaimed (default 30 minutes). */
+  idleTimeoutSecs: number
 }
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
@@ -58,9 +60,14 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   if (Number.isNaN(pairingTtlSecs) || pairingTtlSecs <= 0) {
     throw new Error(`TEAM_PAIRING_TTL_SECS must be a positive number; got ${JSON.stringify(rawPairingTtl)}`)
   }
+  const rawIdle = env.TEAM_IDLE_TIMEOUT_SECS ?? String(30 * 60)
+  const idleTimeoutSecs = Number(rawIdle)
+  if (Number.isNaN(idleTimeoutSecs) || idleTimeoutSecs <= 0) {
+    throw new Error(`TEAM_IDLE_TIMEOUT_SECS must be a positive number; got ${JSON.stringify(rawIdle)}`)
+  }
   return {
     dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes,
     adminSecret: adminSecret === '' ? undefined : adminSecret,
-    portStart, portEnd, pairingTtlSecs,
+    portStart, portEnd, pairingTtlSecs, idleTimeoutSecs,
   }
 }

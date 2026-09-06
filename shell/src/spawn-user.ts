@@ -182,6 +182,8 @@ export interface SupervisedInstance {
   readonly url: Promise<string>
   /** The child process of the current generation (the supervisor swaps it on restart). */
   readonly child: ChildProcess
+  /** The loopback port every generation binds (fixed for the supervision's lifetime). */
+  readonly port: number
   /** Resolves when the supervision loop ends for good (stop, or a non-marker crash). */
   readonly exited: Promise<void>
   /** Stop the loop for good: dispose the current child and never relaunch. */
@@ -338,6 +340,7 @@ export function superviseUserInstance(user: string, port: number, options: { onR
   return {
     url,
     child: current.child,
+    port,
     exited: loop.then(() => {}),
     stop: async () => {
       stopRequested = true

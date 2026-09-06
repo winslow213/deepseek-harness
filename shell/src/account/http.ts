@@ -124,7 +124,13 @@ async function handleLogin(req: IncomingMessage, res: ServerResponse, s: HttpSer
 async function handleLogout(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
   const cookies = parseCookies(req.headers.cookie)
   const sessionId = cookies.get(COOKIE_NAME)
-  if (sessionId !== undefined) await s.sessions.destroy(sessionId)
+  if (sessionId !== undefined) {
+    const userId = await s.sessions.lookup(sessionId)
+    await s.sessions.destroy(sessionId)
+    // Signing out actively reclaims the user's instance (supervisor + dsh
+    // web), matching the S6 lifecycle goal; the next login cold-starts.
+    if (userId !== undefined) await s.lifecycle.stop(userId)
+  }
   res.setHeader('set-cookie', expiredSessionCookie())
   sendJson(res, 200, { loggedOut: true })
 }
@@ -180,6 +186,10 @@ async function handleSessionRoute(req: IncomingMessage, res: ServerResponse, s: 
     sendJson(res, 200, { authenticated: true, instance: null })
     return
   }
+  // The proxy asks this on every forwarded request, so a resolved instance is
+  // itself the activity signal: refresh its idle clock so the reclaim sweep
+  // never collects a session that is still in use.
+  await s.instances.touch(user.user_id)
   sendJson(res, 200, {
     authenticated: true,
     instance: { port: route.port, launchToken: route.launchToken },

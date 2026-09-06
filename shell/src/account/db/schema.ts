@@ -23,9 +23,11 @@ CREATE TABLE IF NOT EXISTS dsh_instances (
   pid          INTEGER,
   launch_token TEXT,
   launched_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Keep an existing table (created before launch_token existed) in sync.
 ALTER TABLE dsh_instances ADD COLUMN IF NOT EXISTS launch_token TEXT;
+ALTER TABLE dsh_instances ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
 `

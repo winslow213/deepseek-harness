@@ -8,6 +8,7 @@ export interface InstanceRow {
   pid: number | null
   launch_token: string | null
   launched_at: string
+  last_seen_at: string
 }
 
 export class InstanceStore {
@@ -26,6 +27,26 @@ export class InstanceStore {
              pid = COALESCE(EXCLUDED.pid, dsh_instances.pid), updated_at = now()`,
       [userId, port, launchToken ?? null, pid ?? null],
     )
+  }
+
+  /** Refresh the instance's activity timestamp (a proxy route decision observed the session). */
+  async touch(userId: string): Promise<void> {
+    await this.db.query('UPDATE dsh_instances SET last_seen_at = now() WHERE user_id = $1', [userId])
+  }
+
+  /**
+   * List the users whose instance has been idle longer than the threshold —
+   * that is, whose `last_seen_at` predates `now() - idleSecs`.
+   * @param idleSecs - the idle timeout in seconds.
+   */
+  async idleUsers(idleSecs: number): Promise<string[]> {
+    const result = await this.db.query(
+      `SELECT user_id FROM dsh_instances
+       WHERE last_seen_at < now() - make_interval(secs => $1)
+       ORDER BY last_seen_at`,
+      [idleSecs],
+    )
+    return result.rows.map(row => String((row as Record<string, unknown>).user_id))
   }
 
   /** Look up the running port for one user. */
@@ -56,6 +77,7 @@ export class InstanceStore {
       pid: (row as Record<string, unknown>).pid === null ? null : Number((row as Record<string, unknown>).pid),
       launch_token: (row as Record<string, unknown>).launch_token === null ? null : String((row as Record<string, unknown>).launch_token),
       launched_at: String((row as Record<string, unknown>).launched_at),
+      last_seen_at: String((row as Record<string, unknown>).last_seen_at),
     }))
   }
 }

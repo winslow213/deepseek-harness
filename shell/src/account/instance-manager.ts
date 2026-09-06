@@ -8,7 +8,12 @@ export interface InstanceManagerOptions {
   readonly instances: InstanceStore
   readonly portStart: number
   readonly portEnd: number
+  /** Idle timeout in seconds after which a member's instance is reclaimed. */
+  readonly idleTimeoutSecs: number
 }
+
+/** How often the idle scanner sweeps for stale instances, in seconds. */
+const IDLE_SWEEP_INTERVAL_SECS = 60
 
 /**
  * Starts a user's supervised shell instance after login and owns its process
@@ -20,8 +25,28 @@ export class InstanceManager {
   private readonly managed = new Map<string, SupervisedInstance>()
   private readonly starting = new Map<string, Promise<void>>()
   private readonly reservedPorts = new Set<number>()
+  private readonly idleTimer: NodeJS.Timeout
 
-  constructor(private readonly options: InstanceManagerOptions) {}
+  constructor(private readonly options: InstanceManagerOptions) {
+    this.idleTimer = setInterval(() => {
+      void this.reapIdle()
+    }, IDLE_SWEEP_INTERVAL_SECS * 1000)
+    // The account service's HTTP server keeps the process alive; the sweep
+    // timer must not, so tests and short-lived boots exit cleanly.
+    this.idleTimer.unref()
+  }
+
+  /**
+   * Reclaim members whose instance has been idle past the configured timeout.
+   * The proxy refreshes `last_seen_at` on every route decision, so a live
+   * session never crosses the threshold; a member whose browser closed or
+   * whose session lapsed is reclaimed on the next sweep and cold-starts on
+   * their next login.
+   */
+  private async reapIdle(): Promise<void> {
+    const idleUsers = await this.options.instances.idleUsers(this.options.idleTimeoutSecs)
+    await Promise.all(idleUsers.map(userId => this.stop(userId)))
+  }
 
   /** Ensure one registered instance exists for a user. */
   async ensure(userId: string): Promise<void> {
@@ -38,6 +63,28 @@ export class InstanceManager {
     } finally {
       this.starting.delete(userId)
     }
+  }
+
+  /**
+   * Stop one user's supervised instance and drop its registration. The
+   * supervision loop's `exited` settlement already runs the same cleanup
+   * (managed map + reserved port + registration), but this awaits the stop
+   * and removes the registration deterministically so a logout returns with
+   * the instance gone rather than shortly after.
+   * @param userId - the account whose instance stops.
+   */
+  async stop(userId: string): Promise<void> {
+    const instance = this.managed.get(userId)
+    if (instance === undefined) {
+      // No running supervisor (never started, or the loop already ended).
+      // Drop any stale registration so the user next logs in to a cold start.
+      await this.options.instances.remove(userId)
+      return
+    }
+    this.managed.delete(userId)
+    this.reservedPorts.delete(instance.port)
+    await instance.stop()
+    await this.options.instances.remove(userId)
   }
 
   private async start(userId: string): Promise<void> {
@@ -78,6 +125,7 @@ export class InstanceManager {
 
   /** Stop all account-owned shell supervisors. */
   async stopAll(): Promise<void> {
+    clearInterval(this.idleTimer)
     const instances = [...this.managed.values()]
     await Promise.all(instances.map(instance => instance.stop()))
     this.managed.clear()
