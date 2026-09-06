@@ -29,7 +29,6 @@ async function main(): Promise<void> {
       // behavior (no auto-restart on a marker).
       const once = args.includes('--once')
       const supervised = !once
-      if (supervised) process.env.DSH_SUPERVISED = '1'
       const instance = supervised ? superviseUserInstance(user, port) : spawnUserInstance(user, port)
       const account = accountBaseUrl()
       const secret = adminSecret()

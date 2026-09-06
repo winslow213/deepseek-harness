@@ -211,9 +211,11 @@ function writeTeamLlmPatch(home: string): void {
  *
  * Omitted facts stay omitted so each surface falls back to its own default.
  * @param home - the user's DSH_HOME (set as `DSH_HOME`).
+ * @param supervised - when true, set `DSH_SUPERVISED=1` so an in-process
+ *   plugin install can request a supervisor restart via the marker.
  * @returns the child process environment.
  */
-function teamChildEnv(home: string): NodeJS.ProcessEnv {
+function teamChildEnv(home: string, supervised: boolean): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, [DSH_HOME_ENV]: home }
   const apiKey = process.env[TEAM_LLM_API_KEY_ENV]
   const baseUrl = process.env[TEAM_LLM_BASE_URL_ENV]
@@ -223,6 +225,7 @@ function teamChildEnv(home: string): NodeJS.ProcessEnv {
   // out: every member can install into their own profile. The operator can
   // still set TEAM_PLUGIN_INSTALL=false to turn it off fleet-wide.
   env.DSH_PLUGIN_INSTALL = process.env.TEAM_PLUGIN_INSTALL ?? 'true'
+  if (supervised) env[DSH_SUPERVISED_ENV] = '1'
   return env
 }
 
@@ -265,13 +268,15 @@ const RESTART_DELAY_MS = 500
  * address) is forwarded as `--trusted-host` so the instance's browser-trust
  * fence accepts the non-loopback Host the reverse proxy forwards; spawns
  * without it stay loopback-only, matching the proxy-less single-machine form.
- * When `DSH_SUPERVISED=1` is set, the child inherits it so an in-process
- * install can request a restart by writing {@link RESTART_MARKER}.
+ * When `supervised` is true, `DSH_SUPERVISED=1` is set on the child so an
+ * in-process install can request a restart by writing {@link RESTART_MARKER}.
  * @param user - account/user id whose DSH_HOME is provisioned.
  * @param port - loopback port to bind.
+ * @param supervised - whether a supervisor loop will relaunch the child
+ *   (`DSH_SUPERVISED=1`), enabling the plugin-install self-restart marker.
  * @returns the running instance handle.
  */
-export function spawnUserInstance(user: string, port: number): DshInstance {
+export function spawnUserInstance(user: string, port: number, supervised = false): DshInstance {
   const home = provisionUserHome(user)
   const entryHost = process.env.DSH_ENTRY_HOST
   const args = [
@@ -283,7 +288,7 @@ export function spawnUserInstance(user: string, port: number): DshInstance {
     process.execPath,
     args,
     {
-      env: teamChildEnv(home),
+      env: teamChildEnv(home, supervised),
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -371,7 +376,7 @@ export async function registerOnReady(user: string, port: number, instance: { ur
 export function superviseUserInstance(user: string, port: number, options: { onReady?: SuperviseOnReady } = {}): SupervisedInstance {
   const onReady = options.onReady ?? registerOnReady
   let stopRequested = false
-  let current: DshInstance = spawnUserInstance(user, port)
+  let current: DshInstance = spawnUserInstance(user, port, true)
   let generation = 0
   const url = current.url
   void onReady(user, port, current)
@@ -392,7 +397,7 @@ export function superviseUserInstance(user: string, port: number, options: { onR
       await new Promise((resolve) => { setTimeout(resolve, RESTART_DELAY_MS) })
       if (stopRequested) return
       console.log(`[spawn-user] ${user} requested a restart; spawning generation ${String(generation)}`)
-      current = spawnUserInstance(user, port)
+      current = spawnUserInstance(user, port, true)
       void onReady(user, port, current)
       current.url.then((u) => {
         console.log(`[spawn-user] generation ${String(next)} URL: ${u}`)
