@@ -13,6 +13,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { injectRegionRouter, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
 
 /** Repository root; resolves the source-launch dsh CLI. */
@@ -68,7 +69,60 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
     }, null, 2) + '\n')
   }
   writeTeamLlmPatch(home)
+  ensureRegionRouter(user, env)
   return home
+}
+
+/** Environment key naming the hub control port (loopback), default 7100. */
+const DSH_HUB_CONTROL_PORT_ENV = 'DSH_HUB_CONTROL_PORT'
+
+/** Environment key naming the hub shadow root, default /tmp/dsh-shadow. */
+const DSH_SHADOW_ROOT_ENV = 'DSH_SHADOW_ROOT'
+
+/** Default hub control port the region routers relay to. */
+const DEFAULT_HUB_CONTROL_PORT = '7100'
+
+/** Default shadow root the region routers and mount-sync agree on. */
+const DEFAULT_SHADOW_ROOT = '/tmp/dsh-shadow'
+
+/** The loopback hub control URL the region routers relay to. */
+function hubControlUrl(env: NodeJS.ProcessEnv): string {
+  return `http://127.0.0.1:${env[DSH_HUB_CONTROL_PORT_ENV] ?? DEFAULT_HUB_CONTROL_PORT}`
+}
+
+/**
+ * Ensure the user's profile carries the region routers + mount-sync, so every
+ * paired agent root auto-registers as a workspace. This is account-provisioning
+ * (not pairing-time) work: every account gets the mount surface out of the box.
+ * A profile patch the operator wrote by hand (no team-shell marker) is left
+ * untouched; a team-generated patch is refreshed from the current hub config.
+ * @param user - the account whose profile is provisioned.
+ * @param env - environment carrying `DSH_HUB_CONTROL_PORT` / `DSH_SHADOW_ROOT`.
+ */
+export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = process.env): void {
+  const profileDir = join(userHome(user, env), 'profiles', 'web')
+  const patch = join(profileDir, PROFILE_PATCH_FILENAME)
+  let exists = false
+  let isOurs = false
+  try {
+    const text = readFileSync(patch, 'utf8')
+    exists = true
+    isOurs = text.includes('Injected by the team shell')
+  } catch {
+    exists = false
+  }
+  if (exists && !isOurs) return
+  const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
+  injectRegionRouter({
+    runtimeSourceDir,
+    hubUrl: hubControlUrl(env),
+    user,
+    shadowRoot: env[DSH_SHADOW_ROOT_ENV] ?? DEFAULT_SHADOW_ROOT,
+    profileDir,
+    includeShell: true,
+    syncMounts: true,
+    fsCwd: '/tmp',
+  })
 }
 
 /** Environment key the account service reads the team API key from. */

@@ -3,14 +3,13 @@
  * @module dsh-team-shell/bin
  */
 
-import { readFileSync } from 'node:fs'
-import { registerOnReady, spawnUserInstance, superviseUserInstance, userHome } from './spawn-user.ts'
+import { ensureRegionRouter, registerOnReady, spawnUserInstance, superviseUserInstance, userHome } from './spawn-user.ts'
 import { startProxy, startAccountProxy } from './reverse-proxy.ts'
 import { join } from 'node:path'
 import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
 import { listAgents, listMounts, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
-import { injectRemoteProviders, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { injectRemoteProviders } from './remote/inject.ts'
 import { accountBaseUrl, adminSecret, unregisterInstance } from './instance-register.ts'
 
 const [, , command, ...args] = process.argv
@@ -239,43 +238,20 @@ async function remoteHub(args: readonly string[]): Promise<void> {
   }
 
   const onPaired = autoInject
-    ? (pairing: ConsumedPairing): void => {
-      // On a completed pairing, provision the user's profile with the remote
-      // executor. The injected cwd defaults to the agent's first served root.
-      // An existing non-generated patch file is left untouched (loud, not silent).
-      try {
-        const profileDir = join(userHome(pairing.user), 'profiles', 'web')
-        const patch = join(profileDir, PROFILE_PATCH_FILENAME)
-        let isOurs = false
-        let exists = false
-        try {
-          const text = readFileSync(patch, 'utf8')
-          exists = true
-          isOurs = text.includes('Injected by the team shell')
-        } catch {
-          exists = false
-        }
-        if (exists && !isOurs) {
-          console.error(`[hub] not auto-injecting ${pairing.user}: ${patch} exists and is not a generated patch; edit it manually`)
-          return
-        }
-        const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
-        const cwd = pairing.agent.roots[0] ?? pairing.user
-        const written = injectRemoteProviders({
-          runtimeSourceDir,
-          hubUrl: loopbackControlBase(control),
-          user: pairing.user,
-          shellCwd: cwd,
-          fsCwd: cwd,
-          profileDir,
-          includeFs: true,
-        })
-        console.log(`[hub] auto-injected remote executor+fs for ${pairing.user} -> ${written} (root ${cwd})`)
-      } catch (error) {
-        console.error(`[hub] auto-inject failed for ${pairing.user}: ${error instanceof Error ? error.message : String(error)}`)
-      }
+  ? (pairing: ConsumedPairing): void => {
+    // On a completed pairing, (re)provision the user's profile with the
+    // region routers + mount-sync. This is the same idempotent
+    // account-provisioning step `provisionUserHome` runs at spawn; pairing
+    // re-runs it so a member who pairs before their instance provisioned (or
+    // whose generated patch was deleted) still gets the mount surface.
+    try {
+      ensureRegionRouter(pairing.user, process.env)
+      console.log(`[hub] ensured region routers + mount-sync for ${pairing.user}`)
+    } catch (error) {
+      console.error(`[hub] auto-inject failed for ${pairing.user}: ${error instanceof Error ? error.message : String(error)}`)
     }
-    : undefined
+  }
+  : undefined
   const hub = createHub({
     agentPort,
     controlPort: control,
