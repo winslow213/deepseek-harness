@@ -9,8 +9,8 @@
 
 | 组件 | 端口 | 用户/路由 | 启动命令 |
 | --- | --- | --- | --- |
-| **proxy** 入口 | 3999 | 默认 `@alice:32001` | `node --import tsx/esm shell/src/bin.ts proxy 3999 @alice:32001` |
-| **hub**（agent 桥） | 7101 agent / 7100 control | token `alice=topsecret` | `remote hub --user-token alice=topsecret --agent-port 7101 --control-port 7100 --no-auto-inject --shadow-root /tmp/dsh-shadow` |
+| **proxy** 入口 | 3999 | account service session route | `node --import tsx/esm shell/src/bin.ts proxy 3999 --account http://127.0.0.1:3900` |
+| **hub**（agent 桥） | 7101 agent / 7100 control | account 校验配对码 | `remote hub --account http://127.0.0.1:3900 --agent-port 7101 --control-port 7100 --no-auto-inject --shadow-root /tmp/dsh-shadow` |
 | **alice 实例**（每用户 dsh web） | 32001 | `DSH_HOME=/home/winslow/.dsh-users/alice` | `spawn-user alice 32001`（见下） |
 
 用户浏览/CLI 走 **proxy 3999**（默认上游 @alice:32001），不直连 32001。
@@ -61,21 +61,24 @@ node --import tsx/esm shell/src/bin.ts spawn-user alice 32001
 ### 1. Linux 服务器：hub（已常驻）
 ```sh
 node --import tsx/esm shell/src/bin.ts remote hub \
-  --user-token alice=topsecret --agent-port 7101 --control-port 7100 \
+  --account http://127.0.0.1:3900 --agent-port 7101 --control-port 7100 \
   --no-auto-inject --shadow-root /tmp/dsh-shadow
 ```
 `--agent-port`(默认 7101,agent 拨入)、`--control-port`(7100,loopback 控制 API)，
 `--shadow-root` 与 region-router config 一致。**agent 端口绑 0.0.0.0**，Windows 可达。
+`--account` 让 hub 向账号服务核实配对码并学习各成员的 agent token（配对码由浏览器
+设置里的「生成配对码」签发）；也可省略 `--account` 用静态 `--user-token user=secret`。
 
 ### 2. Windows 主机：跑 agent 拨号
 ```powershell
-# Windows 上，在 dsh 仓库根目录
+# Windows 上，在 dsh 仓库根目录（配对码在浏览器「设置 → 生成配对码」里拿）
 node --import tsx/esm shell/src/bin.ts remote agent `
-  --user alice --token topsecret --hub 10.33.2.56:7101 `
+  --pair <配对码> --hub 10.33.2.56:7101 `
   --name alice-win --root "D:\work" --allow-command cmd
 ```
 - `--root D:\work` 是要挂载的本地目录（可重复 `--root` 挂多个）
-- `--token` 必须与 hub `--user-token alice=...` 相同
+- 配对成功后 hub 下发该用户真 token，之后重连可改用 `--user alice --token <token>`
+- **一个配对码可挂载多台设备**（码在 TTL 内可复用）；每台设备起一个 `--pair` agent
 - **挂载后**：alice 的 mount-sync 会把它注册成 workspace（标题形如 `↗ work (alice-win)`），
   经 region-router 把 shadow 树转回 Windows。模型/工具经 ctx.fs 访问 `D:\work`。
 - 只跑文件操作可不 `--allow-command`；要让 dsh shell 工具跑命令需白名单 `cmd`。
@@ -99,8 +102,8 @@ alice 实例里出现该 workspace（标题含 `↗`）即挂载成功。
 
 两个都是长驻 daemon（当前 PID 记录于本表/ps）。改 shell 代码后需重启它们才生效：
 - proxy：kill 后同命令重启。
-- hub：kill 后同命令重启（`--user-token` 必须与 agent/CLI 一致；`--shadow-root`
-  与 region-router config 一致）。
+- hub：kill 后同命令重启（`--account` 指向账号服务；`--shadow-root` 与
+  region-router config 一致）。
 
 ## 已验证（2026-09-05）
 
@@ -132,9 +135,13 @@ message + `details.output`。
 ## 本次产物状态
 
 - 部署演进到 team access 形态（S1/S2 已落地，见 `team-access-design.md`）：
-  account 服务（127.0.0.1:3900，Postgres 5432 + Redis 6380）+ account 模式 proxy
+  account 服务（`cd shell && npm run account`，127.0.0.1:3900，Postgres 5432 +
+  Redis 6380，代码在 `shell/src/account/`）+ account 模式 proxy
   （`proxy 3999 --account http://127.0.0.1:3900`，登录路由 + dsh token swap）。
-- 实例生命周期管理（S6：空闲回收 + 按需冷启动）**设计已定、实现归 team 侧**：
-  当前无回收，实例常驻；容量上限 ~70 同时在线的分析记录在 design §10。
+  account 服务在登录成功后分配端口并**在进程内 supervise** 每用户实例（不再
+  子进程 spawn-user）；proxy 只做会话路由。
+- 实例生命周期管理（S6：空闲回收 + 按需冷启动）**设计已定、实现归 account 侧**
+  （`shell/src/account/instance-manager.ts`）：当前无回收，实例常驻；容量上限
+  ~70 同时在线的分析记录在 design §10。
 - 插件安装已具备：4 表单 + pnpm 自愈 + 监督重启 + 装完自动刷新（见上文）。
 - alice 32001 带 `DSH_PLUGIN_INSTALL=true` + `--trusted-host` + 自愈 lib。

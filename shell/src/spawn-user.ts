@@ -10,7 +10,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
@@ -67,7 +67,100 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
       dsh: { profile: { bundles: [...WEB_BUNDLES], patchReload: 'startup' } },
     }, null, 2) + '\n')
   }
+  writeTeamLlmPatch(home)
   return home
+}
+
+/** Environment key the account service reads the team API key from. */
+const TEAM_LLM_API_KEY_ENV = 'TEAM_LLM_API_KEY'
+
+/** Environment key the account service reads the team endpoint from. */
+const TEAM_LLM_BASE_URL_ENV = 'TEAM_LLM_BASE_URL'
+
+/** Credential reference (child env var) the home patch points the DeepSeek adapter at. */
+const LLM_KEY_REF = 'DSH_LLM_API_KEY'
+
+/** Environment key the home patch reads the endpoint from at startup. */
+const LLM_BASE_URL_ENV = 'DSH_LLM_BASE_URL'
+
+/** The id marking the shell-owned block inside the home patch layer. */
+const TEAM_LLM_PATCH_ID = 'dsh-team-llm'
+
+/** The marker pair delimiting the shell-owned block inside the home patch layer. */
+function teamLlmMarkers(): readonly [string, string] {
+  return [`# >>> ${TEAM_LLM_PATCH_ID}\n`, `# <<< ${TEAM_LLM_PATCH_ID}\n`]
+}
+
+/**
+ * Replace (or append) one id-delimited block inside the home-level patch
+ * layer, preserving every byte outside the block. Mirrors the
+ * `plugin-install` marker protocol so the shell's block coexists with any
+ * other writer of `$DSH_HOME/cordis.patch.yml` without clobbering their rows.
+ * @param patchPath - the home `cordis.patch.yml` path.
+ * @param block - the full replacement text, delimited by the team-llm markers.
+ */
+function upsertTeamLlmBlock(patchPath: string, block: string): void {
+  let content: string
+  try {
+    content = readFileSync(patchPath, 'utf8')
+  } catch {
+    // Missing patch layer: the fresh block becomes the whole file.
+    content = ''
+  }
+  const [start, end] = teamLlmMarkers()
+  const open = content.indexOf(start)
+  const close = content.indexOf(end)
+  const next = open >= 0 && close >= open
+    ? `${content.slice(0, open)}${block}${content.slice(close + end.length)}`
+    : content === ''
+      ? block
+      : `${content.replace(/\n*$/, '')}\n${block}`
+  writeFileSync(patchPath, next, { mode: 0o600 })
+}
+
+/**
+ * Upsert the home-level cordis patch steering the DeepSeek adapter to the team
+ * endpoint and key reference. The key is never materialized here: the patch
+ * names the `DSH_LLM_API_KEY` credential reference, resolved per request from
+ * the child's inherited environment (the credentials seam's highest layer),
+ * and the endpoint reads `DSH_LLM_BASE_URL` at startup through `!!js`. One
+ * change to the account service environment — then an instance restart —
+ * propagates new facts to every user. Any other content in the home patch
+ * (e.g. operator rows) survives byte-for-byte.
+ * @param home - the user's DSH_HOME.
+ */
+function writeTeamLlmPatch(home: string): void {
+  const [start, end] = teamLlmMarkers()
+  const body = [
+    '# Team-injected LLM configuration. The API key is never written here: it',
+    '# resolves per request from the inherited DSH_LLM_API_KEY environment',
+    '# variable via the credentials seam, and the endpoint resolves from',
+    '# DSH_LLM_BASE_URL at startup. Change the account service environment and',
+    '# restart the instance to propagate new facts to every user.',
+    '- id: llm-deepseek',
+    "  name: '@deepseek-ai/dsh-llm-deepseek'",
+    '  config:',
+    `    apiKeyEnv: ${LLM_KEY_REF}`,
+    `    baseURL: !!js process.env.${LLM_BASE_URL_ENV}`,
+  ].join('\n')
+  upsertTeamLlmBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`)
+}
+
+/**
+ * Build the child environment for a spawned instance, layering the team's LLM
+ * facts (`TEAM_LLM_API_KEY` / `TEAM_LLM_BASE_URL`) over the inherited
+ * environment under the reference names the home patch reads. Omitted facts
+ * stay omitted, so the adapter falls back to its public defaults.
+ * @param home - the user's DSH_HOME (set as `DSH_HOME`).
+ * @returns the child process environment.
+ */
+function teamLlmChildEnv(home: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, [DSH_HOME_ENV]: home }
+  const apiKey = process.env[TEAM_LLM_API_KEY_ENV]
+  const baseUrl = process.env[TEAM_LLM_BASE_URL_ENV]
+  if (apiKey !== undefined && apiKey !== '') env[LLM_KEY_REF] = apiKey
+  if (baseUrl !== undefined && baseUrl !== '') env[LLM_BASE_URL_ENV] = baseUrl
+  return env
 }
 
 /** A spawned dsh web instance handle. */
@@ -89,9 +182,14 @@ export interface SupervisedInstance {
   readonly url: Promise<string>
   /** The child process of the current generation (the supervisor swaps it on restart). */
   readonly child: ChildProcess
+  /** Resolves when the supervision loop ends for good (stop, or a non-marker crash). */
+  readonly exited: Promise<void>
   /** Stop the loop for good: dispose the current child and never relaunch. */
   stop(): Promise<void>
 }
+
+/** Per-generation registration hook for {@link superviseUserInstance}. */
+export type SuperviseOnReady = (user: string, port: number, instance: DshInstance) => void | Promise<void>
 
 /** Time to wait between a supervised child's exit and a relaunch, in ms. */
 const RESTART_DELAY_MS = 500
@@ -120,7 +218,7 @@ export function spawnUserInstance(user: string, port: number): DshInstance {
     process.execPath,
     args,
     {
-      env: { ...process.env, [DSH_HOME_ENV]: home },
+      env: teamLlmChildEnv(home),
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -201,14 +299,17 @@ export async function registerOnReady(user: string, port: number, instance: { ur
  * requests a relaunch.
  * @param user - account/user id whose DSH_HOME is provisioned.
  * @param port - loopback port to bind.
+ * @param options - registration hook for each generation; defaults to the
+ *   account-service HTTP registration used by the standalone `spawn-user` CLI.
  * @returns the supervised handle, whose `url` resolves on the first generation.
  */
-export function superviseUserInstance(user: string, port: number): SupervisedInstance {
+export function superviseUserInstance(user: string, port: number, options: { onReady?: SuperviseOnReady } = {}): SupervisedInstance {
+  const onReady = options.onReady ?? registerOnReady
   let stopRequested = false
   let current: DshInstance = spawnUserInstance(user, port)
   let generation = 0
   const url = current.url
-  void registerOnReady(user, port, current)
+  void onReady(user, port, current)
 
   const loop = (async () => {
     while (!stopRequested) {
@@ -227,7 +328,7 @@ export function superviseUserInstance(user: string, port: number): SupervisedIns
       if (stopRequested) return
       console.log(`[spawn-user] ${user} requested a restart; spawning generation ${String(generation)}`)
       current = spawnUserInstance(user, port)
-      void registerOnReady(user, port, current)
+      void onReady(user, port, current)
       current.url.then((u) => {
         console.log(`[spawn-user] generation ${String(next)} URL: ${u}`)
       }).catch(() => {})
@@ -237,6 +338,7 @@ export function superviseUserInstance(user: string, port: number): SupervisedIns
   return {
     url,
     child: current.child,
+    exited: loop.then(() => {}),
     stop: async () => {
       stopRequested = true
       await current.stop()

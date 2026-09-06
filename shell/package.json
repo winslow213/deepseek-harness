@@ -15,7 +15,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node --import tsx/esm src/bin.ts",
-    "spawn-user": "node --import tsx/esm src/spawn-user.ts"
+    "start": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts",
+    "spawn-user": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts spawn-user",
+    "account": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts account",
+    "account-cli": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts account-cli"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "@types/node": "^22.10.1",
+    "@types/pg": "^8.11.10"
   }
 }

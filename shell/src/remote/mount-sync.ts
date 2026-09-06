@@ -17,7 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { listMounts } from './client.ts'
-import { ensureShadowDir } from './shadow.ts'
+import { ensureShadowDir, isShadowPath } from './shadow.ts'
 import type { MountRecord } from './hub.ts'
 
 /** Plugin config supplied by the injected profile row. */
@@ -66,8 +66,24 @@ export async function syncAllMounts(
   hubUrl: string,
   user: string,
   registry: WorkspaceRegistry,
+  shadowRoot: string,
 ): Promise<number> {
   const mounts = await listMounts(hubUrl)
+  const onlinePaths = new Set(
+    mounts.filter(mount => mount.user === user).map(mount => mount.shadowPath),
+  )
+  // Prune this user's shadow-tree workspaces whose agent has gone offline:
+  // an orphaned mount workspace otherwise lingers in the list and every access
+  // fails with "agent offline". registry.delete retains the directory and any
+  // session logs, so a re-pair re-registers a fresh workspace.
+  for (const workspace of registry.list()) {
+    if (!isShadowPath(workspace.path, shadowRoot) || onlinePaths.has(workspace.path)) continue
+    try {
+      await registry.delete(workspace.id)
+    } catch (error) {
+      console.warn(`[mount-sync] could not remove offline mount ${workspace.path}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   let synced = 0
   for (const mount of mounts) {
     if (mount.user !== user) continue
@@ -85,10 +101,12 @@ export function apply(ctx: Context, config: MountSyncConfig): () => void {
   const hubUrl = config.hubUrl.replace(/\/+$/, '')
   if (hubUrl === '') throw new Error('mount-sync: hubUrl is required')
   if (config.user === '') throw new Error('mount-sync: user is required')
+  const shadowRoot = config.shadowRoot.replace(/\/+$/, '')
+  if (shadowRoot === '') throw new Error('mount-sync: shadowRoot is required')
   const intervalMs = config.intervalMs ?? DEFAULT_INTERVAL_MS
 
   const tick = (): void => {
-    void syncAllMounts(hubUrl, config.user, ctx.workspaceRegistry).catch((error: unknown) => {
+    void syncAllMounts(hubUrl, config.user, ctx.workspaceRegistry, shadowRoot).catch((error: unknown) => {
       console.warn(`[mount-sync] sync failed: ${error instanceof Error ? error.message : String(error)}`)
     })
   }

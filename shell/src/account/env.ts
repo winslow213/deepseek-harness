@@ -13,6 +13,11 @@ export interface EnvConfig {
   agentTokenBytes: number
   /** Shared secret operator-side services present on instance-registration calls. */
   adminSecret?: string
+  /** Inclusive instance port range. */
+  portStart: number
+  portEnd: number
+  /** Lifetime of a minted pairing code, in seconds (default 30 minutes). */
+  pairingTtlSecs: number
 }
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
@@ -40,5 +45,22 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     throw new Error(`TEAM_AGENT_TOKEN_BYTES must be >= 16; got ${JSON.stringify(rawBytes)}`)
   }
   const adminSecret = env.TEAM_ADMIN_SECRET
-  return { dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes, adminSecret: adminSecret === '' ? undefined : adminSecret }
+  const rawPortStart = env.TEAM_INSTANCE_PORT_START ?? '32001'
+  const rawPortEnd = env.TEAM_INSTANCE_PORT_END ?? '60999'
+  const portStart = Number(rawPortStart)
+  const portEnd = Number(rawPortEnd)
+  if (!Number.isInteger(portStart) || portStart <= 0 || portStart > 65535
+    || !Number.isInteger(portEnd) || portEnd < portStart || portEnd > 65535) {
+    throw new Error(`TEAM_INSTANCE_PORT_START/END must define an inclusive port range; got ${JSON.stringify(rawPortStart)}-${JSON.stringify(rawPortEnd)}`)
+  }
+  const rawPairingTtl = env.TEAM_PAIRING_TTL_SECS ?? String(30 * 60)
+  const pairingTtlSecs = Number(rawPairingTtl)
+  if (Number.isNaN(pairingTtlSecs) || pairingTtlSecs <= 0) {
+    throw new Error(`TEAM_PAIRING_TTL_SECS must be a positive number; got ${JSON.stringify(rawPairingTtl)}`)
+  }
+  return {
+    dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes,
+    adminSecret: adminSecret === '' ? undefined : adminSecret,
+    portStart, portEnd, pairingTtlSecs,
+  }
 }

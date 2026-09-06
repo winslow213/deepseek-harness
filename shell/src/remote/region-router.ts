@@ -298,7 +298,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
     replaceAll?: boolean
   }): Promise<unknown> {
     try {
-      return await fsOp(this.region.hubUrl, t.user, spec)
+      return await fsOp(this.region.hubUrl, t.user, spec, t.mount.agentId)
     } catch (error) {
       throw toFsError(error, 'remote filesystem operation failed')
     }

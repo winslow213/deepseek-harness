@@ -8,7 +8,7 @@ import { loadEnv } from './env.ts'
 function usage(): never {
   process.stderr.write(
     [
-      'usage: dsh-team-cli <command>',
+      'usage: dsh-shell account-cli <command>',
       '  create-user <username> <password> [--operator]   create a member (or operator) account',
       '  list-users                                       list accounts',
       '  reset-agent-token <username>                     rotate a user\'s agent token',
@@ -18,8 +18,8 @@ function usage(): never {
   process.exit(1)
 }
 
-async function main(): Promise<void> {
-  const [, , command, ...args] = process.argv
+export async function main(argv: readonly string[]): Promise<void> {
+  const [command, ...args] = argv
   const env = loadEnv()
   const db = await createDb(env.dbUrl)
   const users = new UserStore(db)
@@ -82,8 +82,3 @@ async function main(): Promise<void> {
     await db.end().catch(() => {})
   }
 }
-
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exit(1)
-})

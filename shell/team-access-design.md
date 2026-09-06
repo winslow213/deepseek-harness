@@ -11,10 +11,10 @@
 
 ```
 服务器（Linux，部署 shell 服务面）
-  proxy       入口聚合 3999（登录路由 + 反代 + WebSocket upgrade）    [reverse-proxy.ts]
+  proxy       入口聚合 3999（会话路由 + 反代 + WebSocket upgrade）      [reverse-proxy.ts]
   hub         agent 桥 7101/7100（token 鉴权 + 配对 + exec/fs 中继）  [hub.ts]
-  supervise   每用户 dsh web 实例（supervised 自动重启）              [spawn-user.ts]
-  账号服务    登录/成员/签发 token 的独立 node 服务（pg-redis）        [★ 新增]
+  supervise   每用户 dsh web 实例（由账号服务按登录拉起）                 [spawn-user.ts]
+  账号服务    登录/成员/签发 token/实例生命周期的独立 node 服务          [★ 新增]
   Postgres    账号/users 表 + user→port 实例登记                       [本机 5432]
   Redis       登录会话（session_id → user_id, TTL）                   [本机 6380/15]
 
@@ -36,9 +36,10 @@
 1. 新成员由 operator 在服务器侧创建账号（用户名 + 初始密码，operator 分配）
 2. 成员访问 `http://<server>:3999/` → 公共登录页
 3. 成员输入用户名 + 密码 → 账号服务验证 → 发会话 cookie
-4. proxy 按会话的 user 把请求路由到该成员的 dsh 实例
-5. 成员在自己 dsh 页面点"生成配对码" → 得到一次性码
-6. 成员在自己主机 `remote agent --pair <code> --hub <server>:7101 --root <dir>` → 挂载
+4. 账号服务按登录用户分配端口并自动拉起该成员的 dsh 实例
+5. proxy 按会话的 user 把请求路由到该成员的 dsh 实例
+6. 成员在自己 dsh 页面点"生成配对码" → 得到一次性码
+7. 成员在自己主机 `remote agent --pair <code> --hub <server>:7101 --root <dir>` → 挂载
 
 ### 2.2 数据模型（Postgres）
 
@@ -90,11 +91,14 @@ CREATE TABLE dsh_instances (
 - 保持 `--trusted-host` 语义不变：实例以 proxy 入口 host 作为 trust authority，
   proxy 转发原 Host，浏览器 cookie 绑定入口 authority。
 
-### 3.2 实例登记
+### 3.2 实例登记与自动拉起
 
-- `superviseUserInstance(user, port)` 首代成功后就写 `dsh_instances`（user→port）；
-  停止时删除。supervise 重启同端口不重写。
-- operator 手动 spawn 未登记时，登录路由报"尚未分配实例"而不是静默反代失败。
+- 登录成功后，账号服务在配置的端口范围内选择空闲端口，启动
+  `TEAM_SHELL_COMMAND spawn-user <user> <port>`，并等待首代输出 URL 后写入
+  `dsh_instances`（user→port）。
+- 同一用户的并发登录共享一次启动操作；实例子进程退出时账号服务删除登记。
+- `superviseUserInstance(user, port)` 在同一端口内负责插件安装后的重启；账号服务负责
+  用户级实例的启动与停止。
 
 ### 3.3 登录 API（账号服务，走 loopback 由 proxy 反代或 proxy 直连）
 
@@ -184,10 +188,20 @@ host remote 包 + client 包：
 
 | 决策 | 结论 |
 |---|---|
-| 账号服务位置 | **仓库根 `team/` 新目录**，独立 package.json，不进 pnpm workspace |
+| 账号服务位置 | ~~仓库根 `team/` 新目录~~（已合并，见下条） |
 | hub token 更新 | **重启 hub** 生效（首版不加重载端点；文档写明流程） |
 | 本次范围 | **S1 + S2**（账号服务 + proxy 登录路由）；S3/S4 配对与 hub 动态 token 下批 |
 | Postgres 访问 | 实现时用 env 提供连接串（config 不落明文）；本机 5432 上库待 operator 给凭据 |
+| 实例启动归属 | ~~账号服务分配端口并自动启动 `spawn-user`~~（已改为进程内 supervise，见下条） |
+
+### Operator 决策（2026-09-06，合并）
+
+账号服务与 shell 服务面功能重合（实例生命周期、实例登记、代理路由），已合并：
+账号服务代码从仓库根 `team/` 移入 `shell/src/account/`，`shell/package.json` 增加
+`pg` + `ioredis` 依赖（remote agent 仍零依赖）。入口为 `dsh-shell account`
+（服务）与 `dsh-shell account-cli`（operator CLI）。实例启动改为**进程内 supervise**
+（`instance-manager` 直接调用 `superviseUserInstance`，不再经 `spawn-user` 子进程 +
+stdout `USER URL` 解析）。
 
 ## 9. 依赖的事实锚（已核实 2026-09-05）
 

@@ -45,11 +45,16 @@ async function main(): Promise<void> {
         console.error(`spawn failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       })
-      process.on('SIGINT', async () => {
+      // The account service stops the supervisor with SIGTERM; SIGINT is the
+      // interactive Ctrl-C path. Both must stop the child and unregister so no
+      // dsh web instance is orphaned on a different port than its record.
+      const shutdown = async (): Promise<void> => {
         await instance.stop()
         if (account !== undefined) await unregisterInstance(account, user, secret)
         process.exit(0)
-      })
+      }
+      process.on('SIGINT', () => { void shutdown() })
+      process.on('SIGTERM', () => { void shutdown() })
       break
     }
     case 'proxy': {
@@ -142,8 +147,18 @@ async function main(): Promise<void> {
       }
       break
     }
+    case 'account': {
+      const { main: accountMain } = await import('./account/server.ts')
+      await accountMain()
+      break
+    }
+    case 'account-cli': {
+      const { main: accountCli } = await import('./account/cli.ts')
+      await accountCli(args)
+      break
+    }
     default:
-      console.error('usage: dsh-shell <spawn-user|proxy|remote> ...')
+      console.error('usage: dsh-shell <spawn-user|proxy|remote|account|account-cli> ...')
       process.exit(1)
   }
 }
@@ -192,7 +207,7 @@ async function remoteHub(args: readonly string[]): Promise<void> {
   const { flags, positionals } = parseFlags(args)
   if (flags.get('help') === 'true') {
     console.error(
-      'usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N] [--shadow-root DIR] [--no-auto-inject]',
+      'usage: dsh-shell remote hub --user-token user=secret[,...] [--account URL] [--account-secret SECRET] [--agent-port N] [--control-port N] [--shadow-root DIR] [--no-auto-inject]',
     )
     process.exit(0)
   }
@@ -204,6 +219,8 @@ async function remoteHub(args: readonly string[]): Promise<void> {
   const control = controlPort(flags)
   const shadowRoot = flags.get('shadow-root')
   const autoInject = flags.get('no-auto-inject') !== 'true'
+  const accountUrl = flags.get('account') ?? process.env.TEAM_ACCOUNT_URL
+  const accountSecret = flags.get('account-secret') ?? process.env.TEAM_ADMIN_SECRET
   const tokens = new Map<string, string>()
   const pairs = flags.get('user-token')
   if (pairs !== undefined) {
@@ -216,8 +233,8 @@ async function remoteHub(args: readonly string[]): Promise<void> {
       tokens.set(user, token)
     }
   }
-  if (tokens.size === 0) {
-    console.error('usage: dsh-shell remote hub --user-token user=secret[,...] [--agent-port N] [--control-port N] [--shadow-root DIR]')
+  if (tokens.size === 0 && (accountUrl === undefined || accountUrl === '')) {
+    console.error('usage: dsh-shell remote hub --user-token user=secret[,...] [--account URL] [--account-secret SECRET]')
     process.exit(1)
   }
 
@@ -265,6 +282,8 @@ async function remoteHub(args: readonly string[]): Promise<void> {
     tokens,
     onPaired,
     ...shadowRoot === undefined ? {} : { shadowRoot },
+    ...accountUrl === undefined || accountUrl === '' ? {} : { accountUrl },
+    ...accountSecret === undefined || accountSecret === '' ? {} : { adminSecret: accountSecret },
   })
   console.log(`hub agent listener on 0.0.0.0:${String(agentPort)}`)
   console.log(`hub control API on http://127.0.0.1:${String(control)}`)

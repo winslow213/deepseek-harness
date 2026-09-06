@@ -1,0 +1,139 @@
+/* Pairing code row: same Setting-Cell chrome as the Sign out row, plus an
+ * inline panel that reveals the minted code, claim command, and copy controls. */
+
+.container {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 0;
+  border: none;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 48px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.chevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 16px;
+}
+
+.meta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.valueRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 13px;
+  line-height: 20px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-l2, transparent);
+  color: var(--dsw-alias-label-primary);
+  word-break: break-all;
+}
+
+.command {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-l2, transparent);
+  color: var(--dsw-alias-label-primary);
+  word-break: break-all;
+}
+
+.copy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.copy:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-danger, #ff7d7d);
+}

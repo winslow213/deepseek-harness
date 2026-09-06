@@ -34,6 +34,11 @@ export interface RemoteShellConfig {
   hubUrl: string
   /** Hub-registered user id whose remote agent serves this executor. */
   user: string
+  /**
+   * Hub agent id disambiguating among several agents for the same user; omit
+   * when the user has a single agent.
+   */
+  agentId?: string
   /** Remote working directory for commands that do not override it; must live under the agent `--root`. */
   cwd: string
   /** Default foreground timeout in milliseconds. */
@@ -56,6 +61,7 @@ export interface RemoteShellConfig {
 export interface ResolvedRemoteShellConfig {
   hubUrl: string
   user: string
+  agentId?: string
   cwd: string
   timeoutMs: number
   maxTimeoutMs: number
@@ -87,6 +93,7 @@ export function resolveRemoteShellConfig(config: RemoteShellConfig): ResolvedRem
   return {
     hubUrl: hubControlBase(config.hubUrl),
     user: config.user,
+    ...config.agentId === undefined || config.agentId === '' ? {} : { agentId: config.agentId },
     cwd: config.cwd,
     timeoutMs,
     maxTimeoutMs,
@@ -246,6 +253,7 @@ export class RemoteShellCore {
       body: JSON.stringify({
         id: requestId,
         user: this.config.user,
+        ...this.config.agentId === undefined ? {} : { agentId: this.config.agentId },
         argv: shellArgvFor(spec.workdir, spec.command),
         cwd: spec.workdir,
         ...timeoutMs !== undefined ? { timeoutMs } : {},
@@ -268,7 +276,7 @@ export class RemoteShellCore {
 
     const killRemote = (): void => {
       if (requestId === undefined) return
-      void runKill(this.config.hubUrl, this.config.user, requestId).catch(() => {})
+      void runKill(this.config.hubUrl, this.config.user, requestId, this.config.agentId).catch(() => {})
     }
     let deadlineTimer: NodeJS.Timeout | undefined
     const onAbort = (): void => {
@@ -374,7 +382,7 @@ export class RemoteShellCore {
       kill: (): boolean => {
         if (status !== 'running') return false
         status = 'killed'
-        if (requestId !== undefined) void runKill(this.config.hubUrl, this.config.user, requestId).catch(() => {})
+        if (requestId !== undefined) void runKill(this.config.hubUrl, this.config.user, requestId, this.config.agentId).catch(() => {})
         return true
       },
     }

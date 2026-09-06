@@ -42,8 +42,15 @@ export interface Config extends BashLocalConfig {
  * executor, mounted shadow-tree workdirs through the owning remote agent.
  */
 export class RegionRouterShellExecutor extends SandboxBashExecutor {
-  /** Registration-free remote runner for shadow workdirs. */
-  private readonly remote: RemoteShellCore
+  /** Per-agent remote runners, keyed by hub agent id ('' for the default core). */
+  private readonly remotes = new Map<string, RemoteShellCore>()
+  private readonly remoteBase: {
+    hubUrl: string
+    user: string
+    timeoutMs: number | undefined
+    maxTimeoutMs: number | undefined
+    maxOutputBytes: number | undefined
+  }
   private readonly shadowRoot: string
   private readonly user: string
   private mountsCache: readonly MountRecord[] | undefined
@@ -55,16 +62,33 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
     if (typeof config.user !== 'string' || config.user === '') throw new Error('region-shell: user is required')
     this.shadowRoot = config.shadowRoot.replace(/\/+$/, '')
     this.user = config.user
-    this.remote = new RemoteShellCore({
+    this.remoteBase = {
       hubUrl: config.hubUrl,
       user: config.user,
-      cwd: this.shadowRoot,
       timeoutMs: config.timeoutMs,
       maxTimeoutMs: config.maxTimeoutMs,
       maxOutputBytes: config.maxOutputBytes,
+    }
+    void this.refreshMounts()
+  }
+
+  /** The remote runner for one agent id (or the default when absent). */
+  private coreFor(agentId?: string): RemoteShellCore {
+    const key = agentId ?? ''
+    const existing = this.remotes.get(key)
+    if (existing !== undefined) return existing
+    const core = new RemoteShellCore({
+      hubUrl: this.remoteBase.hubUrl,
+      user: this.remoteBase.user,
+      ...agentId === undefined ? {} : { agentId },
+      cwd: this.shadowRoot,
+      timeoutMs: this.remoteBase.timeoutMs,
+      maxTimeoutMs: this.remoteBase.maxTimeoutMs,
+      maxOutputBytes: this.remoteBase.maxOutputBytes,
       sandboxMode: 'workspace-write',
     })
-    void this.refreshMounts()
+    this.remotes.set(key, core)
+    return core
   }
 
   /** The inherited local sandbox mode — the capability fact tool layers read. */
@@ -74,7 +98,7 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
 
   private async refreshMounts(): Promise<void> {
     try {
-      this.mountsCache = await listMounts(this.remote.config.hubUrl)
+      this.mountsCache = await listMounts(this.remoteBase.hubUrl)
     } catch {
       this.mountsCache = []
     }
@@ -103,11 +127,11 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
   }
 
   /** Rewrite a shadow workdir into the agent's real path, when it is our mount. */
-  private remoteSpec(spec: ShellExecSpec): ShellExecSpec | undefined {
+  private remoteSpec(spec: ShellExecSpec): { spec: ShellExecSpec; agentId: string } | undefined {
     if (spec.workdir === undefined || !this.isShadow(spec.workdir)) return undefined
     const t = translateShadowPath(spec.workdir, this.mountsCache ?? [])
     if (t === undefined || t.user !== this.user) return undefined
-    return { ...spec, workdir: t.remotePath }
+    return { spec: { ...spec, workdir: t.remotePath }, agentId: t.mount.agentId }
   }
 
   override resolve(request: ShellExecRequest): ShellExecSpec {
@@ -119,13 +143,13 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
     await this.refreshFor(spec.workdir)
     const remote = this.remoteSpec(spec)
     if (remote === undefined) return super.run(spec)
-    return this.remote.run(remote)
+    return this.coreFor(remote.agentId).run(remote.spec)
   }
 
   override start(spec: ShellExecSpec): ShellProcess {
     const remote = this.remoteSpec(spec)
     if (remote === undefined) return super.start(spec)
-    return this.remote.start(remote)
+    return this.coreFor(remote.agentId).start(remote.spec)
   }
 }
 

@@ -35,13 +35,22 @@ export interface HubOptions {
   shadowRoot?: string
   /** Interval between hub heartbeat pings to each agent. */
   heartbeatMs?: number
-  /** Lifetime of an unconsumed pairing code in milliseconds. */
+  /** Lifetime of a hub-minted (CLI) pairing code in milliseconds. */
   pairingTtlMs?: number
   /**
+   * Account-service base URL. When set, a pairing code the hub does not mint
+   * itself is verified by asking the account service (which owns the code
+   * store and the authoritative agent token); the hub learns that token for
+   * later reconnects.
+   */
+  accountUrl?: string
+  /** Shared secret presented on account-service claim calls. */
+  adminSecret?: string
+  /**
    * Fired when an agent completes a pairing handshake and registers. The hub
-   * deletes the code and binds the agent to the pairing's user before calling
-   * this; the caller (typically the shell CLI) may then auto-inject the
-   * remote providers into that user's profile.
+   * binds the agent to the pairing's user before calling this; the caller
+   * (typically the shell CLI) may then auto-inject the remote providers into
+   * that user's profile.
    */
   onPaired?: (pairing: ConsumedPairing) => void
 }
@@ -159,21 +168,57 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   })
 }
 
+/** Account-service pairing-claim result (server-to-server, never browser-visible). */
+interface AccountClaim {
+  user: string
+  agentToken: string
+}
+
+/** Account-service base + secret for verifying externally minted codes. */
+interface AccountVerifier {
+  accountUrl: string
+  adminSecret?: string
+}
+
+/** Verify an account-service-minted pairing code over loopback HTTP. */
+async function accountClaim(account: AccountVerifier | undefined, uuid: string): Promise<AccountClaim | undefined> {
+  if (account === undefined) return undefined
+  try {
+    const res = await fetch(`${account.accountUrl.replace(/\/+$/, '')}/api/pairings/claim`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...account.adminSecret === undefined ? {} : { 'x-team-admin-secret': account.adminSecret },
+      },
+      body: JSON.stringify({ uuid }),
+    })
+    if (!res.ok) return undefined
+    const body = await res.json() as { user?: unknown; agentToken?: unknown }
+    if (typeof body.user !== 'string' || body.user === '' || typeof body.agentToken !== 'string') return undefined
+    return { user: body.user, agentToken: body.agentToken }
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Validate and authenticate an agent `hello`, registering it on success.
- * Two auth modes: token mode (`user`+`token` against the static table) and
- * pairing mode (`pairUuid` against the one-time code table). A consumed
- * pairing code is deleted and `onPaired` fired with the bound user.
+ * Two auth modes: token mode (`user`+`token`) and pairing mode (`pairUuid`).
+ * A hub-minted (CLI) code is one-time; an account-service-minted code is
+ * multi-use within its TTL (the account service owns its expiry), so one code
+ * can bind several agents for the same user. On any pairing the hub learns the
+ * account's authoritative token so a later `--user/--token` reconnect works.
  */
-function authenticate(
-  byUser: Map<string, AgentConn>,
+async function authenticate(
+  byUser: Map<string, AgentConn[]>,
   byAgentId: Map<string, AgentConn>,
-  tokens: ReadonlyMap<string, string>,
+  tokens: Map<string, string>,
   pairings: Map<string, PendingPairing>,
+  account: AccountVerifier | undefined,
   onPaired: ((pairing: ConsumedPairing) => void) | undefined,
   socket: Socket,
   frame: unknown,
-): AgentConn | null {
+): Promise<AgentConn | null> {
   const sendError = (message: string) => {
     if (!socket.destroyed) socket.write(encodeFrame({ type: 'error', message }))
   }
@@ -190,34 +235,40 @@ function authenticate(
   }
 
   let user: string | undefined
+  let issuedToken: string | undefined
   if (typeof hello.pairUuid === 'string' && hello.pairUuid !== '') {
-    const pairing = pairings.get(hello.pairUuid)
-    if (pairing === undefined) {
-      sendError('pairing code not found or already used')
-      socket.destroy()
-      return null
-    }
-    if (Date.now() > pairing.expiresAt) {
+    const local = pairings.get(hello.pairUuid)
+    if (local !== undefined && Date.now() <= local.expiresAt) {
+      // Hub-minted CLI code: one-time.
       pairings.delete(hello.pairUuid)
-      sendError('pairing code expired')
-      socket.destroy()
-      return null
+      user = local.user
+      issuedToken = tokens.get(local.user)
+    } else {
+      if (local !== undefined) pairings.delete(hello.pairUuid)
+      const claim = await accountClaim(account, hello.pairUuid)
+      if (claim === undefined) {
+        sendError('pairing code not found or expired')
+        socket.destroy()
+        return null
+      }
+      user = claim.user
+      issuedToken = claim.agentToken
+      tokens.set(claim.user, claim.agentToken)
     }
-    pairings.delete(hello.pairUuid)
-    user = pairing.user
     if (onPaired !== undefined) {
       const record: AgentRecord = {
         agentId: hello.agentId,
-        user,
+        user: user as string,
         remote: `${socket.remoteAddress ?? '?'}:${String(socket.remotePort ?? '?')}`,
         roots: hello.roots ?? [],
         commands: hello.commands ?? [],
         connectedAt: Date.now(),
         lastSeen: Date.now(),
       }
-      onPaired({ uuid: hello.pairUuid, user, agent: record })
+      onPaired({ uuid: hello.pairUuid, user: user as string, agent: record })
     }
-  } else if (typeof hello.user === 'string' && typeof hello.token === 'string') {    const expected = tokens.get(hello.user)
+  } else if (typeof hello.user === 'string' && typeof hello.token === 'string') {
+    const expected = tokens.get(hello.user)
     if (expected === undefined || expected !== hello.token) {
       sendError('authentication failed')
       socket.destroy()
@@ -240,22 +291,21 @@ function authenticate(
     lastSeen: Date.now(),
     socket,
   }
-  // A newer connection replaces an older one for the same user or agent id.
-  byUser.get(conn.user)?.socket.destroy()
+  // A newer connection for the same agent id replaces the old one. Distinct
+  // agents for the same user coexist (multi-device), keyed by agent id.
   byAgentId.get(conn.agentId)?.socket.destroy()
-  byUser.set(conn.user, conn)
   byAgentId.set(conn.agentId, conn)
+  const list = byUser.get(conn.user) ?? []
+  list.push(conn)
+  byUser.set(conn.user, list)
   if (!socket.destroyed) {
     // A pairing-proven agent receives the user's token so a later reconnect can
-    // authenticate with --user/--token (the one-time pairing code is spent).
-    const pairingToken = typeof hello.pairUuid === 'string' && hello.pairUuid !== ''
-      ? tokens.get(user as string)
-      : undefined
+    // authenticate with --user/--token.
     socket.write(encodeFrame({
       type: 'hello_ack',
       agentId: conn.agentId,
       user: conn.user,
-      ...pairingToken === undefined ? {} : { token: pairingToken },
+      ...issuedToken === undefined ? {} : { token: issuedToken },
     }))
   }
   return conn
@@ -278,42 +328,54 @@ function endPending(pending: Map<string, PendingRequest>, conn: AgentConn, frame
 
 /** Create the hub; starts both listeners immediately. */
 export function createHub(options: HubOptions): TeamHub {
-  const byUser = new Map<string, AgentConn>()
+  const byUser = new Map<string, AgentConn[]>()
   const byAgentId = new Map<string, AgentConn>()
   const pairings = new Map<string, PendingPairing>()
   const pending = new Map<string, PendingRequest>()
+  const tokens = new Map(options.tokens)
   const heartbeatMs = options.heartbeatMs ?? 15_000
   const pairingTtlMs = options.pairingTtlMs ?? 10 * 60 * 1000
   const onPaired = options.onPaired
   const shadowRoot = options.shadowRoot ?? '/var/lib/dsh-mounts'
+  const account = options.accountUrl === undefined || options.accountUrl === ''
+    ? undefined
+    : { accountUrl: options.accountUrl, adminSecret: options.adminSecret }
 
   const agentServer = createNetServer((socket) => {
     socket.setKeepAlive(true, 30_000)
     let conn: AgentConn | null = null
+    let authenticating = false
     const reader = makeLineReader(
       (frame) => {
-        if (conn === null) {
-          conn = authenticate(byUser, byAgentId, options.tokens, pairings, onPaired, socket, frame)
-          if (conn !== null) {
-            console.log(`[hub] agent online user=${conn.user} agent=${conn.agentId} remote=${conn.remote}`)
+        if (conn !== null) {
+          conn.lastSeen = Date.now()
+          if (frame === null || typeof frame !== 'object') return
+          const msg = frame as { type?: string }
+          switch (msg.type) {
+            case 'stream':
+              relayStream(pending, conn, frame as StreamFrame)
+              return
+            case 'fs:result':
+            case 'exit':
+            case 'request-error':
+              endPending(pending, conn, frame as { id: string })
+              return
+            default:
+              return
           }
           return
         }
-        conn.lastSeen = Date.now()
-        if (frame === null || typeof frame !== 'object') return
-        const msg = frame as { type?: string }
-        switch (msg.type) {
-          case 'stream':
-            relayStream(pending, conn, frame as StreamFrame)
-            return
-          case 'fs:result':
-          case 'exit':
-          case 'request-error':
-            endPending(pending, conn, frame as { id: string })
-            return
-          default:
-            return
-        }
+        // The first frame is the hello; while it is being verified, drop any
+        // early frames (an agent waits for hello_ack before sending more).
+        if (authenticating) return
+        authenticating = true
+        void authenticate(byUser, byAgentId, tokens, pairings, account, onPaired, socket, frame)
+          .then((result) => {
+            if (result === null) return
+            conn = result
+            authenticating = false
+            console.log(`[hub] agent online user=${conn.user} agent=${conn.agentId} remote=${conn.remote}`)
+          })
       },
       (message) => {
         console.error(`[hub] protocol violation from ${conn?.agentId ?? 'unauthenticated'}: ${message}`)
@@ -324,11 +386,14 @@ export function createHub(options: HubOptions): TeamHub {
     socket.on('error', () => { socket.destroy() })
     socket.on('close', () => {
       if (conn === null) return
-      // Remove only when this connection still owns the slot: a newer agent for
-      // the same user or id replaces the byUser/byAgentId entries without
-      // waiting for this socket's close, so an unconditional delete here would
-      // evict the replacement.
-      if (byUser.get(conn.user) === conn) byUser.delete(conn.user)
+      // Remove only this connection's registration. Distinct agents for the
+      // same user coexist, so the per-user list drops only this agent id.
+      const list = byUser.get(conn.user)
+      if (list !== undefined) {
+        const next = list.filter(c => c !== conn)
+        if (next.length === 0) byUser.delete(conn.user)
+        else byUser.set(conn.user, next)
+      }
       if (byAgentId.get(conn.agentId) === conn) byAgentId.delete(conn.agentId)
       console.log(`[hub] agent offline user=${conn.user} agent=${conn.agentId}`)
       // Fail open request streams still waiting on the dead channel.
@@ -401,7 +466,7 @@ export function createHub(options: HubOptions): TeamHub {
       const s = body as { user?: unknown; secret?: unknown }
       const user = typeof s.user === 'string' ? s.user : ''
       const secret = typeof s.secret === 'string' ? s.secret : ''
-      const expected = options.tokens.get(user)
+      const expected = tokens.get(user)
       if (expected === undefined || expected !== secret) {
         res.writeHead(403, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: 'user/secret mismatch' }))
@@ -498,8 +563,23 @@ export function createHub(options: HubOptions): TeamHub {
       return
     }
 
-    const conn = byUser.get(user)
-    if (conn === undefined || conn.socket.destroyed) {
+    const bodyAgentId = (body as { agentId?: unknown }).agentId
+    const agentId = typeof bodyAgentId === 'string' && bodyAgentId !== '' ? bodyAgentId : undefined
+    let conn: AgentConn | undefined
+    if (agentId !== undefined) {
+      const c = byAgentId.get(agentId)
+      conn = c !== undefined && c.user === user && !c.socket.destroyed ? c : undefined
+    } else {
+      const live = (byUser.get(user) ?? []).filter(c => !c.socket.destroyed)
+      if (live.length === 1) {
+        conn = live[0]
+      } else if (live.length > 1) {
+        res.writeHead(409, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: `multiple agents online for user ${user}; specify agentId` }))
+        return
+      }
+    }
+    if (conn === undefined) {
       res.writeHead(503, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ error: `agent offline for user ${user}` }))
       return

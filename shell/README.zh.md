@@ -126,7 +126,31 @@ injectRegionRouter({
 node --import tsx/esm shell/src/bin.ts proxy 3080 @alice:32001 alice:32002
 ```
 
-HTTP 请求与 WebSocket 升级（dsh web 的 `/api/remote.mux` 通道）都会被代理到匹配的 upstream。在代理之上叠加账号/登录路由属于后续里程碑（见 design.md §3）。
+HTTP 请求与 WebSocket 升级（dsh web 的 `/api/remote.mux` 通道）都会被代理到匹配的 upstream。账号模式使用 `node --import tsx/esm shell/src/bin.ts proxy 3999 --account http://127.0.0.1:3900`，账号服务在登录成功后于进程内监督每位用户的一个 dsh 实例并登记实例路由；proxy 只负责会话路由，不启动进程。详见[账号设计](team-access-design.md)。
+
+## 账号服务
+
+`account` 在 loopback 端口启动账号服务：成员账号、登录会话（Postgres + Redis）、agent token 签发，以及每位成员一个受监督的 dsh 实例。它是 shell 唯一需要第三方包（`pg`、`ioredis`）的表面；remote agent 仍保持零依赖。
+
+```sh
+cd shell
+npm install
+npm run account
+```
+
+`TEAM_DB_URL`（Postgres）与 `TEAM_REDIS_URL`（Redis）必填；复制 `.env.example` 为 `.env` 并填入。登录成功后，账号服务分配空闲 loopback 端口，在进程内监督该用户的 `dsh --profile web`，并登记 proxy 读取的实例路由。`DSH_USERS_ROOT` 与 `DSH_ENTRY_HOST` 控制生成的实例。
+
+账号服务还签发多设备配对码：浏览器「生成配对码」设置行发 `POST /api/pairings`（会话鉴权，经 proxy），hub 通过 `POST /api/pairings/claim` 核实认领的码。用 `--account http://127.0.0.1:3900` 启动 hub，使其向账号服务（而非静态 `--user-token` 表）查询码并学习每位成员的 agent token；`TEAM_PAIRING_TTL_SECS` 设置码的有效期。
+
+Operator CLI：
+
+```sh
+cd shell
+node --import tsx/esm src/bin.ts account-cli create-user <username> <password> [--operator]
+node --import tsx/esm src/bin.ts account-cli list-users
+node --import tsx/esm src/bin.ts account-cli reset-agent-token <username>
+node --import tsx/esm src/bin.ts account-cli reset-password <username> <password>
+```
 
 ## 开发
 
@@ -139,4 +163,4 @@ npx tsc -p shell/tsconfig.executor.json --noEmit
 
 ## 设计记录
 
-[design.md](design.md) 记录了架构与里程碑：每用户 DSH_HOME 预置、反向代理聚合、远程桥设计（含 A/B settings 取舍）、region-router 影子目录形态，以及尚未实现的部分（agent 通道的 TLS、账号层、生命周期管理与配对网页页）。
+[design.md](design.md) 记录了架构与里程碑：每用户 DSH_HOME 预置、反向代理聚合、远程桥设计（含 A/B settings 取舍）、region-router 影子目录形态，以及尚未实现的部分（agent 通道的 TLS、空闲回收与配对网页页）。

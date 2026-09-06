@@ -15,12 +15,15 @@ export class InstanceStore {
 
   /** Register (or refresh) the loopback port and launch token of a user's spawned dsh instance. */
   async upsert(userId: string, port: number, launchToken?: string, pid?: number): Promise<void> {
+    // The shell child self-registers without a pid; COALESCE keeps the pid the
+    // account service recorded when it spawned the process from being wiped.
     await this.db.query(
       `INSERT INTO dsh_instances (user_id, port, launch_token, pid, launched_at, updated_at)
        VALUES ($1, $2, $3, $4, now(), now())
        ON CONFLICT (user_id) DO UPDATE
-         SET port = EXCLUDED.port, launch_token = COALESCE(EXCLUDED.launch_token, dsh_instances.launch_token),
-             pid = EXCLUDED.pid, updated_at = now()`,
+         SET port = EXCLUDED.port,
+             launch_token = COALESCE(EXCLUDED.launch_token, dsh_instances.launch_token),
+             pid = COALESCE(EXCLUDED.pid, dsh_instances.pid), updated_at = now()`,
       [userId, port, launchToken ?? null, pid ?? null],
     )
   }

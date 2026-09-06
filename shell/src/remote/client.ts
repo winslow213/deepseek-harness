@@ -12,6 +12,8 @@ import type { AgentRecord, MountRecord } from './hub.ts'
 
 export interface ExecSpec {
   user: string
+  /** Disambiguates among several agents for one user; omit for a single agent. */
+  agentId?: string
   argv: readonly string[]
   cwd?: string
   timeoutMs?: number
@@ -19,6 +21,8 @@ export interface ExecSpec {
 
 export interface FsReadSpec {
   user: string
+  /** Disambiguates among several agents for one user; omit for a single agent. */
+  agentId?: string
   path: string
   maxBytes?: number
 }
@@ -84,17 +88,23 @@ export async function runExec(hubBase: string, spec: ExecSpec, onFrame: (frame: 
   const res = await fetch(`${hubControlBase(hubBase)}/api/exec`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ user: spec.user, argv: spec.argv, cwd: spec.cwd, timeoutMs: spec.timeoutMs }),
+    body: JSON.stringify({
+      user: spec.user,
+      ...spec.agentId === undefined ? {} : { agentId: spec.agentId },
+      argv: spec.argv,
+      cwd: spec.cwd,
+      timeoutMs: spec.timeoutMs,
+    }),
   })
   await readFrames(res, onFrame)
 }
 
 /** Ask the agent to kill an in-flight exec by request id (fire-and-forget). */
-export async function runKill(hubBase: string, user: string, id: string): Promise<void> {
+export async function runKill(hubBase: string, user: string, id: string, agentId?: string): Promise<void> {
   const res = await fetch(`${hubControlBase(hubBase)}/api/kill`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ user, id }),
+    body: JSON.stringify({ user, id, ...agentId === undefined ? {} : { agentId } }),
   })
   if (!res.ok) throw new Error(`hub returned ${String(res.status)}: ${await res.text()}`)
 }
@@ -104,7 +114,7 @@ export async function runFsRead(hubBase: string, spec: FsReadSpec, onFrame: (fra
   const res = await fetch(`${hubControlBase(hubBase)}/api/fs-read`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ user: spec.user, path: spec.path, maxBytes: spec.maxBytes }),
+    body: JSON.stringify({ user: spec.user, ...spec.agentId === undefined ? {} : { agentId: spec.agentId }, path: spec.path, maxBytes: spec.maxBytes }),
   })
   await readFrames(res, onFrame)
 }
@@ -152,11 +162,11 @@ export class HubFsError extends Error {
  * The hub relays `request-error` frames as {@link HubFsError} carrying the
  * agent's structured `FS_*` code.
  */
-export async function fsOp(hubBase: string, user: string, spec: FsOpSpec): Promise<unknown> {
+export async function fsOp(hubBase: string, user: string, spec: FsOpSpec, agentId?: string): Promise<unknown> {
   const res = await fetch(`${hubControlBase(hubBase)}/api/fs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ user, ...spec }),
+    body: JSON.stringify({ user, ...agentId === undefined ? {} : { agentId }, ...spec }),
   })
   if (!res.ok) {
     let detail: string

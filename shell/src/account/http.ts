@@ -6,6 +6,8 @@ import type { AuthService } from './auth.ts'
 import type { SessionStore } from './session.ts'
 import { UserStore } from './users.ts'
 import { InstanceStore } from './instances.ts'
+import type { InstanceManager } from './instance-manager.ts'
+import type { PairingStore } from './pairings.ts'
 import type { EnvConfig } from './env.ts'
 
 const COOKIE_NAME = 'dsh_team_session'
@@ -16,6 +18,8 @@ interface HttpServices {
   sessions: SessionStore
   users: UserStore
   instances: InstanceStore
+  pairings: PairingStore
+  lifecycle: InstanceManager
   sessionTtlSecs: number
   /** Shared secret operator-side services present on instance-registration calls. */
   adminSecret?: string
@@ -95,6 +99,18 @@ async function handleLogin(req: IncomingMessage, res: ServerResponse, s: HttpSer
     return
   }
   res.setHeader('set-cookie', sessionCookie(result.sessionId, s.sessionTtlSecs))
+  if (result.userId === undefined) {
+    await s.sessions.destroy(result.sessionId)
+    sendJson(res, 500, { error: 'authentication succeeded without a user id' })
+    return
+  }
+  try {
+    await s.lifecycle.ensure(result.userId)
+  } catch (error) {
+    await s.sessions.destroy(result.sessionId)
+    sendJson(res, 503, { error: error instanceof Error ? error.message : String(error) })
+    return
+  }
   sendJson(res, 200, {
     user: {
       userId: result.userId,
@@ -211,6 +227,47 @@ export async function sessionUser(req: IncomingMessage, s: HttpServices): Promis
   return user === undefined ? undefined : { userId: user.user_id, username: user.username }
 }
 
+/** Mint a pairing code for the signed-in member (never exposes the agent token). */
+async function handleMintPairing(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const user = await sessionUser(req, s)
+  if (user === undefined) {
+    sendJson(res, 401, { error: 'no session' })
+    return
+  }
+  const record = await s.pairings.mint(user.userId)
+  sendJson(res, 200, {
+    uuid: record.uuid,
+    user: record.user,
+    expiresAt: record.expiresAt,
+    ttlMs: record.ttlMs,
+  })
+}
+
+/** Verify a pairing code for the hub (server-to-server, operator-secret guarded). */
+async function handleClaimPairing(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  if (!authorized(req, s)) { sendJson(res, 403, { error: 'forbidden' }); return }
+  let body: unknown
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'invalid body' }); return }
+  const b = body as { uuid?: unknown }
+  if (typeof b.uuid !== 'string' || b.uuid === '') {
+    sendJson(res, 400, { error: 'uuid (string) is required' })
+    return
+  }
+  const userId = await s.pairings.lookup(b.uuid)
+  if (userId === undefined) {
+    sendJson(res, 404, { error: 'pairing code not found or expired' })
+    return
+  }
+  const user = await s.users.findByUsername(userId)
+  if (user === undefined || user.status !== 'active') {
+    sendJson(res, 404, { error: 'pairing code not found or expired' })
+    return
+  }
+  // Server-to-server only: the hub receives the agent token so it can bind the
+  // claiming agent and issue a reconnect token. The browser never sees this.
+  sendJson(res, 200, { user: user.user_id, agentToken: user.agent_token })
+}
+
 export function createAccountServer(s: HttpServices) {
   return createServer((req, res) => {
     const url = req.url ?? '/'
@@ -228,6 +285,10 @@ export function createAccountServer(s: HttpServices) {
           await handleMe(req, res, s)
         } else if (path === '/api/session/route' && method === 'GET') {
           await handleSessionRoute(req, res, s)
+        } else if (path === '/api/pairings' && method === 'POST') {
+          await handleMintPairing(req, res, s)
+        } else if (path === '/api/pairings/claim' && method === 'POST') {
+          await handleClaimPairing(req, res, s)
         } else if (path === '/api/instances' && method === 'POST') {
           await handleUpsertInstance(req, res, s)
         } else if (path.startsWith('/api/instances/') && method === 'DELETE') {

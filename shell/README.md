@@ -126,7 +126,35 @@ injectRegionRouter({
 node --import tsx/esm shell/src/bin.ts proxy 3080 @alice:32001 alice:32002
 ```
 
-HTTP requests and WebSocket upgrades (the dsh web `/api/remote.mux` channel) are proxied to the matching upstream. Account/login routing on top of the proxy is a later milestone (see design.md §3).
+HTTP requests and WebSocket upgrades (the dsh web `/api/remote.mux` channel) are proxied to the matching upstream. In account mode, the proxy fronts the account service with
+`node --import tsx/esm shell/src/bin.ts proxy 3999 --account http://127.0.0.1:3900`.
+The account service supervises one dsh instance per user in-process after a
+successful login and records the instance route; the proxy only performs session
+routing and does not start processes. See [the account design](team-access-design.md).
+
+## Account service
+
+`account` boots the account service on a loopback port: member accounts, login sessions (Postgres + Redis), agent-token issuance, and one supervised dsh instance per member. It is the only shell surface that needs third-party packages (`pg`, `ioredis`); the remote agent stays dependency-free.
+
+```sh
+cd shell
+npm install
+npm run account
+```
+
+`TEAM_DB_URL` (Postgres) and `TEAM_REDIS_URL` (Redis) are required; copy `.env.example` to `.env` and fill them in. After a successful login the service allocates a free loopback port, supervises `dsh --profile web` for that user in-process, and records the route the proxy reads. `DSH_USERS_ROOT` and `DSH_ENTRY_HOST` control the spawned instances.
+
+The service also mints multi-device pairing codes: the browser's Pairing code settings row posts `POST /api/pairings` (session-authenticated, proxied), and the hub verifies a claimed code through `POST /api/pairings/claim`. Start the hub with `--account http://127.0.0.1:3900` so it asks the account service (rather than its static `--user-token` table) to resolve codes and learn each member's agent token; `TEAM_PAIRING_TTL_SECS` sets the code lifetime.
+
+Operator CLI:
+
+```sh
+cd shell
+node --import tsx/esm src/bin.ts account-cli create-user <username> <password> [--operator]
+node --import tsx/esm src/bin.ts account-cli list-users
+node --import tsx/esm src/bin.ts account-cli reset-agent-token <username>
+node --import tsx/esm src/bin.ts account-cli reset-password <username> <password>
+```
 
 ## Development
 
@@ -139,4 +167,4 @@ npx tsc -p shell/tsconfig.executor.json --noEmit
 
 ## Design record
 
-[design.md](design.md) records the architecture and milestones: per-user DSH_HOME provisioning, the reverse-proxy aggregation, the remote-bridge design (with the A/B settings question), the region-router shadow-directory form, and what is still unbuilt (TLS for the agent channel, the account layer, lifecycle management, and the pairing web page).
+[design.md](design.md) records the architecture and milestones: per-user DSH_HOME provisioning, the reverse-proxy aggregation, the remote-bridge design (with the A/B settings question), the region-router shadow-directory form, and what is still unbuilt (TLS for the agent channel, idle-instance reclamation, and the pairing web page).

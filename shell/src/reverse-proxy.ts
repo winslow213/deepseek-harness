@@ -24,6 +24,19 @@ import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 
+/** A stream with just the listener surface the proxy guards. */
+type ErrorGuard = { on(event: 'error', listener: () => void): unknown }
+
+/**
+ * Attach no-op `error` listeners so a client disconnect (`ECONNRESET`) or an
+ * upstream abort never surfaces as an uncaught exception and kills the proxy.
+ * Each stream's own failure path already handles what it must; this only
+ * prevents the process-level crash.
+ */
+function ignoreStreamErrors(...streams: readonly ErrorGuard[]): void {
+  for (const stream of streams) stream.on('error', () => {})
+}
+
 /** One upstream dsh web instance. */
 export interface Upstream {
   /** User id owning the instance (also its DSH_HOME name). */
@@ -127,8 +140,8 @@ const NOT_READY_PAGE = `<!doctype html>
 .card{background:#fff;border:1px solid #d9dee3;border-radius:12px;padding:2rem;width:24rem;text-align:center}
 h1{font-size:1.2rem}code{background:#eef1f4;padding:.15rem .4rem;border-radius:4px}</style></head>
 <body><div class="card"><h1>Your dsh instance is not running</h1>
-<p>An operator has not started your instance yet. Ask them to run
-<code>spawn-user &lt;your-user&gt; &lt;port&gt;</code> and try again.</p>
+<p>The account service could not find a running instance for this session.
+Try signing in again or contact the service operator.</p>
 <p><a href="/api/logout" id="lo">Sign out</a></p></div></body></html>`
 
 /** Proxy one HTTP request to the upstream, stripping the route prefix. */
@@ -145,12 +158,14 @@ function proxyHttp(req: IncomingMessage, res: ServerResponse, upstream: Upstream
     headers: req.headers,
   }, (upstreamRes) => {
     res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
+    ignoreStreamErrors(req, res, upstreamRes)
     upstreamRes.pipe(res)
   })
   forward.on('error', (error: Error) => {
     if (!res.headersSent) res.writeHead(502)
     res.end(`proxy error: ${error.message}`)
   })
+  ignoreStreamErrors(req, res)
   req.pipe(forward)
 }
 
@@ -189,6 +204,7 @@ function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream
   }, (upstreamRes) => {
     const type = upstreamRes.headers['content-type']
     const isHtml = typeof type === 'string' && type.includes('text/html')
+    ignoreStreamErrors(req, res, upstreamRes)
     if (!isHtml) {
       res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
       upstreamRes.pipe(res)
@@ -238,6 +254,7 @@ function proxyHtml(req: IncomingMessage, res: ServerResponse, upstream: Upstream
   forward.on('error', (error: Error) => {
     if (!res.headersSent) { res.writeHead(502); res.end(`proxy error: ${error.message}`) }
   })
+  ignoreStreamErrors(req, res)
   req.pipe(forward)
 }
 
@@ -249,12 +266,14 @@ function proxyAccount(req: IncomingMessage, res: ServerResponse, accountBase: st
     headers: req.headers,
   }, (upstreamRes) => {
     res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers)
+    ignoreStreamErrors(req, res, upstreamRes)
     upstreamRes.pipe(res)
   })
   forward.on('error', (error: Error) => {
     if (!res.headersSent) res.writeHead(502)
     res.end(`proxy error: ${error.message}`)
   })
+  ignoreStreamErrors(req, res)
   req.pipe(forward)
 }
 
@@ -268,6 +287,7 @@ function proxyUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, upstre
     headers: req.headers,
   })
   forward.on('upgrade', (upstreamRes, upstreamSocket, upstreamHead) => {
+    ignoreStreamErrors(socket, upstreamSocket)
     // Forward the upstream 101 handshake verbatim so the browser receives the
     // upstream's Sec-WebSocket-Accept. Skip hop-by-hop headers Node already
     // manages (connection/upgrade would repeat on the downstream side).
@@ -285,6 +305,7 @@ function proxyUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, upstre
     socket.pipe(upstreamSocket)
     if (upstreamHead.length > 0) upstreamSocket.write(upstreamHead)
   })
+  ignoreStreamErrors(socket)
   forward.on('error', () => { socket.destroy() })
   forward.end()
 }
@@ -341,9 +362,14 @@ function readCookie(header: string | undefined, name: string): string | undefine
   return undefined
 }
 
-function hasDshAuthCookie(header: string | undefined): boolean {
+function hasDshAuthCookie(header: string | undefined, authority: string): boolean {
   if (header === undefined) return false
-  return header.split(';').some(segment => segment.trim().startsWith('dsh-auth-'))
+  // Match the authority-bound cookie exactly. A browser that once opened the
+  // instance's printed loopback URL carries a `dsh-auth-<hash(:32001)>` cookie;
+  // treating any `dsh-auth-*` cookie as valid here would skip the token swap
+  // and forward a cookie the instance cannot match for the proxy's authority.
+  const name = `${dshAuthCookieName(authority)}=`
+  return header.split(';').some(segment => segment.trim().startsWith(name))
 }
 
 /**
@@ -407,10 +433,17 @@ function dshAuthCookieName(authority: string): string {
   return 'dsh-auth-' + digest.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
 }
 
-/** The request authority used for cookie naming (host, including port). */
+/** The request authority used for cookie naming (normalized host, including port). */
 function requestAuthority(req: IncomingMessage): string {
-  const host = req.headers.host ?? ''
-  return host
+  const host = req.headers.host
+  if (host === undefined) return ''
+  try {
+    // WHATWG `.host`, matching browser-auth.ts, so the cookie name the proxy
+    // checks equals the name the instance mints from the same Host header.
+    return new URL(`http://${host}`).host
+  } catch {
+    return host
+  }
 }
 
 /**
@@ -494,8 +527,10 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
       return
     }
     // The other public account endpoints proxy straight to the account service
-    // (it owns cookie issuance and login state).
-    if (pathname === '/api/login' || pathname === '/api/me') {
+    // (it owns cookie issuance and login state). `/api/pairings` mints a code
+    // for the signed-in session; the browser only ever sees the code, never the
+    // agent token, which the account service keeps server-side.
+    if (pathname === '/api/login' || pathname === '/api/me' || pathname === '/api/pairings') {
       proxyAccount(req, res, options.accountUrl)
       return
     }
@@ -523,7 +558,8 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
         // exchange so the browser holds the instance session cookie, then
         // redirect back to the same path. The instance cookie is bound to the
         // forwarded Host, so it validates on every later proxied request.
-        if (!pathname.startsWith('/api/') && !hasDshAuthCookie(req.headers.cookie) && decision.launchToken !== undefined) {
+        const authority = requestAuthority(req)
+        if (!pathname.startsWith('/api/') && !hasDshAuthCookie(req.headers.cookie, authority) && decision.launchToken !== undefined) {
           const hostHeader = req.headers.host ?? `127.0.0.1:${String(options.port)}`
           const setCookie = await captureDshSessionCookie(port, decision.launchToken, hostHeader)
           if (setCookie !== undefined) {
