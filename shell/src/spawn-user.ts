@@ -54,11 +54,23 @@ export function userHome(user: string, env?: NodeJS.ProcessEnv): string {
   return join(usersRoot(env), user)
 }
 
+/**
+ * A user's own workspace directory — the only server path the account's
+ * instance may read or write (besides its mounted shadow roots). Lives under
+ * DSH_HOME so each account is isolated from every other by construction.
+ */
+export function userWorkspace(user: string, env?: NodeJS.ProcessEnv): string {
+  return join(userHome(user, env), 'workspace')
+}
+
 /** Provision a user's DSH_HOME so first boot does not auto-init with live reload. */
 export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string {
   const home = userHome(user, env)
   const profileDir = join(home, 'profiles', 'web')
   mkdirSync(profileDir, { recursive: true })
+  // The account's own workspace is created up front so its confinement root
+  // always exists and its default cwd never falls back to a shared location.
+  mkdirSync(userWorkspace(user, env), { recursive: true })
   const manifestPath = join(profileDir, 'package.json')
   if (!existsSync(manifestPath)) {
     writeFileSync(manifestPath, JSON.stringify({
@@ -69,6 +81,7 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
     }, null, 2) + '\n')
   }
   writeTeamLlmPatch(home)
+  writeTeamSandboxPatch(home)
   ensureRegionRouter(user, env)
   return home
 }
@@ -113,15 +126,17 @@ export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = proces
   }
   if (exists && !isOurs) return
   const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
+  const workspace = userWorkspace(user, env)
   injectRegionRouter({
     runtimeSourceDir,
     hubUrl: hubControlUrl(env),
     user,
     shadowRoot: env[DSH_SHADOW_ROOT_ENV] ?? DEFAULT_SHADOW_ROOT,
+    workspaceRoot: workspace,
     profileDir,
     includeShell: true,
     syncMounts: true,
-    fsCwd: '/tmp',
+    fsCwd: workspace,
   })
 }
 
@@ -137,23 +152,27 @@ const LLM_KEY_REF = 'DSH_LLM_API_KEY'
 /** Environment key the home patch reads the endpoint from at startup. */
 const LLM_BASE_URL_ENV = 'DSH_LLM_BASE_URL'
 
-/** The id marking the shell-owned block inside the home patch layer. */
+/** The id marking the shell-owned LLM block inside the home patch layer. */
 const TEAM_LLM_PATCH_ID = 'dsh-team-llm'
 
-/** The marker pair delimiting the shell-owned block inside the home patch layer. */
-function teamLlmMarkers(): readonly [string, string] {
-  return [`# >>> ${TEAM_LLM_PATCH_ID}\n`, `# <<< ${TEAM_LLM_PATCH_ID}\n`]
+/** The id marking the shell-owned sandbox block inside the home patch layer. */
+const TEAM_SANDBOX_PATCH_ID = 'dsh-team-sandbox'
+
+/** The marker pair delimiting one shell-owned block inside the home patch layer. */
+function teamMarkers(id: string): readonly [string, string] {
+  return [`# >>> ${id}\n`, `# <<< ${id}\n`]
 }
 
 /**
  * Replace (or append) one id-delimited block inside the home-level patch
  * layer, preserving every byte outside the block. Mirrors the
- * `plugin-install` marker protocol so the shell's block coexists with any
+ * `plugin-install` marker protocol so the shell's blocks coexist with any
  * other writer of `$DSH_HOME/cordis.patch.yml` without clobbering their rows.
  * @param patchPath - the home `cordis.patch.yml` path.
- * @param block - the full replacement text, delimited by the team-llm markers.
+ * @param block - the full replacement text, delimited by the id's markers.
+ * @param id - the marker id delimiting the block.
  */
-function upsertTeamLlmBlock(patchPath: string, block: string): void {
+function upsertTeamBlock(patchPath: string, block: string, id: string): void {
   let content: string
   try {
     content = readFileSync(patchPath, 'utf8')
@@ -161,7 +180,7 @@ function upsertTeamLlmBlock(patchPath: string, block: string): void {
     // Missing patch layer: the fresh block becomes the whole file.
     content = ''
   }
-  const [start, end] = teamLlmMarkers()
+  const [start, end] = teamMarkers(id)
   const open = content.indexOf(start)
   const close = content.indexOf(end)
   const next = open >= 0 && close >= open
@@ -184,7 +203,7 @@ function upsertTeamLlmBlock(patchPath: string, block: string): void {
  * @param home - the user's DSH_HOME.
  */
 function writeTeamLlmPatch(home: string): void {
-  const [start, end] = teamLlmMarkers()
+  const [start, end] = teamMarkers(TEAM_LLM_PATCH_ID)
   const body = [
     '# Team-injected LLM configuration. The API key is never written here: it',
     '# resolves per request from the inherited DSH_LLM_API_KEY environment',
@@ -197,7 +216,32 @@ function writeTeamLlmPatch(home: string): void {
     `    apiKeyEnv: ${LLM_KEY_REF}`,
     `    baseURL: !!js process.env.${LLM_BASE_URL_ENV}`,
   ].join('\n')
-  upsertTeamLlmBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`)
+  upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_LLM_PATCH_ID)
+}
+
+/** Environment key the child reads its workspace root from (set at spawn). */
+const DSH_WORKSPACE_ROOT_ENV = 'DSH_WORKSPACE_ROOT'
+
+/**
+ * Upsert the home-level patch confining the account's sandbox to its own
+ * workspace: `sandbox-policy` gets `workspaceRoot` pointing at the account's
+ * private directory (read via `!!js` at startup so one spawn always uses the
+ * account's own path). The deployment mode stays operator-controlled through
+ * `DSH_PERMISSION_MODE`, matching the base bundle's default.
+ * @param home - the user's DSH_HOME.
+ */
+function writeTeamSandboxPatch(home: string): void {
+  const [start, end] = teamMarkers(TEAM_SANDBOX_PATCH_ID)
+  const body = [
+    '# Team-injected workspace confinement: each account reads and writes only',
+    '# inside its own workspace directory plus its mounted shadow roots.',
+    '- id: sandbox-policy',
+    "  name: '@deepseek-ai/dsh-sandbox-policy'",
+    '  config:',
+    "    mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'",
+    `    workspaceRoot: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
+  ].join('\n')
+  upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_SANDBOX_PATCH_ID)
 }
 
 /**
@@ -225,6 +269,8 @@ function teamChildEnv(home: string, supervised: boolean): NodeJS.ProcessEnv {
   // out: every member can install into their own profile. The operator can
   // still set TEAM_PLUGIN_INSTALL=false to turn it off fleet-wide.
   env.DSH_PLUGIN_INSTALL = process.env.TEAM_PLUGIN_INSTALL ?? 'true'
+  // The account's private workspace is the sandbox confinement root.
+  env[DSH_WORKSPACE_ROOT_ENV] = join(home, 'workspace')
   if (supervised) env[DSH_SUPERVISED_ENV] = '1'
   return env
 }

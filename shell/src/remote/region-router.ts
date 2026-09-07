@@ -22,6 +22,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { SandboxedFileSystem, type Config as SandboxedFsConfig } from '@deepseek-ai/dsh-fs-sandbox'
+import { canonicalPath } from '@deepseek-ai/dsh-sandbox'
 import { FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
 import type {
   FsDirEntry,
@@ -49,12 +50,26 @@ export interface Config extends SandboxedFsConfig {
   shadowRoot: string
   /** Hub user id of this instance; only that user's mounts are remote-served. */
   user: string
+  /**
+   * The account's private workspace directory — the only local path this
+   * instance may READ besides its mounted shadow roots. Omitted for the bare
+   * (non-team) region-router form, which keeps the inherited read-anywhere
+   * local semantics.
+   */
+  workspaceRoot?: string
 }
 
-type ResolvedConfig = Required<Pick<Config, 'hubUrl' | 'shadowRoot' | 'user'>>
+type ResolvedConfig = Required<Pick<Config, 'hubUrl' | 'shadowRoot' | 'user'>> & { workspaceRoot?: string }
 
 type ProbeWire = { version: string; type: 'file' | 'directory' | 'symlink' | 'other'; size: number } | null
 type ListEntryWire = { name: string; type: 'file' | 'directory' | 'other'; targetKey: string; version?: string; size?: number }
+
+/** Whether a canonical path is the root or a descendant of it (lexical, no symlink walk). */
+function isLexicallyUnder(path: string, root: string): boolean {
+  if (path === root) return true
+  const prefix = root.endsWith(sep) ? root : root + sep
+  return path.startsWith(prefix)
+}
 
 /** Re-raise an agent/hub failure as the seam's typed FsError. */
 function toFsError(error: unknown, fallback: string): FsError {
@@ -87,6 +102,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
       hubUrl: config.hubUrl.replace(/\/+$/, ''),
       shadowRoot: config.shadowRoot.replace(/\/+$/, ''),
       user: config.user,
+      ...config.workspaceRoot === undefined ? {} : { workspaceRoot: canonicalPath(config.workspaceRoot.replace(/\/+$/, '')) },
     }
     void this.refreshMounts()
   }
@@ -155,6 +171,35 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
     return this.remoteOf(target.displayPath)
   }
 
+  /**
+   * Enforce the account's read boundary on a LOCAL target: a read outside the
+   * private workspace is denied with `FS_PERMISSION_DENIED`. Mounted shadow
+   * targets are remote-served and skip this fence; a region-router with no
+   * `workspaceRoot` keeps the inherited read-anywhere semantics.
+   * @param target - the resolved target (its `targetKey` is the canonical path).
+   */
+  private async assertLocalReadable(target: FsTarget): Promise<void> {
+    if (this.shadowTarget(target) !== undefined) return
+    const root = this.region.workspaceRoot
+    if (root === undefined) return
+    if (!isLexicallyUnder(String(target.targetKey), root)) {
+      throw new FsError(
+        `cannot read "${target.displayPath}": access denied outside the account workspace`,
+        'FS_PERMISSION_DENIED',
+      )
+    }
+  }
+
+  /** Enforce the read boundary on a LOCAL absolute path (the `lstat` shape). */
+  private async assertLocalPathReadable(abs: string): Promise<void> {
+    if (this.isShadow(abs)) return
+    const root = this.region.workspaceRoot
+    if (root === undefined) return
+    if (!isLexicallyUnder(canonicalPath(abs), root)) {
+      throw new FsError(`cannot read "${abs}": access denied outside the account workspace`, 'FS_PERMISSION_DENIED')
+    }
+  }
+
   override async stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined> {
     const t = this.shadowTarget(target)
     if (t !== undefined) {
@@ -163,6 +208,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
       const type: 'file' | 'directory' | 'other' = info.type === 'symlink' ? 'other' : info.type
       return { version: FsVersion(info.version), type, size: info.size }
     }
+    await this.assertLocalReadable(target)
     return super.stat(target, signal)
   }
 
@@ -176,6 +222,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
         return { version: FsVersion(info.version), type: info.type, size: info.size }
       }
     }
+    await this.assertLocalPathReadable(abs)
     return super.lstat(path, opts, signal)
   }
 
@@ -186,6 +233,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
       if (typeof text !== 'string') throw new Error('remote readText returned no content')
       return text
     }
+    await this.assertLocalReadable(target)
     return super.readText(target, signal)
   }
 
@@ -209,6 +257,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
       }
       return Buffer.from((value as { base64: string }).base64, 'base64')
     }
+    await this.assertLocalReadable(target)
     return super.readBytes(target, signal, maxBytes)
   }
 
@@ -229,6 +278,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
         ...entry.size !== undefined ? { size: entry.size } : {},
       }))
     }
+    await this.assertLocalReadable(target)
     return super.listDir(target, signal)
   }
 

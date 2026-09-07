@@ -200,6 +200,7 @@ export function regionRouterPatchYaml(config: {
   hubUrl: string
   user: string
   shadowRoot?: string
+  workspaceRoot?: string
   routerFileUrl: string
   shellRouterFileUrl?: string
   syncMountFileUrl?: string
@@ -222,6 +223,7 @@ export function regionRouterPatchYaml(config: {
     `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
     `        user: ${JSON.stringify(config.user)}`,
     `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+    ...config.workspaceRoot === undefined ? [] : [`        workspaceRoot: ${JSON.stringify(config.workspaceRoot)}`],
     ...config.fsCwd === undefined ? [] : [`        cwd: ${JSON.stringify(config.fsCwd)}`],
   ]
   if (config.includeShell && config.shellRouterFileUrl !== undefined) {
@@ -238,6 +240,7 @@ export function regionRouterPatchYaml(config: {
       `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
       `        user: ${JSON.stringify(config.user)}`,
       `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+      ...config.workspaceRoot === undefined ? [] : [`        workspaceRoot: ${JSON.stringify(config.workspaceRoot)}`],
       ...config.fsCwd === undefined ? [] : [`        cwd: ${JSON.stringify(config.fsCwd)}`],
     )
   }
@@ -266,6 +269,8 @@ export interface InjectRegionRouterOptions {
   user: string
   /** Root holding every mount\'s shadow directory. */
   shadowRoot?: string
+  /** The account's private workspace directory (local read/write boundary). */
+  workspaceRoot?: string
   /** Local working directory for relative local fs/shell operations. */
   fsCwd?: string
   /** Also route ctx.shell through the remote agent (default false). */
@@ -295,6 +300,7 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
     hubUrl: options.hubUrl,
     user: options.user,
     shadowRoot: options.shadowRoot,
+    workspaceRoot: options.workspaceRoot,
     routerFileUrl,
     shellRouterFileUrl: shellFileUrl,
     syncMountFileUrl: syncMountFileUrl,
