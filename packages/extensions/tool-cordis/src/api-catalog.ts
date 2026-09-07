@@ -809,7 +809,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: '@Remote(\'list\') async list(path: string | undefined, signal: AbortSignal): Promise<DirectoryListing>',
         description: 'List one directory level for a Remote caller\'s in-app browser.',
-        parameters: [{ name: 'path', description: 'absolute directory to list; absent lists the home directory.' }, { name: 'signal', description: 'caller lifetime; abort stops the backend\'s scan instead of letting it outlive a disconnected caller.' }],
+        parameters: [{ name: 'path', description: 'absolute directory to list; absent lists the browse root (the home directory, or the configured confinement root).' }, { name: 'signal', description: 'caller lifetime; abort stops the backend\'s scan instead of letting it outlive a disconnected caller.' }],
         returns: 'the level\'s listing with its ancestry.',
       },
       {

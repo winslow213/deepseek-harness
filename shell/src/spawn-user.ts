@@ -82,6 +82,7 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
   }
   writeTeamLlmPatch(home)
   writeTeamSandboxPatch(home)
+  writeTeamDirectoryPickerPatch(home)
   ensureRegionRouter(user, env)
   return home
 }
@@ -157,6 +158,9 @@ const TEAM_LLM_PATCH_ID = 'dsh-team-llm'
 
 /** The id marking the shell-owned sandbox block inside the home patch layer. */
 const TEAM_SANDBOX_PATCH_ID = 'dsh-team-sandbox'
+
+/** The id marking the shell-owned directory-picker block inside the home patch layer. */
+const TEAM_DIRECTORY_PICKER_PATCH_ID = 'dsh-team-directory-picker'
 
 /** The marker pair delimiting one shell-owned block inside the home patch layer. */
 function teamMarkers(id: string): readonly [string, string] {
@@ -242,6 +246,34 @@ function writeTeamSandboxPatch(home: string): void {
     `    workspaceRoot: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
   ].join('\n')
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_SANDBOX_PATCH_ID)
+}
+
+/**
+ * Upsert the home-level patch confining the workspace picker to the account's
+ * own directory: the adaptive `directory-picker` row is disabled (a remote
+ * server has no host display for the native chooser) and the browse backend is
+ * pinned with a `root` bound to the account's workspace. The root reads
+ * `DSH_WORKSPACE_ROOT` via `!!js`, so one spawn always uses the account's own
+ * path — and the backend refuses to list or create any directory outside it.
+ * @param home - the user's DSH_HOME.
+ */
+function writeTeamDirectoryPickerPatch(home: string): void {
+  const [start, end] = teamMarkers(TEAM_DIRECTORY_PICKER_PATCH_ID)
+  const body = [
+    '# Team-injected workspace picker confinement: pin the browse interaction',
+    '# and confine it to the account\'s own workspace, so a member can only',
+    '# pick or create directories inside their own root.',
+    '- id: directory-picker',
+    '  disabled: true',
+    '- insert:',
+    '    - id: directory-picker-browse',
+    "      name: '@deepseek-ai/dsh-host-directory-picker-browse'",
+    '      config:',
+    `        root: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
+    '    - id: directory-picker-browse-ui',
+    "      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'",
+  ].join('\n')
+  upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_DIRECTORY_PICKER_PATCH_ID)
 }
 
 /**

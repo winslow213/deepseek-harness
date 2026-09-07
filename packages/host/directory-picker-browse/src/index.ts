@@ -4,14 +4,14 @@
  * creation over the host filesystem via Node's stdlib (which already carries
  * the per-OS adaptation). Nothing renders on the host display, so this backend
  * serves remote clients the dialog backend cannot. Policy decisions (hidden
- * entries flagged but returned, symlinks followed, whole-filesystem scope) are
- * recorded in the directory-picker seam Agent Note.
+ * entries flagged but returned, symlinks followed, optional confinement root)
+ * are recorded in the directory-picker seam Agent Note.
  * @module @deepseek-ai/dsh-host-directory-picker-browse
  */
 
 import { mkdir, opendir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, join, posix, resolve, win32 } from 'node:path'
+import { basename, dirname, join, posix, resolve, sep, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import {
@@ -21,11 +21,20 @@ import type {
   DirectoryEntry, DirectoryListing, DirectoryPickerCapability,
 } from '@deepseek-ai/dsh-host-directory-picker'
 
+/** Whether `path` is the confinement root or a descendant of it (lexical, no symlink walk). */
+function isLexicallyUnder(path: string, root: string): boolean {
+  if (path === root) return true
+  const prefix = root.endsWith(sep) ? root : root + sep
+  return path.startsWith(prefix)
+}
+
 /**
- * Ancestor chain from the filesystem root to `target` inclusive — the
- * breadcrumb rows of a listing, every one a jump target.
+ * Ancestor chain from the confinement root (or the filesystem root when none
+ * is set) to `target` inclusive — the breadcrumb rows of a listing, every one
+ * a jump target. A configured root stops the chain so ancestors above it are
+ * never exposed as jump targets.
  */
-function ancestryCrumbs(target: string): DirectoryEntry[] {
+function ancestryCrumbs(target: string, root?: string): DirectoryEntry[] {
   const crumbs: DirectoryEntry[] = []
   let current = target
   for (;;) {
@@ -33,6 +42,7 @@ function ancestryCrumbs(target: string): DirectoryEntry[] {
     // basename of a root is '' — label the root crumb by its full path ('/', 'C:\').
     crumbs.unshift({ name: parent === current ? current : basename(current), path: current, hidden: false })
     if (parent === current) return crumbs
+    if (root !== undefined && current === root) return crumbs
     current = parent
   }
 }
@@ -181,6 +191,13 @@ async function directoryRow(
 export interface Config {
   /** Complete-result bound of one listing level; see {@link BrowseDirectoryPicker.Config}. */
   maxEntries: number
+  /**
+   * Optional confinement root: every listed or created directory must be this
+   * path or a descendant, the listing's `home` anchor and breadcrumbs root
+   * here, and ancestors above it are never exposed as jump targets. Omitted
+   * keeps the inherited whole-filesystem scope.
+   */
+  root?: string
 }
 
 /** The `ctx.directoryPicker` browse implementation (stable capability object per service life). */
@@ -194,7 +211,12 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
    */
   static Config: z<Config> = z.object({
     maxEntries: z.natural().min(1).default(1000),
+    // schemastery object keys are optional by default (no default → undefined passes).
+    root: z.string(),
   })
+
+  /** Confinement root resolved at construction; undefined keeps whole-filesystem scope. */
+  private readonly root: string | undefined
 
   private readonly browseCapability: DirectoryPickerCapability = {
     kind: 'browse',
@@ -204,6 +226,7 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx)
+    this.root = config.root === undefined ? undefined : resolve(config.root)
   }
 
   /**
@@ -215,7 +238,9 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
   }
 
   private async list(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
-    const home = homedir()
+    // The browse root: the confinement root when configured, else the host
+    // home directory. It anchors the "Home" crumb and bounds every target.
+    const home = this.root ?? homedir()
     // The seam contract takes fully qualified paths only; resolve() would
     // silently rebase a relative or empty wire value under the host process
     // cwd (or, for rooted drive-less Windows forms, its current drive).
@@ -223,6 +248,9 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
       throw new DirectoryPickerError('directory-unreadable', path, `cannot list "${path}": not a fully qualified path`)
     }
     const target = resolve(path ?? home)
+    if (this.root !== undefined && !isLexicallyUnder(target, this.root)) {
+      throw new DirectoryPickerError('directory-unreadable', target, `cannot list "${target}": outside the browse root ${this.root}`)
+    }
     // Stream the level (opendir, one dirent at a time) into a name-sorted
     // window of maxEntries + 1 candidates: memory stays bounded no matter how
     // many children the directory holds, the window keeps the name-sorted
@@ -293,7 +321,7 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
       }
       entries.push(row)
     }
-    return { path: target, home, crumbs: ancestryCrumbs(target), entries, truncated }
+    return { path: target, home, crumbs: ancestryCrumbs(target, this.root), entries, truncated }
   }
 
   private async createDirectory(path: string, name: string): Promise<string> {
@@ -303,6 +331,9 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
       throw new DirectoryPickerError('directory-create-failed', path, `cannot create under "${path}": not a fully qualified parent path`)
     }
     const parent = resolve(path)
+    if (this.root !== undefined && !isLexicallyUnder(parent, this.root)) {
+      throw new DirectoryPickerError('directory-create-failed', path, `cannot create under "${path}": outside the browse root ${this.root}`)
+    }
     // The backend owns segment validation; the Remote controller also refuses
     // invalid wire input, but direct service consumers must hit the same fence.
     if (name.trim() === '' || name === '.' || name === '..' || /[/\\]/.test(name)) {

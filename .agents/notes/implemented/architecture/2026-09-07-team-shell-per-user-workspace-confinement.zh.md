@@ -15,6 +15,7 @@ Status: implemented
 - **写边界。** `provisionUserHome` 向 home patch upsert 第二个标记块（`dsh-team-sandbox`），用 `workspaceRoot: !!js process.env.DSH_WORKSPACE_ROOT` 覆盖 `sandbox-policy`，`teamChildEnv` 把 `DSH_WORKSPACE_ROOT` 设为该账户工作区。部署模式仍由 operator 通过 `DSH_PERMISSION_MODE` 控制。
 - **读边界。** `region-router`（即注入的 `ctx.fs`）新增 `workspaceRoot` 配置，把本地 `stat`/`lstat`/`readText`/`readBytes`/`listDir` 围栏到该根，越界抛 `FS_PERMISSION_DENIED`。已挂载的 shadow 树目标仍走远端、跳过围栏；省略 `workspaceRoot` 则保留裸（非团队）region-router 的「任意读」语义。
 - region-router/shell 的 `cwd` 与 region-router 的 `workspaceRoot` 都指向账户工作区，使相对操作与默认 shell 工作目录落在边界内。
+- **工作区选择器隔离。** 目录选择器是一条独立 seam，绕过 `ctx.fs`，读围栏够不到它。`directory-picker-browse` 新增可选 `root` 配置（对 `list`/`createDirectory` 做词法子树边界），`provisionUserHome` upsert 第三个标记块（`dsh-team-directory-picker`），禁用自适应 `directory-picker` 行，并以 `root: !!js process.env.DSH_WORKSPACE_ROOT` 钉住 browse 后端与其客户端界面。没有这一步，选择器会默认从宿主主目录开始，让成员浏览整个服务器文件系统。
 
 ## Alternatives considered
 
@@ -26,4 +27,4 @@ Status: implemented
 
 ## Consequences
 
-每个账户只能读写 `$DSH_HOME/workspace` 内的路径与其已挂载的 shadow 根。`dsh-team-sandbox` 块幂等，并与 `dsh-team-llm` 块及 home patch 里任何 operator 行共存。既有账户在下一次 provision（登录）时获得工作区目录与 patch；已运行实例需重启。读围栏只作用于注入的 region-router——成员若删除生成的 profile patch 会回退到本地 provider，因此该围栏是团队 shell 的默认，而非内核级保证。
+每个账户只能读写 `$DSH_HOME/workspace` 内的路径与其已挂载的 shadow 根，工作区选择器也只能在同一根内列举或创建目录。`dsh-team-sandbox` 与 `dsh-team-directory-picker` 块幂等，并与 `dsh-team-llm` 块及 home patch 里任何 operator 行共存。既有账户在下一次 provision（登录）时获得工作区目录与 patch；已运行实例需重启。读围栏与选择器根只作用于注入的 region-router 与被钉住的 browse 后端——成员若删除生成的 profile patch 会回退到本地 provider，因此这些围栏是团队 shell 的默认，而非内核级保证。

@@ -228,4 +228,66 @@ describe('BrowseDirectoryPicker', () => {
     const missingParent = await capability.createDirectory(join(root, 'no-such-dir'), 'child').catch((error: unknown) => error)
     expect((missingParent as DirectoryPickerError).code).toBe('directory-create-failed')
   })
+
+  describe('confinement root', () => {
+    async function withRoot(pickerRoot: string): Promise<{ picker: DirectoryPickerBrowseCapability; dispose: () => Promise<void> }> {
+      const ctx = new Context()
+      const fiber = ctx.plugin(BrowseDirectoryPicker, { root: pickerRoot })
+      await fiber.await()
+      const picked = ctx.get('directoryPicker')!.capability()
+      if (picked.kind !== 'browse') throw new Error('browse backend must advertise the browse capability')
+      return { picker: picked, dispose: () => fiber.dispose() }
+    }
+
+    it('roots the default listing at the confinement root and anchors home and crumbs there', async () => {
+      const { picker, dispose } = await withRoot(root)
+      try {
+        const listing = await picker.list()
+        expect(listing.path).toBe(root)
+        expect(listing.home).toBe(root)
+        // Breadcrumbs stop at the confinement root — the filesystem ancestors
+        // above it are never exposed as jump targets.
+        expect(listing.crumbs[0]!.path).toBe(root)
+        expect(listing.crumbs).toHaveLength(1)
+        // A child level's chain still ends at the root, not the filesystem root.
+        const child = await picker.list(join(root, 'projects'))
+        expect(child.crumbs[0]!.path).toBe(root)
+        expect(child.crumbs.at(-1)!.path).toBe(join(root, 'projects'))
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('refuses to list a directory outside the confinement root', async () => {
+      const { picker, dispose } = await withRoot(join(root, 'projects'))
+      try {
+        const failure = await picker.list(root).catch((error: unknown) => error)
+        expect(failure).toBeInstanceOf(DirectoryPickerError)
+        expect((failure as DirectoryPickerError).code).toBe('directory-unreadable')
+        // A lexical sibling whose name shares the root prefix is still outside.
+        const sibling = await picker.list(root + '-suffix').catch((error: unknown) => error)
+        expect((sibling as DirectoryPickerError).code).toBe('directory-unreadable')
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('lists inside the confinement root and refuses to create outside it', async () => {
+      const { picker, dispose } = await withRoot(join(root, 'projects'))
+      try {
+        const inside = await picker.list(join(root, 'projects', 'harness'))
+        expect(inside.entries.map(entry => entry.name)).toEqual(['a', 'b'])
+        const created = await picker.createDirectory(join(root, 'projects'), 'fresh')
+        expect(created).toBe(join(root, 'projects', 'fresh'))
+        const outsideCreate = await picker.createDirectory(root, 'nope').catch((error: unknown) => error)
+        expect(outsideCreate).toBeInstanceOf(DirectoryPickerError)
+        expect((outsideCreate as DirectoryPickerError).code).toBe('directory-create-failed')
+        // The confinement root itself is a valid parent.
+        const atRoot = await picker.createDirectory(join(root, 'projects'), 'fresh-two')
+        expect(atRoot).toBe(join(root, 'projects', 'fresh-two'))
+      } finally {
+        await dispose()
+      }
+    })
+  })
 })

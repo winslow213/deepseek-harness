@@ -21,7 +21,7 @@ export interface DirectoryEntry {
 export interface DirectoryListing {
   /** Absolute path of the listed directory. */
   path: string
-  /** The host account's home directory (breadcrumb "Home" rooting). */
+  /** The browse root — the host account's home directory, or the configured confinement root (breadcrumb "Home" rooting). */
   home: string
   /**
    * Ancestor chain from the filesystem root to the listed directory
