@@ -20,7 +20,11 @@ export interface A2uiFieldOption {
 
 /** One declarative form control the A2UI panel renders. */
 export interface A2uiField {
-  /** Stable identity the submission payload keys values by. */
+  /**
+   * Stable identity the submission payload keys values by. A field name must
+   * be a plain identifier (`[A-Za-z_][A-Za-z0-9_]*`) so expressions can
+   * reference it by bare name.
+   */
   readonly name: string
   /** Human-readable control label. */
   readonly label: string
@@ -33,6 +37,56 @@ export interface A2uiField {
   readonly options?: readonly A2uiFieldOption[]
   /** Short help text shown under the control. */
   readonly help?: string
+  /**
+   * Visibility condition: a restricted expression over sibling field names
+   * (see {@link A2uiExpression}). The field is hidden while the expression is
+   * falsy; an absent condition always shows it.
+   */
+  readonly visibleWhen?: string
+  /**
+   * Custom validation: a restricted expression over sibling field names. When
+   * non-empty it must be truthy at submit, otherwise {@link A2uiField.validateMessage}
+   * is shown and the submit is refused.
+   */
+  readonly validateWhen?: string
+  /** Failure message shown when {@link A2uiField.validateWhen} is falsy at submit. */
+  readonly validateMessage?: string
+  /**
+   * Read-only computed value: a restricted expression over sibling field names
+   * whose result the field always displays. A computed field is never edited
+   * directly and its derived value is what the submission payload carries.
+   */
+  readonly compute?: string
+}
+
+/**
+ * A restricted, side-effect-free expression the model authors for field
+ * visibility, validation, and computation. The grammar is deliberately small
+ * so the browser evaluates it without running arbitrary model text: literals
+ * (`string`, `number`, `true`/`false`, `null`); references to sibling field
+ * names by bare identifier; the operators `=== !== == != < <= > >= && || ! + -
+ * * / %`; parentheses; and the string helpers `.length`, `.trim()`,
+ * `.includes(x)`, `.startsWith(x)`, `.endsWith(x)`, `.toLowerCase()`,
+ * `.toUpperCase()`. Field values are `string | number | boolean | null`.
+ */
+export type A2uiExpression = string
+
+/**
+ * One declarative action rendered as a button beside the submit control. An
+ * action is a named model-tool invocation: when the user clicks it, the
+ * browser serializes the collected values as an ordinary `user/message`
+ * carrying the action id, and the model invokes {@link A2uiAction.tool} with
+ * those values as arguments.
+ */
+export interface A2uiAction {
+  /** Stable identity the action trigger payload carries. */
+  readonly id: string
+  /** Button label. */
+  readonly label: string
+  /** Tool name the model should invoke when the action is triggered. */
+  readonly tool: string
+  /** What invoking the tool accomplishes; the model uses this to form the call. */
+  readonly instruction: string
 }
 
 /** The two page kinds `a2ui_surface` can render: a fillable form or a draggable node canvas. */
@@ -48,6 +102,8 @@ export interface A2uiPageBase {
   readonly submitLabel?: string
   /** What the model should do with the submitted payload when the user submits. */
   readonly instruction?: string
+  /** Optional declarative actions rendered as buttons beside the submit control. */
+  readonly actions?: readonly A2uiAction[]
 }
 
 /** One draggable node the model seeds a canvas page with. */

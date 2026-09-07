@@ -11,9 +11,9 @@ import {
   useEdgesState, useNodesState, useReactFlow,
   type Connection, type Edge, type EdgeProps, type Node, type NodeProps,
 } from '@xyflow/react'
-import type { A2uiCanvasPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiAction, A2uiCanvasPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
-  A2uiChrome, a2uiSubmitMessage, type A2uiPanelProps, type FormError,
+  A2uiChrome, a2uiActionMessage, a2uiSubmitMessage, type A2uiPanelProps, type FormError,
 } from './a2ui-chrome.tsx'
 import css from './A2uiPanel.module.css'
 import './react-flow.css'
@@ -418,34 +418,46 @@ export function A2uiCanvasPanel({ page, surfaceId, useInput, inputActions, t }: 
     ))
   }, [setEdges])
 
+  // The arranged graph projected for a submit or an action trigger: node
+  // content (label/detail/role) plus position, and edges with their labels.
+  const graph = (): Record<string, unknown> => ({
+    nodes: nodes.map(node => ({
+      id: node.id,
+      label: node.data.label,
+      ...node.data.detail === undefined ? {} : { detail: node.data.detail },
+      position: node.position,
+      ...node.data.role === undefined ? {} : { role: node.data.role },
+    })),
+    edges: edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      ...edge.label === undefined ? {} : { label: edge.label },
+    })),
+  })
+
   const submit = (event: FormEvent): void => {
     event.preventDefault()
     if (busy) {
       setError({ key: 'error.busy' })
       return
     }
-    const graph = {
-      nodes: nodes.map(node => ({
-        id: node.id,
-        label: node.data.label,
-        ...node.data.detail === undefined ? {} : { detail: node.data.detail },
-        position: node.position,
-        ...node.data.role === undefined ? {} : { role: node.data.role },
-      })),
-      edges: edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        ...edge.label === undefined ? {} : { label: edge.label },
-      })),
+    inputActions.setDraft(a2uiSubmitMessage(surfaceId, { graph: graph() }))
+    inputActions.submit()
+  }
+
+  const triggerAction = (action: A2uiAction): void => {
+    if (busy) {
+      setError({ key: 'error.busy' })
+      return
     }
-    inputActions.setDraft(a2uiSubmitMessage(surfaceId, { graph }))
+    inputActions.setDraft(a2uiActionMessage(surfaceId, action, { graph: graph() }))
     inputActions.submit()
   }
 
   return (
     <form className={css.root} data-a2ui-surface={surfaceId} onSubmit={submit}>
-      <A2uiChrome page={page} error={error} busy={busy} t={t}>
+      <A2uiChrome page={page} error={error} busy={busy} t={t} onAction={triggerAction}>
         <div className={css.canvas} data-a2ui-canvas>
           <ReactFlow
             nodes={nodes}

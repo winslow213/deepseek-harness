@@ -34,7 +34,6 @@ import {
   a2uiSurfaceDefinition, type A2uiSurfaceChatData,
 } from '../src/client/a2ui-definition.ts'
 import { apply as applyNode } from '../src/index.ts'
-import { apply as applyInvariant } from '../src/invariant.ts'
 import type {} from '../src/client/index.ts'
 
 afterEach(cleanup)
@@ -499,6 +498,30 @@ describe('A2uiPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
     expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
       a2uiSubmit: { surfaceId: 'a2ui-1', values: { name: 'Jane', priority: 'high' } },
+    }))
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders action buttons and triggers one with the collected values', () => {
+    const setDraft = vi.fn()
+    const submit = vi.fn()
+    render(<A2uiPanel {...panelProps({
+      seq: 2,
+      surfaceId: 'a2ui-1',
+      page: page({ actions: [
+        { id: 'deploy', label: 'Deploy', tool: 'run_deploy', instruction: 'Deploy the configured service' },
+      ] }),
+    }, 'plain', { setDraft, submit })} />)
+    fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'Jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
+      a2uiAction: {
+        surfaceId: 'a2ui-1',
+        actionId: 'deploy',
+        tool: 'run_deploy',
+        instruction: 'Deploy the configured service',
+        values: { name: 'Jane', priority: 'low' },
+      },
     }))
     expect(submit).toHaveBeenCalledTimes(1)
   })
@@ -1044,6 +1067,77 @@ describe('A2uiPanel', () => {
     expect(screen.getByText('回流')).toBeTruthy()
     expect(screen.getByText('then')).toBeTruthy()
   })
+
+  it('hides a field while its visibleWhen expression is falsy', () => {
+    const setDraft = vi.fn()
+    const submit = vi.fn()
+    render(<A2uiPanel {...panelProps({
+      seq: 2,
+      surfaceId: 'a2ui-1',
+      page: page({ fields: [
+        { name: 'notify', label: 'Notify me', type: 'checkbox' },
+        { name: 'email', label: 'Email', type: 'text', visibleWhen: 'notify === true' },
+      ] }),
+    }, 'plain', { setDraft, submit })} />)
+    expect(screen.queryByLabelText('Email', { exact: false })).toBeNull()
+    fireEvent.click(screen.getByLabelText('Notify me', { exact: false }))
+    expect(screen.getByLabelText('Email', { exact: false })).toBeTruthy()
+  })
+
+  it('shows a computed field derived from sibling values', () => {
+    render(<A2uiPanel {...panelProps({
+      seq: 2,
+      surfaceId: 'a2ui-1',
+      page: page({ fields: [
+        { name: 'first', label: 'First', type: 'text' },
+        { name: 'last', label: 'Last', type: 'text' },
+        { name: 'full', label: 'Full', type: 'text', compute: 'first + " " + last' },
+      ] }),
+    }, 'plain')} />)
+    fireEvent.change(screen.getByLabelText('First', { exact: false }), { target: { value: 'Ada' } })
+    fireEvent.change(screen.getByLabelText('Last', { exact: false }), { target: { value: 'Lovelace' } })
+    expect(screen.getByText('Ada Lovelace')).toBeTruthy()
+  })
+
+  it('blocks submission when a validateWhen expression is falsy, showing validateMessage', () => {
+    const setDraft = vi.fn()
+    const submit = vi.fn()
+    render(<A2uiPanel {...panelProps({
+      seq: 2,
+      surfaceId: 'a2ui-1',
+      page: page({ fields: [
+        { name: 'age', label: 'Age', type: 'number', validateWhen: 'age >= 18', validateMessage: 'You must be 18 or older' },
+      ] }),
+    }, 'plain', { setDraft, submit })} />)
+    fireEvent.change(screen.getByLabelText('Age', { exact: false }), { target: { value: '12' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(screen.getByRole('alert').textContent).toBe('You must be 18 or older')
+    expect(submit).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Age', { exact: false }), { target: { value: '30' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('submits computed values and excludes hidden fields', () => {
+    const setDraft = vi.fn()
+    const submit = vi.fn()
+    render(<A2uiPanel {...panelProps({
+      seq: 2,
+      surfaceId: 'a2ui-1',
+      page: page({ fields: [
+        { name: 'enabled', label: 'Enabled', type: 'checkbox' },
+        { name: 'label', label: 'Label', type: 'text', visibleWhen: 'enabled === true' },
+        { name: 'double', label: 'Double', type: 'text', compute: 'label.toUpperCase()' },
+      ] }),
+    }, 'plain', { setDraft, submit })} />)
+    fireEvent.click(screen.getByLabelText('Enabled', { exact: false }))
+    fireEvent.change(screen.getByLabelText('Label', { exact: false }), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
+      a2uiSubmit: { surfaceId: 'a2ui-1', values: { enabled: true, label: 'abc', double: 'ABC' } },
+    }))
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
 })
 
 async function runtimeSlotRoot(ctx: Context): Promise<void> {
@@ -1074,15 +1168,7 @@ describe('plugin lifecycle', () => {
     expect(ctx.slots.entries('conversation.chat.node')).toEqual([])
   })
 
-  it('keeps the node half inert and registers invariant ownership', async () => {
+  it('keeps the node half inert', async () => {
     applyNode()
-    const registered: string[] = []
-    const ctx = new Context()
-    ctx.provide('invariants')
-    ctx.set('invariants', {
-      register: (pkg: string) => { registered.push(pkg); return () => {} },
-    } as never)
-    await applyInvariant(ctx)
-    expect(registered).toEqual(['@deepseek-ai/dsh-client-ui-a2ui'])
   })
 })

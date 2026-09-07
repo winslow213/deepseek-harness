@@ -48,7 +48,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `a2ui_surface`
 
-Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values.
+Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values. Fields may carry restricted, side-effect-free expressions for live logic: `visibleWhen` hides the field while a sibling-field expression is falsy, `validateWhen` (with `validateMessage`) refuses submit while its expression is falsy, and `compute` makes the field read-only and displays a derived value. Expressions reference sibling fields by bare `name` and support string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - * / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/`.startsWith(x)`/`.endsWith(x)`. To expose real operations, add `actions`: each is an `id`, a `label`, a `tool` name, and an `instruction`; when the user clicks it you receive an action trigger with the collected values and should invoke that tool with them.
 
 ```json
 {
@@ -120,6 +120,22 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
               "help": {
                 "type": "string",
                 "description": "Short help text under the control."
+              },
+              "visibleWhen": {
+                "type": "string",
+                "description": "Restricted expression over sibling field names; the field is hidden while it is falsy."
+              },
+              "validateWhen": {
+                "type": "string",
+                "description": "Restricted expression over sibling field names; when set it must be truthy at submit."
+              },
+              "validateMessage": {
+                "type": "string",
+                "description": "Failure message shown when validateWhen is falsy at submit."
+              },
+              "compute": {
+                "type": "string",
+                "description": "Restricted expression over sibling field names; the field becomes read-only and displays its result."
               },
               "options": {
                 "type": "array",
@@ -232,6 +248,38 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
               "id",
               "source",
               "target"
+            ]
+          }
+        },
+        "actions": {
+          "type": "array",
+          "description": "Declarative actions rendered as buttons beside the submit control; each triggers a named model tool call.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable identity the action trigger payload carries."
+              },
+              "label": {
+                "type": "string",
+                "description": "Button label."
+              },
+              "tool": {
+                "type": "string",
+                "description": "Tool name the model should invoke when the action is triggered."
+              },
+              "instruction": {
+                "type": "string",
+                "description": "What invoking the tool accomplishes; the model uses this to form the call."
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "tool",
+              "instruction"
             ]
           }
         }

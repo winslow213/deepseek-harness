@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {
-  A2uiCanvasEdge, A2uiCanvasNode, A2uiCanvasPage, A2uiField, A2uiPage, A2uiPageKind,
+  A2uiAction, A2uiCanvasEdge, A2uiCanvasNode, A2uiCanvasPage, A2uiField, A2uiPage, A2uiPageKind,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -32,6 +32,7 @@ interface A2uiPageInput {
   fields?: A2uiField[]
   nodes?: A2uiCanvasNode[]
   edges?: A2uiCanvasEdge[]
+  actions?: A2uiAction[]
 }
 
 /** Model-facing A2UI surface tool configuration. */
@@ -64,7 +65,18 @@ const DESCRIPTION = 'Render an interactive page in the web UI. The page JSON you
   + 'optional `detail`, and an initial `position`) and `edges` (each a stable '
   + '`id`, a `source` node id, and a `target` node id); the user may move '
   + 'nodes and add or remove connections before submitting. The optional '
-  + '`instruction` tells the user what will happen with the submitted values.'
+  + '`instruction` tells the user what will happen with the submitted values. '
+  + 'Fields may carry restricted, side-effect-free expressions for live logic: '
+  + '`visibleWhen` hides the field while a sibling-field expression is falsy, '
+  + '`validateWhen` (with `validateMessage`) refuses submit while its expression '
+  + 'is falsy, and `compute` makes the field read-only and displays a derived '
+  + 'value. Expressions reference sibling fields by bare `name` and support '
+  + 'string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - '
+  + '* / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/'
+  + '`.startsWith(x)`/`.endsWith(x)`. To expose real operations, add `actions`: '
+  + 'each is an `id`, a `label`, a `tool` name, and an `instruction`; when the '
+  + 'user clicks it you receive an action trigger with the collected values and '
+  + 'should invoke that tool with them.'
 
 /**
  * Mint a fresh, collision-resistant surface identity.
@@ -90,6 +102,7 @@ function mintSurfaceId(): string {
 function toA2uiPage(raw: A2uiPageInput): A2uiPage {
   const title = raw.title.trim()
   if (title.length === 0) throw new Error('invalid a2ui page: `title` must be a non-empty string')
+  const actions = toA2uiActions(raw.actions ?? [])
   if (raw.kind === 'form') {
     if (raw.nodes !== undefined || raw.edges !== undefined) {
       throw new Error('invalid a2ui form page: a `form` page must not carry `nodes` or `edges`')
@@ -101,6 +114,7 @@ function toA2uiPage(raw: A2uiPageInput): A2uiPage {
       fields: toA2uiFields(raw.fields ?? []),
       ...raw.submitLabel === undefined ? {} : { submitLabel: raw.submitLabel },
       ...raw.instruction === undefined ? {} : { instruction: raw.instruction },
+      ...actions.length === 0 ? {} : { actions },
     }
   }
   if (raw.fields !== undefined) {
@@ -113,7 +127,36 @@ function toA2uiPage(raw: A2uiPageInput): A2uiPage {
     ...toA2uiCanvas(raw.nodes, raw.edges),
     ...raw.submitLabel === undefined ? {} : { submitLabel: raw.submitLabel },
     ...raw.instruction === undefined ? {} : { instruction: raw.instruction },
+    ...actions.length === 0 ? {} : { actions },
   }
+}
+
+/** Canonicalize the model-supplied action list, preserving the existing constraints. */
+function toA2uiActions(rawActions: readonly A2uiAction[]): A2uiAction[] {
+  const seen = new Set<string>()
+  const actions: A2uiAction[] = []
+  for (const action of rawActions) {
+    const id = action.id.trim()
+    const label = action.label.trim()
+    const tool = action.tool.trim()
+    const instruction = action.instruction.trim()
+    if (id.length === 0) throw new Error('invalid a2ui action: `id` must be a non-empty string')
+    if (label.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`label\` must be a non-empty string`)
+    if (tool.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`tool\` must be a non-empty string`)
+    if (instruction.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`instruction\` must be a non-empty string`)
+    if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
+    seen.add(id)
+    actions.push({ id, label, tool, instruction })
+  }
+  return actions
+}
+
+/** Trim one model-supplied expression, rejecting blank text. */
+function toA2uiExpression(value: string | undefined, owner: string, key: string): string | undefined {
+  if (value === undefined) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0) throw new Error(`invalid a2ui ${owner}: \`${key}\` must be a non-empty expression`)
+  return trimmed
 }
 
 /** Canonicalize the model-supplied field list, preserving the existing constraints. */
@@ -124,11 +167,23 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
     const name = field.name.trim()
     const label = field.label.trim()
     if (name.length === 0) throw new Error('invalid a2ui field: `name` must be a non-empty string')
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`name\` must be a plain identifier (letters, digits, underscore; not starting with a digit)`)
+    }
     if (label.length === 0) throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`label\` must be a non-empty string`)
     if (seen.has(name)) throw new Error(`invalid a2ui page: duplicate field name ${JSON.stringify(name)}`)
     seen.add(name)
     if (field.type === 'select' && (field.options === undefined || field.options.length === 0)) {
       throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a \`select\` field needs at least one option`)
+    }
+    const visibleWhen = toA2uiExpression(field.visibleWhen, `field ${JSON.stringify(name)}`, 'visibleWhen')
+    const validateWhen = toA2uiExpression(field.validateWhen, `field ${JSON.stringify(name)}`, 'validateWhen')
+    const compute = toA2uiExpression(field.compute, `field ${JSON.stringify(name)}`, 'compute')
+    if (field.validateMessage !== undefined && validateWhen === undefined) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`validateMessage\` needs a \`validateWhen\` expression`)
+    }
+    if (compute !== undefined && field.required === true) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a computed field cannot be \`required\``)
     }
     fields.push({
       name,
@@ -138,6 +193,10 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
       ...field.placeholder === undefined ? {} : { placeholder: field.placeholder },
       ...field.options === undefined ? {} : { options: field.options },
       ...field.help === undefined ? {} : { help: field.help },
+      ...visibleWhen === undefined ? {} : { visibleWhen },
+      ...validateWhen === undefined ? {} : { validateWhen },
+      ...validateWhen === undefined ? {} : { validateMessage: field.validateMessage },
+      ...compute === undefined ? {} : { compute },
     })
   }
   return fields
@@ -232,6 +291,10 @@ export function apply(ctx: Context, config: Config): void {
                 required: { type: 'boolean', description: 'Whether the user must fill the field.' },
                 placeholder: { type: 'string', description: 'Placeholder while the control is empty.' },
                 help: { type: 'string', description: 'Short help text under the control.' },
+                visibleWhen: { type: 'string', description: 'Restricted expression over sibling field names; the field is hidden while it is falsy.' },
+                validateWhen: { type: 'string', description: 'Restricted expression over sibling field names; when set it must be truthy at submit.' },
+                validateMessage: { type: 'string', description: 'Failure message shown when validateWhen is falsy at submit.' },
+                compute: { type: 'string', description: 'Restricted expression over sibling field names; the field becomes read-only and displays its result.' },
                 options: {
                   type: 'array',
                   description: 'Selectable options; meaningful only for `select`.',
@@ -281,6 +344,20 @@ export function apply(ctx: Context, config: Config): void {
                 source: { type: 'string', required: true, description: 'Source node id (the outgoing end).' },
                 target: { type: 'string', required: true, description: 'Target node id (the incoming end).' },
                 label: { type: 'string', description: 'Optional text shown on the connector.' },
+              },
+            },
+          },
+          actions: {
+            type: 'array',
+            description: 'Declarative actions rendered as buttons beside the submit control; each triggers a named model tool call.',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string', required: true, description: 'Stable identity the action trigger payload carries.' },
+                label: { type: 'string', required: true, description: 'Button label.' },
+                tool: { type: 'string', required: true, description: 'Tool name the model should invoke when the action is triggered.' },
+                instruction: { type: 'string', required: true, description: 'What invoking the tool accomplishes; the model uses this to form the call.' },
               },
             },
           },

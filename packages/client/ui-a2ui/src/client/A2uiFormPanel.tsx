@@ -1,8 +1,9 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
-import type { A2uiField, A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import type { A2uiAction, A2uiField, A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
-  A2uiChrome, a2uiSubmitMessage, type A2uiPanelProps, type FormError,
+  A2uiChrome, a2uiActionMessage, a2uiSubmitMessage, type A2uiPanelProps, type FormError,
 } from './a2ui-chrome.tsx'
+import { evaluateA2uiExpression, type A2uiValues } from './a2ui-expression.ts'
 import css from './A2uiPanel.module.css'
 
 /** Keyed Chat renderer props for a form page, narrowed by the `A2uiPanel` dispatcher. */
@@ -45,6 +46,24 @@ function payloadValue(field: A2uiField, value: FieldValue | undefined): FieldVal
   const parsed = Number(value)
   /* v8 ignore next -- a number input only yields numeric strings or '' */
   return Number.isNaN(parsed) ? '' : parsed
+}
+
+/**
+ * Evaluate one model-authored expression, degrading to a safe fallback on any
+ * grammar/reference/type error. Visibility and validation degrade permissive
+ * (show / accept) so a bad expression never hides or blocks a field the user
+ * must reach; a computed field degrades to an empty display.
+ */
+function tryEval(
+  expression: string,
+  values: A2uiValues,
+  fallback: string | number | boolean | null,
+): string | number | boolean | null {
+  try {
+    return evaluateA2uiExpression(expression, values)
+  } catch {
+    return fallback
+  }
 }
 
 function FieldLabel({ field, t }: { field: A2uiField; t: A2uiPanelProps['t'] }) {
@@ -136,48 +155,115 @@ function FieldControl({ field, value, onChange }: {
 /** Render one model-authored `form` page as a native, fillable, submittable form. */
 export function A2uiFormPanel({ page, surfaceId, useInput, inputActions, t }: A2uiFormPanelProps) {
   const [values, setValues] = useState<FormValues>(() => Object.fromEntries(
-    page.fields.map(field => [field.name, initialValue(field)]),
+    page.fields.filter(field => field.compute === undefined).map(field => [field.name, initialValue(field)]),
   ))
   const [error, setError] = useState<FormError | null>(null)
   const phase = useInput(state => state.phase)
   const busy = phase === 'adjudicating' || phase === 'claimed' || phase === 'submitting'
+
+  // Expression values: user inputs with `number` fields normalized to numbers
+  // (the widget stores the raw text), plus derived compute fields evaluated in
+  // declaration order so a computed field may reference earlier siblings.
+  const exprValues = useMemo<A2uiValues>(() => {
+    const result: Record<string, string | number | boolean | null> = { ...values }
+    for (const field of page.fields) {
+      if (field.type !== 'number' || field.compute !== undefined) continue
+      const raw = result[field.name]
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number(raw)
+        if (!Number.isNaN(parsed)) result[field.name] = parsed
+      }
+    }
+    for (const field of page.fields) {
+      if (field.compute === undefined) continue
+      // A null result (the `null` literal, or a sibling that is null) degrades
+      // to an empty display, since a form value is never null on the wire.
+      result[field.name] = tryEval(field.compute, result, '') ?? ''
+    }
+    return result
+  }, [values, page.fields])
+
+  // Per-field visibility, evaluated against the expression values.
+  const visibility = useMemo<Record<string, boolean>>(() => {
+    const map: Record<string, boolean> = {}
+    for (const field of page.fields) {
+      map[field.name] = field.visibleWhen === undefined
+        ? true
+        : Boolean(tryEval(field.visibleWhen, exprValues, true))
+    }
+    return map
+  }, [exprValues, page.fields])
 
   const setValue = (name: string, value: FieldValue): void => {
     setValues(current => ({ ...current, [name]: value }))
     setError(null)
   }
 
+  // Validate the visible fields and collect the submission payload. Returns
+  // the first failure, or the collected values when the form is valid.
+  const collect = (): { ok: true; values: Record<string, FieldValue> } | { ok: false; error: FormError } => {
+    const visible = page.fields.filter(field => visibility[field.name] === true)
+    const missing = visible.find(field =>
+      field.compute === undefined && field.required === true && isEmpty(field, values[field.name]))
+    if (missing !== undefined) {
+      return { ok: false, error: { key: 'error.required', name: missing.label } }
+    }
+    for (const field of visible) {
+      if (field.validateWhen === undefined) continue
+      if (!Boolean(tryEval(field.validateWhen, exprValues, true))) {
+        return { ok: false, error: { key: 'error.custom', name: field.validateMessage ?? field.label } }
+      }
+    }
+    const collected = Object.fromEntries(visible.map(field => [
+      field.name,
+      field.compute !== undefined ? (exprValues[field.name] ?? '') : payloadValue(field, values[field.name]),
+    ]))
+    return { ok: true, values: collected }
+  }
+
   const submit = (event: FormEvent): void => {
     event.preventDefault()
-    const missing = page.fields.find(field => field.required === true && isEmpty(field, values[field.name]))
-    if (missing !== undefined) {
-      setError({ key: 'error.required', name: missing.label })
+    const outcome = collect()
+    if (!outcome.ok) {
+      setError(outcome.error)
       return
     }
     if (busy) {
       setError({ key: 'error.busy' })
       return
     }
-    const payload = Object.fromEntries(page.fields.map(field => [
-      field.name,
-      payloadValue(field, values[field.name]),
-    ]))
-    inputActions.setDraft(a2uiSubmitMessage(surfaceId, { values: payload }))
+    inputActions.setDraft(a2uiSubmitMessage(surfaceId, { values: outcome.values }))
+    inputActions.submit()
+  }
+
+  const triggerAction = (action: A2uiAction): void => {
+    const outcome = collect()
+    if (!outcome.ok) {
+      setError(outcome.error)
+      return
+    }
+    if (busy) {
+      setError({ key: 'error.busy' })
+      return
+    }
+    inputActions.setDraft(a2uiActionMessage(surfaceId, action, outcome.values))
     inputActions.submit()
   }
 
   return (
     <form className={css.root} data-a2ui-surface={surfaceId} onSubmit={submit}>
-      <A2uiChrome page={page} error={error} busy={busy} t={t}>
+      <A2uiChrome page={page} error={error} busy={busy} t={t} onAction={triggerAction}>
         <div className={css.fields}>
-          {page.fields.map(field => (
+          {page.fields.filter(field => visibility[field.name]).map(field => (
             <div className={css.field} key={field.name}>
               <FieldLabel field={field} t={t} />
-              <FieldControl
-                field={field}
-                value={values[field.name]}
-                onChange={(value) => { setValue(field.name, value) }}
-              />
+              {field.compute !== undefined
+                ? <div className={css.computed}>{String(exprValues[field.name] ?? '')}</div>
+                : <FieldControl
+                  field={field}
+                  value={values[field.name]}
+                  onChange={(value) => { setValue(field.name, value) }}
+                />}
               {field.type !== 'checkbox' && field.help !== undefined
                 && <span className={css.help}>{field.help}</span>}
             </div>

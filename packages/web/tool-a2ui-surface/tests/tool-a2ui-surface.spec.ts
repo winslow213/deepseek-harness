@@ -89,12 +89,12 @@ describe('dsh-tool-a2ui-surface', () => {
     expect(pageSpec.type).toBe('object')
     expect(pageSpec.required).toEqual(['kind', 'title'])
     expect(Object.keys(pageSpec.properties ?? {}).sort()).toEqual([
-      'description', 'edges', 'fields', 'instruction', 'kind', 'nodes', 'submitLabel', 'title',
+      'actions', 'description', 'edges', 'fields', 'instruction', 'kind', 'nodes', 'submitLabel', 'title',
     ])
     const kindSpec = pageSpec.properties!.kind as { enum?: string[] }
     expect(kindSpec.enum).toEqual(['form', 'canvas'])
     const fieldProps = ((pageSpec.properties!.fields as { items: { properties: Record<string, unknown> } }).items.properties)
-    expect(Object.keys(fieldProps).sort()).toEqual(['help', 'label', 'name', 'options', 'placeholder', 'required', 'type'])
+    expect(Object.keys(fieldProps).sort()).toEqual(['compute', 'help', 'label', 'name', 'options', 'placeholder', 'required', 'type', 'validateMessage', 'validateWhen', 'visibleWhen'])
     const typeSpec = fieldProps.type as { enum?: string[] }
     expect(typeSpec.enum).toEqual(['text', 'textarea', 'select', 'number', 'checkbox'])
     const nodeSpec = ((pageSpec.properties!.nodes as { items: { properties: Record<string, unknown>; required?: string[] } }).items)
