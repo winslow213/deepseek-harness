@@ -23,7 +23,7 @@ export const inject = ['tools']
 export const FIELD_TYPES = ['text', 'textarea', 'select', 'number', 'checkbox'] as const
 
 /** The model-supplied page shape, already schema-checked, before canonicalization. */
-interface A2uiPageInput {
+export interface A2uiPageInput {
   kind: A2uiPageKind
   title: string
   description?: string
@@ -90,16 +90,19 @@ function mintSurfaceId(): string {
  * Validate the value constraints the ParameterSchemaSpec can't express and
  * build the canonical {@link A2uiPage}: trimmed non-empty title, unique
  * trimmed field names, every `select` field carrying at least one option,
- * and for `canvas` pages unique node ids with finite positions plus edges
- * whose endpoints reference existing nodes. The registry has already
- * enforced the enums and rejected unknown keys (`additionalProperties:
- * false` — the logged page must equal what the model believes it wrote, so a
- * nested or extended shape fails loud at the schema boundary); the casts
- * below record that guarantee.
+ * known field `type` and node `role` values, and for `canvas` pages unique
+ * node ids with finite positions plus edges whose endpoints reference
+ * existing nodes. The registry has already enforced the enums and rejected
+ * unknown keys (`additionalProperties: false` — the logged page must equal
+ * what the model believes it wrote, so a nested or extended shape fails loud
+ * at the schema boundary); the casts below record that guarantee. The enum
+ * checks are re-asserted here so a caller that canonicalizes a page outside
+ * the registry schema (the a2ui tool store) still rejects an unknown field
+ * or node-role value.
  * @param raw - the model-supplied page, already schema-checked.
  * @returns the canonical page.
  */
-function toA2uiPage(raw: A2uiPageInput): A2uiPage {
+export function canonicalizeA2uiPage(raw: A2uiPageInput): A2uiPage {
   const title = raw.title.trim()
   if (title.length === 0) throw new Error('invalid a2ui page: `title` must be a non-empty string')
   const actions = toA2uiActions(raw.actions ?? [])
@@ -173,6 +176,9 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
     if (label.length === 0) throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`label\` must be a non-empty string`)
     if (seen.has(name)) throw new Error(`invalid a2ui page: duplicate field name ${JSON.stringify(name)}`)
     seen.add(name)
+    if (!(FIELD_TYPES as readonly string[]).includes(field.type)) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: unknown type ${JSON.stringify(field.type)}`)
+    }
     if (field.type === 'select' && (field.options === undefined || field.options.length === 0)) {
       throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a \`select\` field needs at least one option`)
     }
@@ -389,7 +395,7 @@ export function apply(ctx: Context, config: Config): void {
       }],
     },
     execute(args, exec) {
-      const page = toA2uiPage(args.page)
+      const page = canonicalizeA2uiPage(args.page)
       if (!exec.agent) {
         // The surface is per-agent-session state; a non-agent caller (no
         // owning session) has nowhere to write it. Reject rather than no-op.

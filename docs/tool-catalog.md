@@ -16,6 +16,7 @@ This table connects model-visible tool names to the plugin package and service s
 | Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-tool-a2ui-surface` | `a2ui_surface` | `ctx.tools`, `a calling Agent (exec.agent writes the a2ui/surface record to its session)` | `tool/call`, `a2ui/surface (durable session record)`, `tool/result` | - | a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`. |
+| `@deepseek-ai/dsh-tool-a2ui-store` | `a2ui_export` | `ctx.tools`, `ctx.a2uiStore (self-provided)` | `tool/call`, `tool/result`, `a JSON tool file under the harness home` | - | a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: ptc` / `mode: both` (see the PTC mode Agent Note). Under `ptc` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
@@ -303,6 +304,37 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
 Source: [`packages/web/tool-a2ui-surface/src/index.ts`](../packages/web/tool-a2ui-surface/src/index.ts)
 
 a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`.
+
+<a id="deepseek-aidsh-tool-a2ui-store"></a>
+
+## `@deepseek-ai/dsh-tool-a2ui-store`
+
+### `a2ui_export`
+
+Save an A2UI page you authored as a reusable tool file under the local tool store. The page is the same declarative JSON the `a2ui_surface` tool renders — `kind`, `title`, and the form `fields` (with their `visibleWhen`/`validateWhen`/`compute` logic) or canvas `nodes`/`edges`, plus optional `actions`. Once saved, the tool is listed in the sidebar for any member to reopen without re-authoring it. Give the tool a short, stable `name` that will appear in that list.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Stable tool name for the saved file (letters, digits, dot, dash, underscore; no path separators)."
+    },
+    "page": {
+      "description": "The declarative A2UI page to save: the same shape as `a2ui_surface`'s `page` argument."
+    }
+  },
+  "required": [
+    "name",
+    "page"
+  ]
+}
+```
+
+Source: [`packages/web/tool-a2ui-store/src/index.ts`](../packages/web/tool-a2ui-store/src/index.ts)
+
+a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts.
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 

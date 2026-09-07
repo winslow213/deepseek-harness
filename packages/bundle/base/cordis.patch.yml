@@ -389,6 +389,12 @@
       config:
         allowUpdate: false
 
+    # Local persistence for authored A2UI pages: a2ui_export saves a page as
+    # one JSON file per tool under the harness home, so a generated page can be
+    # exported and shared across deployments.
+    - id: tool-a2ui-store
+      name: '@deepseek-ai/dsh-tool-a2ui-store'
+
     - id: timeout-policy
       name: '@deepseek-ai/dsh-tool-call-timeout-policy'
 

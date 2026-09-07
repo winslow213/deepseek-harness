@@ -68,6 +68,7 @@ import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
 import * as ToolA2uiSurface from '@deepseek-ai/dsh-tool-a2ui-surface'
+import * as ToolA2uiStore from '@deepseek-ai/dsh-tool-a2ui-store'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -201,6 +202,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-a2ui-store',
+    dir: 'tool-a2ui-store',
+    source: 'packages/web/tool-a2ui-store/src/index.ts',
+    requires: ['ctx.tools', 'ctx.a2uiStore (self-provided)'],
+    writes: ['tool/call', 'tool/result', 'a JSON tool file under the harness home'],
+    async mount(ctx) {
+      await ctx.plugin(ToolA2uiStore, {})
+    },
+    note:
+      'a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-ask-user',
