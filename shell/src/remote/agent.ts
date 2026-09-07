@@ -45,6 +45,7 @@ import {
   type FsReadRequest,
   type KillRequest,
 } from './protocol.ts'
+import { checkEnvironment, parseCheckArgs } from './check.ts'
 
 export interface AgentOptions {
   user: string
@@ -516,10 +517,15 @@ async function connectLoop(opts: AgentOptions): Promise<void> {
 
 // Entry so the file doubles as `node shell/src/remote/agent.ts`.
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  void startAgent(process.argv.slice(2)).catch((error: unknown) => {
-    console.error(`[agent] fatal: ${error instanceof Error ? error.message : String(error)}`)
-    process.exit(1)
-  })
+  const argv = process.argv.slice(2)
+  if (argv.includes('--check')) {
+    void checkEnvironment(parseCheckArgs(argv)).then((code) => process.exit(code))
+  } else {
+    void startAgent(argv).catch((error: unknown) => {
+      console.error(`[agent] fatal: ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    })
+  }
 }
 
 /** Parse agent CLI flags and run the daemon until the process is stopped. */
