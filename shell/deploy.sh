@@ -49,8 +49,10 @@ RSYNC_EXCLUDES=(
   --exclude=shell/.env
   --exclude='*.log'
   --exclude='*.tsbuildinfo'
-  --exclude=lib
-  --exclude=dist
+  # NOTE: lib/ and apps/web/dist are NOT excluded — dsh instances run in
+  # source mode but still need each package's built lib/typert.host.js and the
+  # web front-end's dist/ (index.html + assets); a deploy copy without them
+  # cannot boot a profile or serve any web route (every path 404s).
   --exclude=dist-exe
   --exclude=coverage
   --exclude=.cache
@@ -124,7 +126,7 @@ cmd_start() {
   ( cd "${DEPLOY_ROOT}/shell" && \
     nohup node --import tsx/esm src/bin.ts remote hub --account "${ACCOUNT_URL}" \
       --agent-port "${HUB_AGENT_PORT}" --control-port "${HUB_CONTROL_PORT}" \
-      --no-auto-inject --shadow-root "${DSH_SHADOW_ROOT}" \
+      --shadow-root "${DSH_SHADOW_ROOT}" \
       > "${HUB_LOG}" 2>&1 & echo $! > "${LOG_DIR}/hub.pid" )
   sleep 2
   log "started account (${ACCOUNT_URL}), proxy (0.0.0.0:${PROXY_PORT}), hub (0.0.0.0:${HUB_AGENT_PORT})"
