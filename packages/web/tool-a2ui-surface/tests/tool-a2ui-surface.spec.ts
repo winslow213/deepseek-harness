@@ -95,7 +95,7 @@ describe('dsh-tool-a2ui-surface', () => {
     const kindSpec = pageSpec.properties!.kind as { enum?: string[] }
     expect(kindSpec.enum).toEqual(['form', 'canvas'])
     const fieldProps = ((pageSpec.properties!.fields as { items: { properties: Record<string, unknown> } }).items.properties)
-    expect(Object.keys(fieldProps).sort()).toEqual(['compute', 'help', 'label', 'name', 'options', 'placeholder', 'required', 'type', 'validateMessage', 'validateWhen', 'visibleWhen'])
+    expect(Object.keys(fieldProps).sort()).toEqual(['compute', 'help', 'label', 'name', 'options', 'optionsFrom', 'placeholder', 'required', 'type', 'validateMessage', 'validateWhen', 'visibleWhen'])
     const typeSpec = fieldProps.type as { enum?: string[] }
     expect(typeSpec.enum).toEqual(['text', 'textarea', 'select', 'number', 'checkbox'])
     const nodeSpec = ((pageSpec.properties!.nodes as { items: { properties: Record<string, unknown>; required?: string[] } }).items)
@@ -288,6 +288,43 @@ describe('dsh-tool-a2ui-surface', () => {
     expect(ctx.tools.schemas().some(s => s.name === 'a2ui_surface')).toBe(false)
   })
 
+
+  describe('optionsFrom canonicalization', () => {
+    it('keeps a select optionsFrom and requires the referenced script action', () => {
+      const raw = {
+        kind: 'form', title: 'D', fields: [{ name: 'dev', label: 'Dev', type: 'select', optionsFrom: 'list' }],
+        actions: [{ id: 'list', label: 'List', execution: 'script', program: 'return []', binds: [] }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as { fields: Array<Record<string, unknown>> }).fields[0]).toMatchObject({ optionsFrom: 'list' })
+    })
+
+    it('rejects an optionsFrom referencing an unknown or non-script action', () => {
+      const bad = {
+        kind: 'form', title: 'D', fields: [{ name: 'dev', label: 'Dev', type: 'select', optionsFrom: 'nope' }],
+        actions: [{ id: 'x', label: 'X', execution: 'command', command: 'echo hi' }],
+      }
+      expect(() => canonicalizeA2uiPage(bad as unknown as A2uiPageInput)).toThrow(/references unknown action/)
+      const notScript = {
+        kind: 'form', title: 'D', fields: [{ name: 'dev', label: 'Dev', type: 'select', optionsFrom: 'x' }],
+        actions: [{ id: 'x', label: 'X', execution: 'command', command: 'echo hi' }],
+      }
+      expect(() => canonicalizeA2uiPage(notScript as unknown as A2uiPageInput)).toThrow(/must reference a `script` action/)
+    })
+
+    it('rejects optionsFrom on a non-select or alongside static options', () => {
+      const notSelect = {
+        kind: 'form', title: 'D', fields: [{ name: 't', label: 'T', type: 'text', optionsFrom: 'x' }],
+        actions: [{ id: 'x', label: 'X', execution: 'script', program: 'x', binds: [] }],
+      }
+      expect(() => canonicalizeA2uiPage(notSelect as unknown as A2uiPageInput)).toThrow(/only valid on a `select`/)
+      const both = {
+        kind: 'form', title: 'D', fields: [{ name: 'd', label: 'D', type: 'select', options: [{ label: 'a', value: 'a' }], optionsFrom: 'x' }],
+        actions: [{ id: 'x', label: 'X', execution: 'script', program: 'x', binds: [] }],
+      }
+      expect(() => canonicalizeA2uiPage(both as unknown as A2uiPageInput)).toThrow(/mutually exclusive/)
+    })
+  })
 
   describe('script write-back canonicalization', () => {
     it('carries a write entry trimmed on both sides', () => {

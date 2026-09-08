@@ -24,8 +24,8 @@ export type A2uiOpenerMessage =
   | { readonly type: 'a2ui/runFailed'; readonly message: string; readonly ok: false }
   | { readonly type: 'a2ui/runChunk'; readonly runId: string; readonly output: string; readonly running: boolean }
   | { readonly type: 'a2ui/runDone'; readonly runId: string; readonly exitCode: number | null }
-  | { readonly type: 'a2ui/scriptResult'; readonly ok: true; readonly value?: unknown; readonly logs?: readonly string[] }
-  | { readonly type: 'a2ui/scriptFailed'; readonly message: string; readonly ok: false }
+  | { readonly type: 'a2ui/scriptResult'; readonly ok: true; readonly actionId: string; readonly value?: unknown; readonly logs?: readonly string[] }
+  | { readonly type: 'a2ui/scriptFailed'; readonly actionId?: string; readonly message: string; readonly ok: false }
 
 /** Progress of one command run as the popup renders it. */
 export interface A2uiRunState {

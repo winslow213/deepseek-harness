@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  A2UI_POPUP_IDLE, invokeAction, reducePopupState, selectOutcome,
+  A2UI_POPUP_IDLE, completionToOptions, invokeAction, reducePopupState, selectOutcome,
   type A2uiPopupAction, type A2uiValues,
 } from '../src/a2ui-runtime.ts'
 
@@ -65,6 +65,25 @@ describe('selectOutcome', () => {
     expect(selectOutcome(null, 'value.x')).toBeUndefined()
     expect(selectOutcome('str', 'value.x')).toBeUndefined()
     expect(selectOutcome({ a: 1 }, 'other')).toBeUndefined()
+  })
+})
+
+describe('completionToOptions', () => {
+  it('accepts a bare array of label/value records', () => {
+    expect(completionToOptions([{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }]))
+      .toEqual([{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }])
+  })
+
+  it('accepts a wrapped items array', () => {
+    expect(completionToOptions({ items: [{ label: 'X', value: 'x' }] }))
+      .toEqual([{ label: 'X', value: 'x' }])
+  })
+
+  it('skips malformed entries and returns empty on a non-array shape', () => {
+    expect(completionToOptions([{ label: 'ok', value: '1' }, { label: 'no-value' }]))
+      .toEqual([{ label: 'ok', value: '1' }])
+    expect(completionToOptions('nope')).toEqual([])
+    expect(completionToOptions(null)).toEqual([])
   })
 })
 

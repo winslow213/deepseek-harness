@@ -16,7 +16,8 @@ export { A2uiCanvasPanel, a2uiBendForPoint, a2uiEdgeGeometry, type A2uiCanvasPan
 export { A2uiFormPanel, type A2uiFormPanelProps } from './A2uiFormPanel.tsx'
 export type { A2uiPageProps, A2uiTranslate, FormError } from './a2ui-chrome.tsx'
 export {
-  A2UI_POPUP_IDLE, invokeAction, reducePopupState,
+  A2UI_POPUP_IDLE, completionToOptions, invokeAction, reducePopupState,
   type A2uiInvocation, type A2uiPopupAction, type A2uiPopupState,
-  type A2uiValues, type A2uiValue, type A2uiExpressionEvaluator,
+  type A2uiResolvedOption, type A2uiValues, type A2uiValue,
+  type A2uiExpressionEvaluator,
 } from './a2ui-runtime.ts'

@@ -177,9 +177,9 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
       try {
         const outcome = await runBridge.runScript(action.program ?? '', action.binds as readonly A2uiScriptBinding[] ?? [])
         if (outcome.error !== undefined) {
-          send({ type: 'a2ui/scriptFailed', message: outcome.error.message, ok: false })
+          send({ type: 'a2ui/scriptFailed', actionId: action.id, message: outcome.error.message, ok: false })
         } else {
-          send({ type: 'a2ui/scriptResult', value: outcome.value, logs: outcome.logs, ok: true })
+          send({ type: 'a2ui/scriptResult', actionId: action.id, value: outcome.value, logs: outcome.logs, ok: true })
         }
         const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
         send(ack)

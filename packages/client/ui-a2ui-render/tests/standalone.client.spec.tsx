@@ -91,6 +91,30 @@ describe('renderA2uiPopup', () => {
     expect(pane.textContent).toContain('no shell mounted')
   })
 
+  it('fires optionsFrom actions on open and fills the select from their completion', () => {
+    const { sent, root, opener } = harness()
+    const dynamic: A2uiFormPage = {
+      kind: 'form',
+      title: 'Dynamic',
+      fields: [
+        { name: 'device', label: 'Device', type: 'select', optionsFrom: 'list' },
+      ],
+      actions: [{ id: 'list', label: 'List', execution: 'script', program: 'return []', binds: [] }],
+    }
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: dynamic }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: dynamic }, opener)
+    // The open triggers one auto runScript for the optionsFrom action.
+    expect(sent.some(m => m.type === 'a2ui/runScript')).toBe(true)
+
+    // The opener returns an options array for that action.
+    sendFromOpener({
+      type: 'a2ui/scriptResult', actionId: 'list', value: [{ label: 'SN-1', value: 'sn1' }, { label: 'SN-2', value: 'sn2' }], ok: true,
+    }, opener)
+    const select = root.querySelector('select[name="device"]') as HTMLSelectElement | null
+    expect(select?.options.length ?? 0).toBe(2)
+    expect(select?.options[0]?.text).toBe('SN-1')
+  })
+
   it('writes a script outcome back into a declared field via the action write map', () => {
     const { sent, root, opener } = harness()
     const withWrite: A2uiFormPage = {

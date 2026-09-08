@@ -57,6 +57,15 @@ export interface A2uiField {
    * directly and its derived value is what the submission payload carries.
    */
   readonly compute?: string
+  /**
+   * Dynamic option source: the id of a `script` action on the same page whose
+   * completion populates this field's `select` options. The action runs once
+   * when the page opens (and again whenever the user re-runs it); its
+   * completion must be an array of `{ label, value }` or `{ items: [...] }`.
+   * Only meaningful for a `select` field; static `options` and `optionsFrom`
+   * are mutually exclusive.
+   */
+  readonly optionsFrom?: string
 }
 
 /**

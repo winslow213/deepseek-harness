@@ -15,8 +15,8 @@ import { A2uiFormPanel } from './A2uiFormPanel.tsx'
 import type { A2uiTranslate } from './a2ui-chrome.tsx'
 import { evaluateA2uiExpression } from './a2ui-expression.ts'
 import {
-  A2UI_POPUP_IDLE, invokeAction, reducePopupState, selectOutcome,
-  type A2uiExpressionEvaluator, type A2uiValues,
+  A2UI_POPUP_IDLE, completionToOptions, invokeAction, reducePopupState, selectOutcome,
+  type A2uiExpressionEvaluator, type A2uiResolvedOption, type A2uiValues,
 } from './a2ui-runtime.ts'
 import type { A2uiOpenerMessage, A2uiPopupMessage } from './a2ui-wire.ts'
 import { en, zh, type A2uiKey } from './locales.ts'
@@ -67,8 +67,20 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
   const [state, dispatch] = useReducer(reducePopupState, A2UI_POPUP_IDLE)
   const { busy, run, localResult, scriptResult, scriptError } = state
   const [patch, setPatch] = useState<{ name: string; value: string | number | boolean } | null>(null)
+  const [optionSets, setOptionSets] = useState<Record<string, readonly A2uiResolvedOption[]>>({})
   // The action whose outcome is still pending a possible write-back.
   const pendingActionRef = useRef<A2uiAction | null>(null)
+  // optionsFrom action id -> owning select field name (static per page).
+  const optionActionsRef = useRef<Map<string, string> | null>(null)
+  if (optionActionsRef.current === null) {
+    const map = new Map<string, string>()
+    if (page.kind === 'form') {
+      for (const field of page.fields) {
+        if (field.optionsFrom !== undefined) map.set(field.optionsFrom, field.name)
+      }
+    }
+    optionActionsRef.current = map
+  }
   const post = useCallback((message: A2uiPopupMessage): void => {
     opener.postMessage(message, location.origin)
   }, [opener])
@@ -109,6 +121,26 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     post(message)
   }, [state.run, post])
 
+  // Fire each declared optionsFrom action once on open so the page starts
+  // with live options. The same runScript path a manual click uses.
+  const runOptionSource = useCallback((action: A2uiAction): void => {
+    pendingActionRef.current = action
+    const invocation = invokeAction(action, {}, surfaceId, evaluateExpression, t('action.localDone'))
+    if (invocation.kind === 'script') {
+      dispatch({ type: 'submit-sent' })
+      post(invocation.message)
+    }
+  }, [surfaceId, post, t])
+  useEffect(() => {
+    if (page.kind !== 'form') return
+    const actions = page.actions ?? []
+    for (const field of page.fields) {
+      if (field.optionsFrom === undefined) continue
+      const action = actions.find(candidate => candidate.id === field.optionsFrom)
+      if (action !== undefined) runOptionSource(action)
+    }
+  }, [page, runOptionSource])
+
   useEffect(() => {
     const onMessage = (event: MessageEvent): void => {
       if (event.origin !== location.origin || event.source !== opener) return
@@ -133,6 +165,11 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         case 'a2ui/scriptResult': {
           const text = data.value === undefined ? '(no value)' : JSON.stringify(data.value)
           dispatch({ type: 'script-result', text })
+          const optionField = optionActionsRef.current?.get(data.actionId)
+          if (optionField !== undefined && data.value !== undefined) {
+            const resolved = completionToOptions(data.value)
+            setOptionSets(current => ({ ...current, [optionField]: resolved }))
+          }
           const action = pendingActionRef.current
           const write = action?.write?.[0]
           if (write !== undefined && data.value !== undefined) {
@@ -155,8 +192,10 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
   }, [opener])
 
   const panel = page.kind === 'canvas'
-    ? <A2uiCanvasPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} />
-    : <A2uiFormPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} patch={patch} />
+    ? <A2uiCanvasPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit}
+      onAction={onAction} />
+    : <A2uiFormPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit}
+      onAction={onAction} patch={patch} optionSets={optionSets} />
 
   const active = run.runId !== null || run.error !== null
   return (

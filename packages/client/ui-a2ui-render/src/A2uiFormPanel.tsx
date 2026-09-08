@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import type { A2uiAction, A2uiField, A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiAction, A2uiField, A2uiFieldOption, A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
   A2uiChrome, type A2uiPageProps, type A2uiTranslate, type FormError,
 } from './a2ui-chrome.tsx'
@@ -17,6 +17,12 @@ export interface A2uiFormPanelProps extends Omit<A2uiPageProps, 'page'> {
    * applies it to the named field once and clears it.
    */
   readonly patch?: { readonly name: string; readonly value: FieldValue } | null
+  /**
+   * Runtime option sets keyed by `select` field name, overriding static
+   * `field.options` for fields whose options come from an `optionsFrom`
+   * script action.
+   */
+  readonly optionSets?: Readonly<Record<string, readonly A2uiFieldOption[]>>
 }
 
 /** One collected field value: the exact type the field widget produces. */
@@ -80,10 +86,12 @@ function FieldLabel({ field, t }: { field: A2uiField; t: A2uiTranslate }) {
   )
 }
 
-function FieldControl({ field, value, onChange }: {
+function FieldControl({ field, value, onChange, options }: {
   field: A2uiField
   value: FieldValue | undefined
   onChange: (value: FieldValue) => void
+  /** Runtime-resolved options overriding static `field.options` (optionsFrom). */
+  options?: readonly A2uiFieldOption[]
 }) {
   const id = `a2ui-${field.name}`
   const stringValue = typeof value === 'string' ? value : ''
@@ -112,7 +120,7 @@ function FieldControl({ field, value, onChange }: {
           value={stringValue}
           onChange={updateText}
         >
-          {(field.options ?? []).map(option => (
+          {(options ?? field.options ?? []).map(option => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
@@ -158,7 +166,7 @@ function FieldControl({ field, value, onChange }: {
 }
 
 /** Render one model-authored `form` page as a native, fillable, submittable form. */
-export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, patch }: A2uiFormPanelProps) {
+export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, patch, optionSets }: A2uiFormPanelProps) {
   const [values, setValues] = useState<FormValues>(() => Object.fromEntries(
     page.fields.filter(field => field.compute === undefined).map(field => [field.name, initialValue(field)]),
   ))
@@ -284,6 +292,9 @@ export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, pa
                 : <FieldControl
                   field={field}
                   value={values[field.name]}
+                  {...(field.optionsFrom !== undefined && optionSets?.[field.name] !== undefined
+                    ? { options: optionSets[field.name] }
+                    : {})}
                   onChange={(value) => { setValue(field.name, value) }}
                 />}
               {field.type !== 'checkbox' && field.help !== undefined

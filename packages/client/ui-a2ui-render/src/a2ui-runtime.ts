@@ -208,3 +208,32 @@ export function selectOutcome(outcome: Selectable, selector: string): unknown {
   }
   return current
 }
+
+/** A resolved select option. */
+export interface A2uiResolvedOption {
+  readonly label: string
+  readonly value: string
+}
+
+/**
+ * Convert one script completion into select options. Accepts either a bare
+ * array of `{label,value}` records or `{ items: [...] }`. Invalid entries
+ * are skipped; a non-array-shaped completion yields `[]` so a page degrades
+ * to an empty select rather than failing.
+ * @param completion - the script completion value.
+ * @returns the resolved options (label/value strings).
+ */
+export function completionToOptions(completion: unknown): A2uiResolvedOption[] {
+  const source = Array.isArray(completion) ? completion
+    : completion !== null && typeof completion === 'object' && Array.isArray((completion as { items?: unknown }).items)
+      ? (completion as { items: unknown[] }).items
+      : []
+  const options: A2uiResolvedOption[] = []
+  for (const item of source) {
+    if (item === null || typeof item !== 'object') continue
+    const record = item as { label?: unknown; value?: unknown }
+    if (typeof record.label !== 'string' || typeof record.value !== 'string') continue
+    options.push({ label: record.label, value: record.value })
+  }
+  return options
+}

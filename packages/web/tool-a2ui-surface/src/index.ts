@@ -116,11 +116,23 @@ export function canonicalizeA2uiPage(raw: A2uiPageInput): A2uiPage {
     if (raw.nodes !== undefined || raw.edges !== undefined) {
       throw new Error('invalid a2ui form page: a `form` page must not carry `nodes` or `edges`')
     }
+    const fields = toA2uiFields(raw.fields ?? [])
+    for (const field of fields) {
+      const from = field.optionsFrom
+      if (from === undefined) continue
+      const action = actions.find(candidate => candidate.id === from)
+      if (action === undefined) {
+        throw new Error(`invalid a2ui form page: \`optionsFrom\` on field ${JSON.stringify(field.name)} references unknown action ${JSON.stringify(from)}`)
+      }
+      if (action.execution !== 'script') {
+        throw new Error(`invalid a2ui form page: \`optionsFrom\` on field ${JSON.stringify(field.name)} must reference a \`script\` action`)
+      }
+    }
     return {
       kind: 'form',
       title,
       ...raw.description === undefined ? {} : { description: raw.description },
-      fields: toA2uiFields(raw.fields ?? []),
+      fields,
       ...raw.submitLabel === undefined ? {} : { submitLabel: raw.submitLabel },
       ...raw.instruction === undefined ? {} : { instruction: raw.instruction },
       ...actions.length === 0 ? {} : { actions },
@@ -242,8 +254,18 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
     if (!(FIELD_TYPES as readonly string[]).includes(field.type)) {
       throw new Error(`invalid a2ui field ${JSON.stringify(name)}: unknown type ${JSON.stringify(field.type)}`)
     }
-    if (field.type === 'select' && (field.options === undefined || field.options.length === 0)) {
-      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a \`select\` field needs at least one option`)
+    const optionsFrom = field.optionsFrom?.trim()
+    if (optionsFrom !== undefined && optionsFrom.length === 0) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`optionsFrom\` must be a non-empty action id`)
+    }
+    if (optionsFrom !== undefined && field.type !== 'select') {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`optionsFrom\` is only valid on a \`select\` field`)
+    }
+    if (optionsFrom !== undefined && field.options !== undefined && field.options.length > 0) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`optionsFrom\` and static \`options\` are mutually exclusive`)
+    }
+    if (field.type === 'select' && optionsFrom === undefined && (field.options === undefined || field.options.length === 0)) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a \`select\` field needs at least one option or an \`optionsFrom\` action`)
     }
     const visibleWhen = toA2uiExpression(field.visibleWhen, `field ${JSON.stringify(name)}`, 'visibleWhen')
     const validateWhen = toA2uiExpression(field.validateWhen, `field ${JSON.stringify(name)}`, 'validateWhen')
@@ -262,6 +284,7 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
       ...field.placeholder === undefined ? {} : { placeholder: field.placeholder },
       ...field.options === undefined ? {} : { options: field.options },
       ...field.help === undefined ? {} : { help: field.help },
+      ...optionsFrom === undefined ? {} : { optionsFrom },
       ...visibleWhen === undefined ? {} : { visibleWhen },
       ...validateWhen === undefined ? {} : { validateWhen },
       ...validateWhen === undefined ? {} : { validateMessage: field.validateMessage },
@@ -364,6 +387,7 @@ export function apply(ctx: Context, config: Config): void {
                 validateWhen: { type: 'string', description: 'Restricted expression over sibling field names; when set it must be truthy at submit.' },
                 validateMessage: { type: 'string', description: 'Failure message shown when validateWhen is falsy at submit.' },
                 compute: { type: 'string', description: 'Restricted expression over sibling field names; the field becomes read-only and displays its result.' },
+                optionsFrom: { type: 'string', description: 'Id of a `script` action whose completion populates this `select` field with options (array of `{label,value}` or `{items:[...]}`); mutually exclusive with static `options`.' },
                 options: {
                   type: 'array',
                   description: 'Selectable options; meaningful only for `select`.',
