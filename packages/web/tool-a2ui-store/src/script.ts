@@ -5,8 +5,11 @@
  * never in the browser and never in the host process. The program may call
  * only the `a2ui.*` members its `binds` grant — each grant maps to one pure
  * host helper, so a script can fetch or reshape data without ever receiving
- * an ambient capability. The completion value and any logs cross the
- * runtime's lossless JSON boundary and become the action result.
+ * an ambient capability. Binding calls are async, so the program must
+ * `await a2ui.<name>(...)` before folding the result into its completion
+ * value; an un-awaited call leaves a Promise in the value and the run fails
+ * the lossless-JSON boundary. The completion value and any logs cross that
+ * boundary and become the action result.
  * @module @deepseek-ai/dsh-tool-a2ui-store/script
  */
 
