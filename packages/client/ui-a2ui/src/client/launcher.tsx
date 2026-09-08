@@ -43,14 +43,6 @@ export type A2uiLauncherProps =
 /** The popup URL served by the web frontend's dedicated A2UI entry. */
 const A2UI_POPUP_PATH = '/a2ui.html'
 
-/**
- * The surface most recently mounted across this document. Reopening a
- * transcript re-mounts every historical launcher, so auto-open must fire once
- * for the newest surface only — the last `surfaceId` recorded after the
- * deferred timer settles.
- */
-let lastAutoOpenKey: string | null = null
-
 /** Serialize one submission as an ordinary user message the model receives. */
 function a2uiSubmitMessage(surfaceId: string, payload: Record<string, unknown>): string {
   return JSON.stringify({ a2uiSubmit: { surfaceId, ...payload } })
@@ -77,24 +69,6 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
     console.log('[a2ui] launcher mounted', { surfaceId, kind: page.kind, origin: location.origin })
     return () => { console.log('[a2ui] launcher unmounted', surfaceId) }
   }, [surfaceId, page.kind])
-
-  // Auto-open the popup for the newest mounted surface. When the sidebar's
-  // open gesture has already opened the same named window, `window.open`
-  // returns the existing window reference instead of a new one (no user
-  // activation needed), so the launcher "adopts" it and the ready handshake
-  // below completes the handoff. Only the last surface fires, so replaying a
-  // transcript with many historical launchers opens at most one window.
-  useEffect(() => {
-    const key = surfaceId
-    lastAutoOpenKey = key
-    const timer = setTimeout(() => {
-      if (lastAutoOpenKey !== key) return
-      const win = window.open(A2UI_POPUP_PATH, `a2ui-${surfaceId}`, 'popup=yes,width=920,height=760')
-      console.log('[a2ui] auto-open', { surfaceId, opened: win !== null })
-      if (win !== null) popupRef.current = win
-    }, 200)
-    return () => { clearTimeout(timer) }
-  }, [surfaceId])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent): void => {

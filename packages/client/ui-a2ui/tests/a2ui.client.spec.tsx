@@ -1004,7 +1004,7 @@ describe('A2uiLauncher', () => {
       actions: [{ id: 'go', label: 'Go', execution: 'command', command: 'echo {name}' }],
     })
     render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-run', page: actionPage })} bridge={bridge} />)
-    await act(async () => { await new Promise(r => setTimeout(r, 300)) }) // auto-open adopts the fake window
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
     act(() => {
       window.dispatchEvent(new MessageEvent('message', {
         origin: window.location.origin,
