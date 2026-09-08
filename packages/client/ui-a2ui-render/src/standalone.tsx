@@ -1,19 +1,24 @@
 /**
  * Standalone A2UI page renderer for the dedicated popup window. It mounts a
  * minimal React root that draws the form or canvas page with no slot
- * dependency: local actions resolve in-browser, while submissions and
- * model-mode actions post a typed message back to the opener window (the main
- * dsh app), which owns the session and forwards them to the model.
+ * dependency, and owns the popup run-time: every click resolves through
+ * `invokeAction` into the single message the opener must act on, and every
+ * opener reply folds through `reducePopupState` into one popup state.
  * @module @deepseek-ai/dsh-client-ui-a2ui/standalone
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useReducer } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { A2uiAction, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import { A2uiCanvasPanel } from './A2uiCanvasPanel.tsx'
 import { A2uiFormPanel } from './A2uiFormPanel.tsx'
 import type { A2uiTranslate } from './a2ui-chrome.tsx'
-import { A2UI_RUN_IDLE, type A2uiOpenerMessage, type A2uiPopupMessage, type A2uiRunState } from './a2ui-wire.ts'
+import { evaluateA2uiExpression } from './a2ui-expression.ts'
+import {
+  A2UI_POPUP_IDLE, invokeAction, reducePopupState,
+  type A2uiExpressionEvaluator, type A2uiValues,
+} from './a2ui-runtime.ts'
+import type { A2uiOpenerMessage, A2uiPopupMessage } from './a2ui-wire.ts'
 import { en, zh, type A2uiKey } from './locales.ts'
 import css from './A2uiPanel.module.css'
 
@@ -43,35 +48,58 @@ function buildTranslate(locale: 'en' | 'zh'): A2uiTranslate {
   }
 }
 
-/** The popup host: owns the `busy` flag, posts submissions/actions/runs to the opener, and projects command-run progress. */
+/** The restricted expression evaluator the local actions run through. */
+const evaluateExpression: A2uiExpressionEvaluator = (expression, values) => {
+  try {
+    return evaluateA2uiExpression(expression, values as Parameters<typeof evaluateA2uiExpression>[1])
+  } catch {
+    return null
+  }
+}
+
+/** The popup host: one reducer-owned runtime, posting resolved intents to the opener. */
 function A2uiPopupHost({ surfaceId, page, t, opener }: {
   surfaceId: string
   page: A2uiPage
   t: A2uiTranslate
   opener: Window
 }) {
-  const [busy, setBusy] = useState(false)
-  const [run, setRun] = useState<A2uiRunState>(A2UI_RUN_IDLE)
+  const [state, dispatch] = useReducer(reducePopupState, A2UI_POPUP_IDLE)
+  const { busy, run, localResult } = state
+  const post = useCallback((message: A2uiPopupMessage): void => {
+    opener.postMessage(message, location.origin)
+  }, [opener])
 
   const onSubmit = useCallback((payload: Record<string, unknown>): void => {
-    setBusy(true)
+    dispatch({ type: 'submit-sent' })
     const message: A2uiPopupMessage = { type: 'a2ui/submit', surfaceId, payload }
-    opener.postMessage(message, location.origin)
-  }, [surfaceId, opener])
+    post(message)
+  }, [surfaceId, post])
 
   const onAction = useCallback((action: A2uiAction, values: Record<string, unknown>): void => {
-    setBusy(true)
-    const message: A2uiPopupMessage = action.execution === 'command'
-      ? { type: 'a2ui/run', surfaceId, action, values }
-      : { type: 'a2ui/action', surfaceId, action, values }
-    opener.postMessage(message, location.origin)
-  }, [surfaceId, opener])
+    const invocation = invokeAction(action, values as A2uiValues, surfaceId, evaluateExpression, t('action.localDone'))
+    switch (invocation.kind) {
+      case 'expr':
+        dispatch({ type: 'local-result', text: invocation.result })
+        break
+      case 'command':
+        // The opener answers with runStarted (busy) and settles via runDone.
+        post(invocation.message)
+        break
+      case 'model':
+        dispatch({ type: 'submit-sent' })
+        post(invocation.message)
+        break
+    }
+  }, [surfaceId, post, t])
 
   const stopRun = useCallback((): void => {
-    setRun(current => current.runId === null ? current : { ...current, running: false })
-    const message: A2uiPopupMessage = { type: 'a2ui/runStop', runId: run.runId ?? '' }
-    opener.postMessage(message, location.origin)
-  }, [opener, run.runId])
+    const current = state.run
+    if (current.runId === null) return
+    dispatch({ type: 'run-stop-requested' })
+    const message: A2uiPopupMessage = { type: 'a2ui/runStop', runId: current.runId }
+    post(message)
+  }, [state.run, post])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent): void => {
@@ -80,21 +108,19 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
       if (data === null) return
       switch (data.type) {
         case 'a2ui/ack':
-          setBusy(false)
+          dispatch({ type: 'ack' })
           break
         case 'a2ui/runStarted':
-          setRun(current => ({ ...current, runId: data.runId, running: true, settled: false, error: null }))
-          break
-        case 'a2ui/runFailed':
-          setBusy(false)
-          setRun(current => ({ ...current, error: data.message, running: false, settled: true }))
+          dispatch({ type: 'run-started', runId: data.runId })
           break
         case 'a2ui/runChunk':
-          setRun(current => ({ ...current, output: current.output + data.output, running: data.running }))
+          dispatch({ type: 'run-chunk', output: data.output, running: data.running })
           break
         case 'a2ui/runDone':
-          setBusy(false)
-          setRun(current => ({ ...current, running: false, settled: true, exitCode: data.exitCode }))
+          dispatch({ type: 'run-done', exitCode: data.exitCode })
+          break
+        case 'a2ui/runFailed':
+          dispatch({ type: 'run-failed', message: data.message })
           break
       }
     }
@@ -110,6 +136,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
   return (
     <>
       {panel}
+      {localResult !== null && <p className={css.result} role="status">{localResult}</p>}
       {active && (
         <div className={css.console} data-a2ui-console>
           <div className={css.consoleHeader}>
