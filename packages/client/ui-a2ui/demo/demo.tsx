@@ -4,9 +4,8 @@
  * 仓库门禁。
  */
 import { createRoot } from 'react-dom/client'
-import { A2uiCanvasPanel, type A2uiCanvasPanelProps } from '../src/client/A2uiCanvasPanel.tsx'
-import { zh } from '../src/client/locales.ts'
-import type { A2uiSurfaceChatData } from '../src/client/a2ui-definition.ts'
+import { A2uiCanvasPanel, type A2uiCanvasPanelProps } from '@deepseek-ai/dsh-client-ui-a2ui-render/src/A2uiCanvasPanel.tsx'
+import { zh } from '@deepseek-ai/dsh-client-ui-a2ui-render/src/locales.ts'
 import type { A2uiCanvasPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 
 // 多节点 mock 页面：start→deploy 的「直通」直线恰好穿过 build 节点，适合演示把线拖开。
@@ -41,40 +40,14 @@ const t = (key: string, params?: Record<string, string>): string => {
   return template.replace(/\{(\w+)\}/g, (match, name: string) => params[name] ?? match)
 }
 
-const data: A2uiSurfaceChatData = { seq: 1, surfaceId: 'demo-1', page }
-
-// 与单测 panelProps 相同的运行时占位；canvas 渲染器实际只用 page/useInput/inputActions/t。
-const props = {
+const props: A2uiCanvasPanelProps = {
   page,
   surfaceId: 'demo-1',
-  node: {
-    key: '12:a2ui-surface demo-1#1', kind: 'a2ui-surface', id: 'demo-1#1',
-    target: 'chat', anchorSeq: 1, location: { kind: 'unresolved' },
-    visibility: 'visible', data,
-  },
-  sessionId: 'demo',
-  useSessions: () => undefined,
-  useSession: () => undefined,
-  useProjection: () => undefined,
-  useInput: ((selector: (state: { phase: string }) => string) => selector({ phase: 'idle' })),
-  inputActions: {
-    setDraft: (draft: string) => console.log('[a2ui demo] draft:', draft),
-    addImages: () => false,
-    removeImage: () => {},
-    pruneImages: () => {},
-    submit: () => console.log('[a2ui demo] submit'),
-  },
-  useWorkspaces: () => undefined,
-  useTurnData: () => undefined,
-  selectedCallId: undefined,
-  cwd: undefined,
-  openFile: () => {},
-  inspectCall: () => {},
-  forkAt: () => {},
-  renderMessageImages: () => null,
-  fileMentions: () => undefined,
-  t,
-} as unknown as A2uiCanvasPanelProps
+  t: t as never,
+  busy: false,
+  onSubmit: payload => console.log('[a2ui demo] submit:', payload),
+  onAction: (action, values) => console.log('[a2ui demo] action:', action.id, values),
+}
 
 const root = createRoot(document.getElementById('app') as HTMLElement)
 root.render(<A2uiCanvasPanel {...props} />)

@@ -73,10 +73,16 @@ const DESCRIPTION = 'Render an interactive page in the web UI. The page JSON you
   + 'value. Expressions reference sibling fields by bare `name` and support '
   + 'string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - '
   + '* / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/'
-  + '`.startsWith(x)`/`.endsWith(x)`. To expose real operations, add `actions`: '
-  + 'each is an `id`, a `label`, a `tool` name, and an `instruction`; when the '
-  + 'user clicks it you receive an action trigger with the collected values and '
-  + 'should invoke that tool with them.'
+  + '`.startsWith(x)`/`.endsWith(x)`. To expose operations, add `actions`: each '
+  + 'is an `id`, a `label`, and an `execution` mode. `execution: "model"` '
+  + '(the default) names a `tool` and an `instruction`, and when the user '
+  + 'clicks it you receive an action trigger with the collected values and '
+  + 'should invoke that tool with them. `execution: "local"` runs in the '
+  + 'browser with no model round-trip: give it a `result` expression (over '
+  + 'the collected values, same grammar as field logic) shown to the user '
+  + 'after the click. Use `local` for deterministic, side-effect-free '
+  + 'transformations and `model` only when the action needs reasoning or a '
+  + 'real tool call.'
 
 /**
  * Mint a fresh, collision-resistant surface identity.
@@ -141,15 +147,27 @@ function toA2uiActions(rawActions: readonly A2uiAction[]): A2uiAction[] {
   for (const action of rawActions) {
     const id = action.id.trim()
     const label = action.label.trim()
-    const tool = action.tool.trim()
-    const instruction = action.instruction.trim()
+    const execution = action.execution === undefined ? 'model' : action.execution
     if (id.length === 0) throw new Error('invalid a2ui action: `id` must be a non-empty string')
     if (label.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`label\` must be a non-empty string`)
-    if (tool.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`tool\` must be a non-empty string`)
-    if (instruction.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`instruction\` must be a non-empty string`)
-    if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
-    seen.add(id)
-    actions.push({ id, label, tool, instruction })
+    if (execution === 'model') {
+      const tool = action.tool?.trim() ?? ''
+      const instruction = action.instruction?.trim() ?? ''
+      if (tool.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: a \`model\` action must name a \`tool\``)
+      if (instruction.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: a \`model\` action must carry an \`instruction\``)
+      if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
+      seen.add(id)
+      actions.push({ id, label, execution: 'model', tool, instruction })
+    } else {
+      if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
+      seen.add(id)
+      actions.push({
+        id,
+        label,
+        execution: 'local',
+        ...action.result === undefined || action.result.trim().length === 0 ? {} : { result: action.result.trim() },
+      })
+    }
   }
   return actions
 }
@@ -355,15 +373,17 @@ export function apply(ctx: Context, config: Config): void {
           },
           actions: {
             type: 'array',
-            description: 'Declarative actions rendered as buttons beside the submit control; each triggers a named model tool call.',
+            description: 'Declarative actions rendered as buttons beside the submit control; each runs locally (`local`) or triggers a model tool call (`model`).',
             items: {
               type: 'object',
               additionalProperties: false,
               properties: {
                 id: { type: 'string', required: true, description: 'Stable identity the action trigger payload carries.' },
                 label: { type: 'string', required: true, description: 'Button label.' },
-                tool: { type: 'string', required: true, description: 'Tool name the model should invoke when the action is triggered.' },
-                instruction: { type: 'string', required: true, description: 'What invoking the tool accomplishes; the model uses this to form the call.' },
+                execution: { type: 'string', enum: ['local', 'model'], description: 'Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`.' },
+                tool: { type: 'string', description: 'Tool name the model invokes when the action is triggered (required for `model` mode).' },
+                instruction: { type: 'string', description: 'What invoking the tool accomplishes; the model uses this to form the call (required for `model` mode).' },
+                result: { type: 'string', description: 'Expression over the collected values shown after a `local` action runs.' },
               },
             },
           },

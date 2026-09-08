@@ -72,21 +72,43 @@ export interface A2uiField {
 export type A2uiExpression = string
 
 /**
- * One declarative action rendered as a button beside the submit control. An
- * action is a named model-tool invocation: when the user clicks it, the
- * browser serializes the collected values as an ordinary `user/message`
- * carrying the action id, and the model invokes {@link A2uiAction.tool} with
- * those values as arguments.
+ * How one declarative action executes when the user clicks it.
+ *
+ * - `local`: the browser runs the page's field logic over the collected
+ *   values and shows {@link A2uiAction.result} (an expression over those
+ *   values, or a literal) without any model round-trip. A local action is
+ *   pure, deterministic, client-side logic.
+ * - `model`: the browser serializes the collected values as an ordinary
+ *   `user/message` carrying the action id, and the model invokes
+ *   {@link A2uiAction.tool} with those values as arguments.
+ */
+export type A2uiExecutionMode = 'local' | 'model'
+
+/**
+ * One declarative action rendered as a button beside the submit control. The
+ * {@link A2uiAction.execution} mode decides whether the click is resolved in
+ * the browser (`local`) or routed to the model (`model`).
  */
 export interface A2uiAction {
   /** Stable identity the action trigger payload carries. */
   readonly id: string
   /** Button label. */
   readonly label: string
-  /** Tool name the model should invoke when the action is triggered. */
-  readonly tool: string
+  /**
+   * Execution mode; defaults to `model` when absent. `local` never contacts
+   * the model, `model` routes the collected values to the model.
+   */
+  readonly execution?: A2uiExecutionMode
+  /** Tool name the model invokes when the action is triggered in `model` mode. */
+  readonly tool?: string
   /** What invoking the tool accomplishes; the model uses this to form the call. */
-  readonly instruction: string
+  readonly instruction?: string
+  /**
+   * `local`-mode result: an expression over the collected field values (or a
+   * literal) shown in the page after the action runs. Only meaningful when
+   * `execution` is `local`.
+   */
+  readonly result?: string
 }
 
 /** The two page kinds `a2ui_surface` can render: a fillable form or a draggable node canvas. */

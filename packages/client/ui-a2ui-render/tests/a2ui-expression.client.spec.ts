@@ -1,7 +1,7 @@
 /** Behavior of the restricted A2UI expression evaluator. */
 
 import { describe, expect, it } from 'vitest'
-import { evaluateA2uiExpression } from '../src/client/a2ui-expression.ts'
+import { evaluateA2uiExpression } from '../src/a2ui-expression.ts'
 
 describe('evaluateA2uiExpression', () => {
   it('evaluates literals', () => {

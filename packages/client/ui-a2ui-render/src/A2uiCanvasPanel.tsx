@@ -13,17 +13,15 @@ import {
 } from '@xyflow/react'
 import type { A2uiAction, A2uiCanvasPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
-  A2uiChrome, a2uiActionMessage, a2uiSubmitMessage, type A2uiPanelProps, type FormError,
+  A2uiChrome, type A2uiPageProps, type A2uiTranslate, type FormError,
 } from './a2ui-chrome.tsx'
 import css from './A2uiPanel.module.css'
 import './react-flow.css'
 
-/** Keyed Chat renderer props for a canvas page, narrowed by the `A2uiPanel` dispatcher. */
-export interface A2uiCanvasPanelProps extends A2uiPanelProps {
+/** Renderer props for a canvas page, narrowed by the dispatcher. */
+export interface A2uiCanvasPanelProps extends Omit<A2uiPageProps, 'page'> {
   /** The narrowed canvas page this renderer draws. */
   readonly page: A2uiCanvasPage
-  /** The stable surface identity the submission correlates with. */
-  readonly surfaceId: string
 }
 
 /** Custom node payload: the model-authored label, styling hints, and the edit channel. */
@@ -32,7 +30,7 @@ type A2uiFlowNodeData = {
   readonly detail?: string
   readonly role?: 'start' | 'end'
   /** Locale translator for the editing affordances. */
-  readonly t?: A2uiPanelProps['t']
+  readonly t?: A2uiTranslate
   /** Persist a double-click edit back into the node store. */
   readonly onCommit?: (id: string, patch: { label?: string; detail?: string }) => void
 } & Record<string, unknown>
@@ -132,7 +130,7 @@ type A2uiFlowEdgeData = {
   /** Perpendicular offset (flow px) of the bend apex from the straight source→target line. */
   readonly bend: number
   /** Locale translator for the label editing affordances. */
-  readonly t?: A2uiPanelProps['t']
+  readonly t?: A2uiTranslate
 } & Record<string, unknown>
 
 /** One React Flow edge carrying the bend payload. */
@@ -339,7 +337,7 @@ function A2uiBendableEdge({
 const edgeTypes = { a2ui: A2uiBendableEdge }
 
 /** Render one model-authored `canvas` page as a draggable, connectable, zoomable node graph. */
-export function A2uiCanvasPanel({ page, surfaceId, useInput, inputActions, t }: A2uiCanvasPanelProps) {
+export function A2uiCanvasPanel({ page, surfaceId, t, busy, onSubmit, onAction }: A2uiCanvasPanelProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<A2uiFlowNode>(page.nodes.map(node => ({
     id: node.id,
     // Seeded nodes are part of the model-authored page; only their position
@@ -395,8 +393,7 @@ export function A2uiCanvasPanel({ page, surfaceId, useInput, inputActions, t }: 
     })))
   }, [setEdges, t])
   const [error, setError] = useState<FormError | null>(null)
-  const phase = useInput(state => state.phase)
-  const busy = phase === 'adjudicating' || phase === 'claimed' || phase === 'submitting'
+  const [localResult, setLocalResult] = useState<string | null>(null)
   const edgeCounter = useRef(0)
 
   const onConnect = useCallback((connection: Connection) => {
@@ -442,22 +439,27 @@ export function A2uiCanvasPanel({ page, surfaceId, useInput, inputActions, t }: 
       setError({ key: 'error.busy' })
       return
     }
-    inputActions.setDraft(a2uiSubmitMessage(surfaceId, { graph: graph() }))
-    inputActions.submit()
+    onSubmit({ graph: graph() })
   }
 
   const triggerAction = (action: A2uiAction): void => {
+    if (action.execution === 'local') {
+      setError(null)
+      setLocalResult(action.result === undefined || action.result.trim().length === 0
+        ? t('action.localDone')
+        : action.result)
+      return
+    }
     if (busy) {
       setError({ key: 'error.busy' })
       return
     }
-    inputActions.setDraft(a2uiActionMessage(surfaceId, action, { graph: graph() }))
-    inputActions.submit()
+    onAction(action, { graph: graph() })
   }
 
   return (
     <form className={css.root} data-a2ui-surface={surfaceId} onSubmit={submit}>
-      <A2uiChrome page={page} error={error} busy={busy} t={t} onAction={triggerAction}>
+      <A2uiChrome page={page} error={error} busy={busy} localResult={localResult} t={t} onAction={triggerAction}>
         <div className={css.canvas} data-a2ui-canvas>
           <ReactFlow
             nodes={nodes}

@@ -85,6 +85,7 @@
     "@deepseek-ai/dsh-client-ui-tool": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workflow-run": "workspace:^",
     "@deepseek-ai/dsh-client-ui-a2ui": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-a2ui-store": "workspace:^",
     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",

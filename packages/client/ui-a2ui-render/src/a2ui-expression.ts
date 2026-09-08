@@ -310,7 +310,7 @@ class Evaluator {
     }
     if (token.kind === 'identifier') {
       // `true`/`false`/`null` already carry their literal; a bare identifier is a field reference.
-      if (token.literal !== undefined) return token.literal as string | number | boolean | null
+      if (token.literal !== undefined) return token.literal
       if (!(token.text in this.values)) throw new ReferenceError(`unknown field ${JSON.stringify(token.text)}`)
       return this.values[token.text] ?? null
     }

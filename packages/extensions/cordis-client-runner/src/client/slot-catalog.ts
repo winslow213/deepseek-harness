@@ -294,7 +294,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     slotInject: 'ChatNodeTurnDataInjected',
     declaredBy: 'an entry in \'conversation.view\' (client-ui-chat), so it exists while that entry is mounted',
     occupants: [
-      'client-ui-a2ui A2uiPanel key \'a2ui-surface\'',
+      'client-ui-a2ui A2uiLauncher key \'a2ui-surface\'',
       'client-ui-chat UserMessageNodeView key \'user\'',
       'client-ui-chat UserMessageNodeView key \'steering\'',
       'client-ui-chat ContextMessageNodeView key \'context\'',
@@ -1515,6 +1515,8 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-chat TranscriptViewRow id \'transcript-view\'',
       'client-ui-conversation EnterBehaviorRow id \'composer-enter\'',
       'client-ui-permission-presets PermissionRow id \'permission\'',
+      'client-ui-team-account PairingRow id \'team-pairing\'',
+      'client-ui-team-account TeamAccountRow id \'team-account\'',
       'client-ui-theme AppearanceRow id \'appearance\'',
       'client-ui-theme FontSizeRow id \'font-size\'',
     ],
@@ -2011,6 +2013,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     slotInject: '',
     declaredBy: 'an entry in \'sidebar\' (client-ui-sidebar), so it exists while that entry is mounted',
     occupants: [
+      'client-ui-a2ui-store A2uiStorePanel id \'a2ui-store\'',
       'client-ui-cordis CordisPanel id \'cordis-panel\'',
     ],
     replaceRisk: 'none',

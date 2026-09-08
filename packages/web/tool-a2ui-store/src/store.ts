@@ -16,10 +16,11 @@ import { A2UI_TOOLS_DIR, isSafeA2uiToolName, type A2uiToolRecord } from './types
 export type { A2uiToolRecord } from './types.ts'
 export { A2UI_TOOLS_DIR, isSafeA2uiToolName } from './types.ts'
 
-/** On-disk shape of one saved tool (the page plus its provenance). */
-interface A2uiToolDocument extends A2uiToolRecord {}
-
-/** Resolve the store directory: the configured override wins, else `<harness home>/a2ui-tools`. */
+/**
+ * Resolve the store directory: the configured override wins, else `<harness home>/a2ui-tools`.
+ * @param configuredDir - optional explicit directory; empty or absent falls back to the harness home.
+ * @returns the absolute store directory path.
+ */
 export function resolveA2uiToolsDir(configuredDir?: string): string {
   return configuredDir !== undefined && configuredDir !== ''
     ? resolve(configuredDir)
@@ -61,7 +62,7 @@ export async function listA2uiTools(dir: string): Promise<A2uiToolRecord[]> {
       const raw = await readFile(join(dir, entry), 'utf8')
       const parsed = JSON.parse(raw) as unknown
       if (typeof parsed !== 'object' || parsed === null) continue
-      const { page, savedAt } = parsed as Partial<A2uiToolDocument>
+      const { page, savedAt } = parsed as Record<string, unknown>
       if (typeof page !== 'object' || page === null) continue
       records.push({
         name,
@@ -93,9 +94,10 @@ export async function saveA2uiTool(dir: string, name: string, page: A2uiPage): P
 }
 
 /**
- * Remove one saved tool; returns false when it did not exist.
+ * Remove one saved tool.
  * @param dir - the store directory.
  * @param name - the tool name to remove.
+ * @returns false when the tool did not exist, true after a successful removal.
  */
 export async function removeA2uiTool(dir: string, name: string): Promise<boolean> {
   assertSafeName(name)
@@ -109,7 +111,10 @@ export async function removeA2uiTool(dir: string, name: string): Promise<boolean
   return true
 }
 
-/** Ensure the store directory exists (owner-private). */
+/**
+ * Ensure the store directory exists (owner-private).
+ * @param dir - the store directory to create.
+ */
 export async function ensureA2uiToolsDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 })
 }

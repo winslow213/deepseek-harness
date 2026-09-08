@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-07-a2ui-tool-store-local-save.md
-2026-09-07-a2ui-tool-store-local-save.md: 3959138f124952b09c9af5843db895afed7ba1a6
-2026-09-07-a2ui-tool-store-local-save.zh.md: aad2b87bc11994d9d543b027c6ea13d6fa0a92e1
+2026-09-07-a2ui-tool-store-local-save.md: f0cebaa4b0eda00a4ffb3df5bd504c12b8467c40
+2026-09-07-a2ui-tool-store-local-save.zh.md: d99ba844dadae4632d1d66d131c88fc458f4ad65

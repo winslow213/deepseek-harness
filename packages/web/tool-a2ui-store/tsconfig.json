@@ -19,7 +19,16 @@
       "path": "../../util/home-paths"
     },
     {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
       "path": "../../core/tools"
+    },
+    {
+      "path": "../../typert/protocol"
     },
     {
       "path": "../../web/tool-a2ui-surface"

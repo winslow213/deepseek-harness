@@ -1,17 +1,15 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { A2uiAction, A2uiField, A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
-  A2uiChrome, a2uiActionMessage, a2uiSubmitMessage, type A2uiPanelProps, type FormError,
+  A2uiChrome, type A2uiPageProps, type A2uiTranslate, type FormError,
 } from './a2ui-chrome.tsx'
 import { evaluateA2uiExpression, type A2uiValues } from './a2ui-expression.ts'
 import css from './A2uiPanel.module.css'
 
-/** Keyed Chat renderer props for a form page, narrowed by the `A2uiPanel` dispatcher. */
-export interface A2uiFormPanelProps extends A2uiPanelProps {
+/** Renderer props for a form page, narrowed by the dispatcher. */
+export interface A2uiFormPanelProps extends Omit<A2uiPageProps, 'page'> {
   /** The narrowed form page this renderer draws. */
   readonly page: A2uiFormPage
-  /** The stable surface identity the submission correlates with. */
-  readonly surfaceId: string
 }
 
 /** One collected field value: the exact type the field widget produces. */
@@ -66,7 +64,7 @@ function tryEval(
   }
 }
 
-function FieldLabel({ field, t }: { field: A2uiField; t: A2uiPanelProps['t'] }) {
+function FieldLabel({ field, t }: { field: A2uiField; t: A2uiTranslate }) {
   return (
     <label className={css.label} htmlFor={`a2ui-${field.name}`}>
       <span className={css.labelText}>{field.label}</span>
@@ -153,13 +151,12 @@ function FieldControl({ field, value, onChange }: {
 }
 
 /** Render one model-authored `form` page as a native, fillable, submittable form. */
-export function A2uiFormPanel({ page, surfaceId, useInput, inputActions, t }: A2uiFormPanelProps) {
+export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction }: A2uiFormPanelProps) {
   const [values, setValues] = useState<FormValues>(() => Object.fromEntries(
     page.fields.filter(field => field.compute === undefined).map(field => [field.name, initialValue(field)]),
   ))
   const [error, setError] = useState<FormError | null>(null)
-  const phase = useInput(state => state.phase)
-  const busy = phase === 'adjudicating' || phase === 'claimed' || phase === 'submitting'
+  const [localResult, setLocalResult] = useState<string | null>(null)
 
   // Expression values: user inputs with `number` fields normalized to numbers
   // (the widget stores the raw text), plus derived compute fields evaluated in
@@ -197,6 +194,7 @@ export function A2uiFormPanel({ page, surfaceId, useInput, inputActions, t }: A2
   const setValue = (name: string, value: FieldValue): void => {
     setValues(current => ({ ...current, [name]: value }))
     setError(null)
+    setLocalResult(null)
   }
 
   // Validate the visible fields and collect the submission payload. Returns
@@ -232,8 +230,7 @@ export function A2uiFormPanel({ page, surfaceId, useInput, inputActions, t }: A2
       setError({ key: 'error.busy' })
       return
     }
-    inputActions.setDraft(a2uiSubmitMessage(surfaceId, { values: outcome.values }))
-    inputActions.submit()
+    onSubmit({ values: outcome.values })
   }
 
   const triggerAction = (action: A2uiAction): void => {
@@ -242,17 +239,23 @@ export function A2uiFormPanel({ page, surfaceId, useInput, inputActions, t }: A2
       setError(outcome.error)
       return
     }
+    if (action.execution === 'local') {
+      setError(null)
+      setLocalResult(action.result === undefined || action.result.trim().length === 0
+        ? t('action.localDone')
+        : String(tryEval(action.result, exprValues, action.result) ?? ''))
+      return
+    }
     if (busy) {
       setError({ key: 'error.busy' })
       return
     }
-    inputActions.setDraft(a2uiActionMessage(surfaceId, action, outcome.values))
-    inputActions.submit()
+    onAction(action, outcome.values)
   }
 
   return (
     <form className={css.root} data-a2ui-surface={surfaceId} onSubmit={submit}>
-      <A2uiChrome page={page} error={error} busy={busy} t={t} onAction={triggerAction}>
+      <A2uiChrome page={page} error={error} busy={busy} localResult={localResult} t={t} onAction={triggerAction}>
         <div className={css.fields}>
           {page.fields.filter(field => visibility[field.name]).map(field => (
             <div className={css.field} key={field.name}>

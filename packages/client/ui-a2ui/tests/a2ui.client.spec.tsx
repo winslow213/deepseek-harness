@@ -14,20 +14,18 @@ import {
 import type {
   ChatConversationViewNode,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
-import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type {
   SessionLiveEventEntry,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import type { A2uiCanvasPage, A2uiFormPage, A2uiSurfaceData } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiAction, A2uiCanvasPage, A2uiFormPage, A2uiSurfaceData } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
-  A2uiPanel, type A2uiPanelProps,
-} from '../src/client/A2uiPanel.tsx'
-import {
-  a2uiBendForPoint, a2uiEdgeGeometry,
-} from '../src/client/A2uiCanvasPanel.tsx'
+  A2uiCanvasPanel, A2uiFormPanel, a2uiBendForPoint, a2uiEdgeGeometry,
+  type A2uiCanvasPanelProps, type A2uiFormPanelProps, type A2uiTranslate,
+} from '@deepseek-ai/dsh-client-ui-a2ui-render'
+import { A2uiLauncher, type A2uiLauncherProps } from '../src/client/launcher.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 import {
@@ -227,7 +225,6 @@ function flowToScreen(container: HTMLElement, x: number, y: number): [number, nu
   return [x * zoom + tx, y * zoom + ty]
 }
 
-const SESSION_ID = 'parent' as SessionId
 
 interface ChatSnapshot {
   readonly nodes: ReadonlyMap<string, ChatConversationViewNode>
@@ -420,63 +417,49 @@ describe('a2ui-surface Conversation Definition', () => {
   })
 })
 
-function node(data: A2uiSurfaceChatData): A2uiPanelProps['node'] {
+// ── Standalone renderer harness (the decoupled form/canvas panels) ──────────
+
+const t = makeTranslate(zh) as A2uiTranslate
+
+interface RenderOptions {
+  busy?: boolean
+  onSubmit?: (payload: Record<string, unknown>) => void
+  onAction?: (action: A2uiAction, values: Record<string, unknown>) => void
+}
+
+function formProps(form: A2uiFormPage, options: RenderOptions = {}): A2uiFormPanelProps {
   return {
-    key: `12:a2ui-surface${data.surfaceId}#${data.seq}`,
-    kind: 'a2ui-surface',
-    id: `${data.surfaceId}#${data.seq}`,
-    target: 'chat',
-    anchorSeq: data.seq,
-    location: { kind: 'unresolved' },
-    visibility: 'visible',
-    data,
+    page: form,
+    surfaceId: 'a2ui-1',
+    t,
+    busy: options.busy ?? false,
+    onSubmit: options.onSubmit ?? (() => {}),
+    onAction: options.onAction ?? (() => {}),
   }
 }
 
-function panelProps(
-  data: A2uiSurfaceChatData,
-  phase: string = 'plain',
-  inputActions: Partial<A2uiPanelProps['inputActions']> = {},
-): A2uiPanelProps {
+function canvasProps(canvas: A2uiCanvasPage, options: RenderOptions = {}): A2uiCanvasPanelProps {
   return {
-    node: node(data),
-    sessionId: SESSION_ID,
-    useSessions: (() => undefined) as unknown as A2uiPanelProps['useSessions'],
-    useSession: (() => undefined) as unknown as A2uiPanelProps['useSession'],
-    useProjection: () => undefined,
-    // The panel reads `state.phase` from the input machine; stub it to answer
-    // the requested phase. The generic snapshot hook is faked through the
-    // repo's test escape hatch like sibling panel tests.
-    useInput: ((selector: (state: { phase: string }) => string) => selector({ phase })) as unknown as A2uiPanelProps['useInput'],
-    inputActions: {
-      setDraft: () => {}, addImages: () => false, removeImage: () => {}, pruneImages: () => {}, submit: () => {},
-      ...inputActions,
-    },
-    useWorkspaces: (() => undefined) as unknown as A2uiPanelProps['useWorkspaces'],
-    useConversation: (() => undefined) as unknown as A2uiPanelProps['useConversation'],
-    useChat: (() => undefined) as unknown as A2uiPanelProps['useChat'],
-    useTrajectory: (() => undefined) as unknown as A2uiPanelProps['useTrajectory'],
-    useSessionPendingInteraction: (() => undefined) as unknown as A2uiPanelProps['useSessionPendingInteraction'],
-    useTurnData: () => undefined,
-    selectedCallId: undefined,
-    cwd: undefined,
-    openFile: () => {},
-    inspectCall: () => {},
-    forkAt: () => {},
-    loadImage: vi.fn(() => Promise.resolve('blob:unused')),
-    renderMessageImages: () => null,
-    fileMentions: () => undefined,
-    t: makeTranslate(zh),
+    page: canvas,
+    surfaceId: 'a2ui-1',
+    t,
+    busy: options.busy ?? false,
+    onSubmit: options.onSubmit ?? (() => {}),
+    onAction: options.onAction ?? (() => {}),
   }
 }
 
-function renderSurface(overrides: Partial<A2uiSurfaceChatData> = {}) {
-  return render(<A2uiPanel {...panelProps({ seq: 2, surfaceId: 'a2ui-1', page: page(), ...overrides })} />)
+function renderForm(form = page(), options: RenderOptions = {}) {
+  return render(<A2uiFormPanel {...formProps(form, options)} />)
 }
 
-describe('A2uiPanel', () => {
+function renderCanvas(canvas = canvasPage(), options: RenderOptions = {}) {
+  return render(<A2uiCanvasPanel {...canvasProps(canvas, options)} />)
+}
+
+describe('A2uiFormPanel', () => {
   it('renders the page title, fields, and submit button', () => {
-    renderSurface()
+    renderForm()
     expect(screen.getByText('Collect details')).toBeTruthy()
     expect(screen.getByLabelText('Name', { exact: false })).toBeTruthy()
     expect(screen.getByLabelText('Priority', { exact: false })).toBeTruthy()
@@ -485,236 +468,237 @@ describe('A2uiPanel', () => {
   })
 
   it('uses the model-authored submit label when provided', () => {
-    renderSurface({ page: page({ submitLabel: 'Go' }) })
+    renderForm(page({ submitLabel: 'Go' }))
     expect(screen.getByRole('button', { name: 'Go' })).toBeTruthy()
   })
 
-  it('submits the collected values as one user message carrying the surfaceId', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({ seq: 2, surfaceId: 'a2ui-1', page: page() }, 'plain', { setDraft, submit })} />)
+  it('submits the collected values carrying the surfaceId through onSubmit', () => {
+    const onSubmit = vi.fn()
+    renderForm(page(), { onSubmit })
     fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'Jane' } })
     fireEvent.change(screen.getByLabelText('Priority', { exact: false }), { target: { value: 'high' } })
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: { surfaceId: 'a2ui-1', values: { name: 'Jane', priority: 'high' } },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith({ values: { name: 'Jane', priority: 'high' } })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
-  it('renders action buttons and triggers one with the collected values', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ actions: [
-        { id: 'deploy', label: 'Deploy', tool: 'run_deploy', instruction: 'Deploy the configured service' },
-      ] }),
-    }, 'plain', { setDraft, submit })} />)
+  it('renders action buttons and triggers a model action with the collected values', () => {
+    const onAction = vi.fn()
+    const action = { id: 'deploy', label: 'Deploy', tool: 'run_deploy', instruction: 'Deploy the configured service' }
+    renderForm(page({ actions: [action] }), { onAction })
     fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'Jane' } })
     fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiAction: {
-        surfaceId: 'a2ui-1',
-        actionId: 'deploy',
-        tool: 'run_deploy',
-        instruction: 'Deploy the configured service',
-        values: { name: 'Jane', priority: 'low' },
-      },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    expect(onAction).toHaveBeenCalledWith(action, { name: 'Jane', priority: 'low' })
+  })
+
+  it('runs a local action in-browser without a model round-trip', () => {
+    const onSubmit = vi.fn()
+    const onAction = vi.fn()
+    renderForm(page({ actions: [
+      { id: 'upper', label: 'Upper', execution: 'local', result: 'name.toUpperCase()' },
+    ] }), { onSubmit, onAction })
+    fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Upper' }))
+    expect(screen.getByText('JANE')).toBeTruthy()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it('shows a generic completion for a local action without a result expression', () => {
+    const onAction = vi.fn()
+    renderForm(page({ actions: [{ id: 'done', label: 'Done', execution: 'local' }] }), { onAction })
+    fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByText('已完成')).toBeTruthy()
+    expect(onAction).not.toHaveBeenCalled()
   })
 
   it('blocks submission until required fields are filled', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({ seq: 2, surfaceId: 'a2ui-1', page: page() }, 'plain', { setDraft, submit })} />)
+    const onSubmit = vi.fn()
+    renderForm(page(), { onSubmit })
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
     expect(screen.getByRole('alert').textContent).toContain('Name')
-    expect(setDraft).not.toHaveBeenCalled()
-    expect(submit).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it('refuses submission while the input machine is busy', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({ seq: 2, surfaceId: 'a2ui-1', page: page() }, 'submitting', { setDraft, submit })} />)
+  it('refuses submission while busy', () => {
+    const onSubmit = vi.fn()
+    renderForm(page(), { busy: true, onSubmit })
     fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'Jane' } })
-    // The busy state disables the submit button, so a click cannot fire. The
-    // in-flight guard is defensive: dispatch a submit directly to prove a
-    // racing submission is refused.
     const form = screen.getByText('Collect details').closest('form')!
     fireEvent.submit(form)
     expect(screen.getByRole('alert').textContent).toContain('处理')
-    expect(setDraft).not.toHaveBeenCalled()
-    expect(submit).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('collects checkbox and number fields by their field kinds', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [
-        { name: 'agree', label: 'Agree', type: 'checkbox', required: true },
-        { name: 'count', label: 'Count', type: 'number' },
-      ] }),
-    }, 'plain', { setDraft, submit })} />)
+    const onSubmit = vi.fn()
+    renderForm(page({ fields: [
+      { name: 'agree', label: 'Agree', type: 'checkbox', required: true },
+      { name: 'count', label: 'Count', type: 'number' },
+    ] }), { onSubmit })
     fireEvent.click(screen.getByLabelText('Agree', { exact: false }))
     fireEvent.change(screen.getByLabelText('Count', { exact: false }), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: { surfaceId: 'a2ui-1', values: { agree: true, count: 3 } },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith({ values: { agree: true, count: 3 } })
   })
 
   it('keeps an unchecked required checkbox invalid', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [{ name: 'agree', label: 'Agree', type: 'checkbox', required: true }] }),
-    }, 'plain', { setDraft, submit })} />)
+    const onSubmit = vi.fn()
+    renderForm(page({ fields: [{ name: 'agree', label: 'Agree', type: 'checkbox', required: true }] }), { onSubmit })
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
     expect(screen.getByRole('alert').textContent).toContain('Agree')
-    expect(submit).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('renders the page description and instruction around a textarea field', () => {
-    renderSurface({ page: page({
+    renderForm(page({
       title: 'Notes',
       description: 'Fill in the details below.',
       instruction: 'Press submit when you are done.',
       fields: [{ name: 'notes', label: 'Notes', type: 'textarea' }],
-    }) })
+    }))
     expect(screen.getByText('Fill in the details below.')).toBeTruthy()
     expect(screen.getByText('Press submit when you are done.')).toBeTruthy()
     expect(screen.getByLabelText('Notes', { exact: false })).toBeTruthy()
   })
 
   it('keeps a select field empty when it has no options', () => {
-    renderSurface({ page: page({ fields: [{ name: 'pick', label: 'Pick', type: 'select' }] }) })
+    renderForm(page({ fields: [{ name: 'pick', label: 'Pick', type: 'select' }] }))
     const select = screen.getByLabelText('Pick', { exact: false }) as HTMLSelectElement
     expect(select.value).toBe('')
   })
 
   it('submits an untouched number field as an empty string', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [{ name: 'count', label: 'Count', type: 'number' }] }),
-    }, 'plain', { setDraft, submit })} />)
+    const onSubmit = vi.fn()
+    renderForm(page({ fields: [{ name: 'count', label: 'Count', type: 'number' }] }), { onSubmit })
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: { surfaceId: 'a2ui-1', values: { count: '' } },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith({ values: { count: '' } })
   })
 
   it('renders help text beside a checkbox and under a text field', () => {
-    renderSurface({ page: page({ fields: [
+    renderForm(page({ fields: [
       { name: 'agree', label: 'Agree', type: 'checkbox', help: 'Tick to agree.' },
       { name: 'name', label: 'Name', type: 'text', help: 'Your display name.' },
-    ] }) })
+    ] }))
     expect(screen.getByText('Tick to agree.')).toBeTruthy()
     expect(screen.getByText('Your display name.')).toBeTruthy()
   })
 
+  it('hides a field while its visibleWhen expression is falsy', () => {
+    renderForm(page({ fields: [
+      { name: 'notify', label: 'Notify me', type: 'checkbox' },
+      { name: 'email', label: 'Email', type: 'text', visibleWhen: 'notify === true' },
+    ] }))
+    expect(screen.queryByLabelText('Email', { exact: false })).toBeNull()
+    fireEvent.click(screen.getByLabelText('Notify me', { exact: false }))
+    expect(screen.getByLabelText('Email', { exact: false })).toBeTruthy()
+  })
+
+  it('shows a computed field derived from sibling values', () => {
+    renderForm(page({ fields: [
+      { name: 'first', label: 'First', type: 'text' },
+      { name: 'last', label: 'Last', type: 'text' },
+      { name: 'full', label: 'Full', type: 'text', compute: 'first + " " + last' },
+    ] }))
+    fireEvent.change(screen.getByLabelText('First', { exact: false }), { target: { value: 'Ada' } })
+    fireEvent.change(screen.getByLabelText('Last', { exact: false }), { target: { value: 'Lovelace' } })
+    expect(screen.getByText('Ada Lovelace')).toBeTruthy()
+  })
+
+  it('blocks submission when a validateWhen expression is falsy, showing validateMessage', () => {
+    const onSubmit = vi.fn()
+    renderForm(page({ fields: [
+      { name: 'age', label: 'Age', type: 'number', validateWhen: 'age >= 18', validateMessage: 'You must be 18 or older' },
+    ] }), { onSubmit })
+    fireEvent.change(screen.getByLabelText('Age', { exact: false }), { target: { value: '12' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(screen.getByRole('alert').textContent).toBe('You must be 18 or older')
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Age', { exact: false }), { target: { value: '30' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('submits computed values and excludes hidden fields', () => {
+    const onSubmit = vi.fn()
+    renderForm(page({ fields: [
+      { name: 'enabled', label: 'Enabled', type: 'checkbox' },
+      { name: 'label', label: 'Label', type: 'text', visibleWhen: 'enabled === true' },
+      { name: 'double', label: 'Double', type: 'text', compute: 'label.toUpperCase()' },
+    ] }), { onSubmit })
+    fireEvent.click(screen.getByLabelText('Enabled', { exact: false }))
+    fireEvent.change(screen.getByLabelText('Label', { exact: false }), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(onSubmit).toHaveBeenCalledWith({ values: { enabled: true, label: 'abc', double: 'ABC' } })
+  })
+})
+
+describe('A2uiCanvasPanel', () => {
   it('routes a canvas page to the draggable graph renderer', () => {
-    renderSurface({ page: canvasPage() })
+    renderCanvas()
     expect(screen.getByText('Plan a flow')).toBeTruthy()
     expect(screen.getByRole('button', { name: '提交' })).toBeTruthy()
     expect(screen.getByText('Start')).toBeTruthy()
     expect(screen.getByText('End')).toBeTruthy()
   })
 
-  it('submits the arranged graph as one user message carrying the surfaceId', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    // The third node carries a detail but no role, and the second edge carries
-    // no label, so the seed and submit projections cover both optional fields.
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage({
+  it('submits the arranged graph carrying the surfaceId through onSubmit', () => {
+    const onSubmit = vi.fn()
+    renderCanvas(canvasPage({
+      nodes: [
+        { id: 'start', label: 'Start', role: 'start', position: { x: 0, y: 0 } },
+        { id: 'end', label: 'End', role: 'end', position: { x: 200, y: 100 } },
+        { id: 'mid', label: 'Mid', detail: 'Draft', position: { x: 100, y: 200 } },
+      ],
+      edges: [
+        { id: 'e1', source: 'start', target: 'end', label: 'then' },
+        { id: 'e2', source: 'mid', target: 'end' },
+      ],
+    }), { onSubmit })
+    fireEvent.submit(screen.getByText('Plan a flow').closest('form')!)
+    expect(onSubmit).toHaveBeenCalledWith({
+      graph: {
         nodes: [
-          { id: 'start', label: 'Start', role: 'start', position: { x: 0, y: 0 } },
-          { id: 'end', label: 'End', role: 'end', position: { x: 200, y: 100 } },
+          { id: 'start', label: 'Start', position: { x: 0, y: 0 }, role: 'start' },
+          { id: 'end', label: 'End', position: { x: 200, y: 100 }, role: 'end' },
           { id: 'mid', label: 'Mid', detail: 'Draft', position: { x: 100, y: 200 } },
         ],
         edges: [
           { id: 'e1', source: 'start', target: 'end', label: 'then' },
           { id: 'e2', source: 'mid', target: 'end' },
         ],
-      }),
-    }, 'plain', { setDraft, submit })} />)
-    fireEvent.submit(screen.getByText('Plan a flow').closest('form')!)
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: {
-        surfaceId: 'a2ui-1',
-        graph: {
-          nodes: [
-            { id: 'start', label: 'Start', position: { x: 0, y: 0 }, role: 'start' },
-            { id: 'end', label: 'End', position: { x: 200, y: 100 }, role: 'end' },
-            { id: 'mid', label: 'Mid', detail: 'Draft', position: { x: 100, y: 200 } },
-          ],
-          edges: [
-            { id: 'e1', source: 'start', target: 'end', label: 'then' },
-            { id: 'e2', source: 'mid', target: 'end' },
-          ],
-        },
       },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('edits a node label and detail on double-click and submits the new content', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    }, 'plain', { setDraft, submit })} />)
+    const onSubmit = vi.fn()
+    renderCanvas(canvasPage(), { onSubmit })
 
     fireEvent.doubleClick(screen.getByText('Start'))
     fireEvent.change(screen.getByLabelText('节点标题'), { target: { value: '开始' } })
     fireEvent.change(screen.getByLabelText('自定义内容…'), { target: { value: '第一步' } })
     fireEvent.keyDown(screen.getByLabelText('节点标题'), { key: 'Enter' })
 
-    // The card shows the committed content instead of the inputs.
     expect(screen.getByText('开始')).toBeTruthy()
     expect(screen.getByText('第一步')).toBeTruthy()
     expect(screen.queryByLabelText('节点标题')).toBeNull()
 
     fireEvent.submit(screen.getByText('Plan a flow').closest('form')!)
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: {
-        surfaceId: 'a2ui-1',
-        graph: {
-          nodes: [
-            { id: 'start', label: '开始', detail: '第一步', position: { x: 0, y: 0 }, role: 'start' },
-            { id: 'end', label: 'End', position: { x: 200, y: 100 }, role: 'end' },
-          ],
-          edges: [{ id: 'e1', source: 'start', target: 'end', label: 'then' }],
-        },
+    expect(onSubmit).toHaveBeenCalledWith({
+      graph: {
+        nodes: [
+          { id: 'start', label: '开始', detail: '第一步', position: { x: 0, y: 0 }, role: 'start' },
+          { id: 'end', label: 'End', position: { x: 200, y: 100 }, role: 'end' },
+        ],
+        edges: [{ id: 'e1', source: 'start', target: 'end', label: 'then' }],
       },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('cancels a node edit on Escape without touching the label', () => {
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    renderCanvas()
 
     fireEvent.doubleClick(screen.getByText('Start'))
     fireEvent.change(screen.getByLabelText('节点标题'), { target: { value: '不要这个' } })
@@ -726,13 +710,8 @@ describe('A2uiPanel', () => {
   })
 
   it('cancels a detail edit on Escape and commits it with Ctrl+Enter', () => {
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    renderCanvas()
 
-    // Escape inside the detail textarea discards the draft.
     fireEvent.doubleClick(screen.getByText('Start'))
     const detail = screen.getByLabelText('自定义内容…')
     fireEvent.change(detail, { target: { value: '草稿' } })
@@ -740,7 +719,6 @@ describe('A2uiPanel', () => {
     expect(screen.getByText('Start')).toBeTruthy()
     expect(screen.queryByText('草稿')).toBeNull()
 
-    // A plain Enter keeps editing (detail commits only with Ctrl/Cmd+Enter).
     fireEvent.doubleClick(screen.getByText('Start'))
     fireEvent.change(screen.getByLabelText('自定义内容…'), { target: { value: '第一步' } })
     fireEvent.keyDown(screen.getByLabelText('自定义内容…'), { key: 'Enter' })
@@ -752,14 +730,8 @@ describe('A2uiPanel', () => {
   })
 
   it('keeps the card styling when a selected node is edited', () => {
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    const { container } = renderCanvas()
 
-    // Clicking the node selects it; the wrapper and the custom card both mark
-    // the selection, and the card keeps that styling once editing starts.
     const node = screen.getByText('Start').closest('.react-flow__node') as HTMLElement
     fireEvent.click(node)
     expect(container.querySelector('.react-flow__node.selected')).toBeTruthy()
@@ -771,45 +743,27 @@ describe('A2uiPanel', () => {
   })
 
   it('drops a blank label on commit without touching the card', () => {
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    renderCanvas()
 
     fireEvent.doubleClick(screen.getByText('Start'))
     fireEvent.change(screen.getByLabelText('节点标题'), { target: { value: '   ' } })
     fireEvent.keyDown(screen.getByLabelText('节点标题'), { key: 'Enter' })
 
-    // The blank label is not committed; the edit still closes and the card
-    // keeps its original content.
     expect(screen.getByText('Start')).toBeTruthy()
     expect(screen.queryByLabelText('节点标题')).toBeNull()
   })
 
-  it('refuses to submit the arranged graph while the input machine is busy', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    }, 'submitting', { setDraft, submit })} />)
+  it('refuses to submit the arranged graph while busy', () => {
+    const onSubmit = vi.fn()
+    renderCanvas(canvasPage(), { busy: true, onSubmit })
     fireEvent.submit(screen.getByText('Plan a flow').closest('form')!)
     expect(screen.getByRole('alert').textContent).toContain('处理')
-    expect(setDraft).not.toHaveBeenCalled()
-    expect(submit).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('pulls a connected line bend handle to route it around a node', async () => {
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    const { container } = renderCanvas()
 
-    // Node/handle measurement runs through the (asynchronous) ResizeObserver
-    // round, so the seeded edge materializes after the initial render pass.
     const edgePath = await waitFor(() => {
       const path = container.querySelector('.react-flow__edge-path') as SVGPathElement | null
       if (path === null) throw new Error('seed edge not rendered')
@@ -817,19 +771,15 @@ describe('A2uiPanel', () => {
     })
     const straight = edgePath.getAttribute('d')
 
-    // The bend handle is the apex group inside the edge: a transparent hit
-    // disc plus the visible knob dot.
     const circles = container.querySelectorAll('.react-flow__edge circle')
     const dot = circles[1] as SVGCircleElement
     const handle = dot.closest('g') as SVGGElement
     expect(dot.getAttribute('r')).toBe('3.5')
 
-    // A move before the pull is ignored: the path stays straight.
     fireEvent.pointerMove(handle, { clientX: 420, clientY: 30 })
     expect(edgePath.getAttribute('d')).toBe(straight)
 
     fireEvent.pointerDown(handle)
-    // Pulling grows the knob so the grab reads as live.
     expect(dot.getAttribute('r')).toBe('5')
     fireEvent.pointerMove(handle, { clientX: 420, clientY: 30 })
     await waitFor(() => { expect(edgePath.getAttribute('d')).not.toBe(straight) })
@@ -838,27 +788,16 @@ describe('A2uiPanel', () => {
   })
 
   it('connects a new line by dragging a source handle onto a target handle', async () => {
-    // A third node with no seeded edge gives the drag a connection React Flow
-    // will accept: dragging start onto the existing end would be rejected as
-    // a duplicate of the seeded start→end edge.
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage({
-        nodes: [
-          { id: 'start', label: 'Start', role: 'start', position: { x: 0, y: 0 } },
-          { id: 'end', label: 'End', role: 'end', position: { x: 200, y: 100 } },
-          { id: 'mid', label: 'Mid', position: { x: 100, y: 200 } },
-        ],
-      }),
-    })} />)
+    const { container } = renderCanvas(canvasPage({
+      nodes: [
+        { id: 'start', label: 'Start', role: 'start', position: { x: 0, y: 0 } },
+        { id: 'end', label: 'End', role: 'end', position: { x: 200, y: 100 } },
+        { id: 'mid', label: 'Mid', position: { x: 100, y: 200 } },
+      ],
+    }))
 
-    // The seeded edge renders once the (asynchronous) measurement pass lands.
     await waitFor(() => { expect(container.querySelectorAll('.react-flow__edge')).toHaveLength(1) })
 
-    // The start node's source handle connects to the third node's target
-    // handle (its left border at flow x=100): a node pair with no existing
-    // edge. Map that point to screen through the viewport transform.
     const source = container.querySelector('.react-flow__handle.source') as HTMLElement
     expect(source).toBeTruthy()
     const [sx, sy] = flowToScreen(container, 100, 220)
@@ -870,27 +809,18 @@ describe('A2uiPanel', () => {
   })
 
   it('reconnects a line endpoint by dragging its updater anchor onto another handle', async () => {
-    // A second edge stays put while the first is re-targeted, so the
-    // reconnect projection preserves the untouched edges.
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage({
-        nodes: [
-          { id: 'start', label: 'Start', role: 'start', position: { x: 0, y: 0 } },
-          { id: 'end', label: 'End', role: 'end', position: { x: 200, y: 100 } },
-          { id: 'mid', label: 'Mid', position: { x: 100, y: 200 } },
-        ],
-        edges: [
-          { id: 'e1', source: 'start', target: 'end', label: 'then' },
-          { id: 'e2', source: 'mid', target: 'end' },
-        ],
-      }),
-    })} />)
+    const { container } = renderCanvas(canvasPage({
+      nodes: [
+        { id: 'start', label: 'Start', role: 'start', position: { x: 0, y: 0 } },
+        { id: 'end', label: 'End', role: 'end', position: { x: 200, y: 100 } },
+        { id: 'mid', label: 'Mid', position: { x: 100, y: 200 } },
+      ],
+      edges: [
+        { id: 'e1', source: 'start', target: 'end', label: 'then' },
+        { id: 'e2', source: 'mid', target: 'end' },
+      ],
+    }))
 
-    // The source updater anchor hangs off the edge's source end; dragging it
-    // onto the end node's source handle re-targets the edge's source. The
-    // first anchor in the DOM belongs to the first seeded edge.
     const anchor = await waitFor(() => {
       const element = container.querySelector('.react-flow__edgeupdater-source') as HTMLElement | null
       if (element === null) throw new Error('edge updater anchor not rendered')
@@ -908,16 +838,9 @@ describe('A2uiPanel', () => {
   })
 
   it('renames an edge label on double-click and submits the new content', async () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    }, 'plain', { setDraft, submit })} />)
+    const onSubmit = vi.fn()
+    renderCanvas(canvasPage(), { onSubmit })
 
-    // The label chip materializes with the (asynchronous) edge render; it is
-    // the edge's only copy of the label text.
     const chip = await waitFor(() => {
       const element = screen.queryByText('then') as HTMLElement | null
       if (element === null) throw new Error('edge label chip not rendered')
@@ -930,36 +853,24 @@ describe('A2uiPanel', () => {
     fireEvent.change(input, { target: { value: '然后' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    // The chip shows the committed text instead of the input.
     expect(screen.getByText('然后')).toBeTruthy()
     expect(screen.queryByLabelText('连线文字')).toBeNull()
 
     fireEvent.submit(screen.getByText('Plan a flow').closest('form')!)
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: {
-        surfaceId: 'a2ui-1',
-        graph: {
-          nodes: [
-            { id: 'start', label: 'Start', position: { x: 0, y: 0 }, role: 'start' },
-            { id: 'end', label: 'End', position: { x: 200, y: 100 }, role: 'end' },
-          ],
-          edges: [{ id: 'e1', source: 'start', target: 'end', label: '然后' }],
-        },
+    expect(onSubmit).toHaveBeenCalledWith({
+      graph: {
+        nodes: [
+          { id: 'start', label: 'Start', position: { x: 0, y: 0 }, role: 'start' },
+          { id: 'end', label: 'End', position: { x: 200, y: 100 }, role: 'end' },
+        ],
+        edges: [{ id: 'e1', source: 'start', target: 'end', label: '然后' }],
       },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('starts an edge rename by double-clicking the line itself, not the chip', async () => {
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    const { container } = renderCanvas()
 
-    // The transparent hit path spans the whole stroke so any double-click on
-    // the line starts a rename; it is the only edge path with a transparent
-    // stroke (BaseEdge's own interaction path sets strokeOpacity instead).
     const hitPath = await waitFor(() => {
       const hit = [...container.querySelectorAll('.react-flow__edge path')]
         .find(path => path.getAttribute('stroke') === 'transparent') as SVGPathElement | undefined
@@ -973,11 +884,7 @@ describe('A2uiPanel', () => {
   })
 
   it('cancels an edge rename on Escape without touching the label', async () => {
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    renderCanvas()
 
     const chip = await waitFor(() => {
       const element = screen.queryByText('then') as HTMLElement | null
@@ -995,11 +902,7 @@ describe('A2uiPanel', () => {
   })
 
   it('drops a blank edge label on commit without touching the line', async () => {
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage(),
-    })} />)
+    renderCanvas()
 
     const chip = await waitFor(() => {
       const element = screen.queryByText('then') as HTMLElement | null
@@ -1016,37 +919,25 @@ describe('A2uiPanel', () => {
   })
 
   it('renders no label chip for an edge without a label', async () => {
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage({
-        edges: [
-          { id: 'e1', source: 'start', target: 'end', label: 'then' },
-          { id: 'e2', source: 'end', target: 'start' },
-        ],
-      }),
-    })} />)
+    const { container } = renderCanvas(canvasPage({
+      edges: [
+        { id: 'e1', source: 'start', target: 'end', label: 'then' },
+        { id: 'e2', source: 'end', target: 'start' },
+      ],
+    }))
 
     await waitFor(() => { expect(container.querySelectorAll('.react-flow__edge')).toHaveLength(2) })
-    // Only the labelled edge draws a chip inside the edge-label renderer; the
-    // unlabelled one renders nothing.
     await waitFor(() => { expect(container.querySelectorAll('.react-flow__edgelabel-renderer > div')).toHaveLength(1) })
   })
 
   it('labels an unlabelled line on double-click and keeps its sibling untouched', async () => {
-    const { container } = render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: canvasPage({
-        edges: [
-          { id: 'e1', source: 'start', target: 'end', label: 'then' },
-          { id: 'e2', source: 'end', target: 'start' },
-        ],
-      }),
-    })} />)
+    const { container } = renderCanvas(canvasPage({
+      edges: [
+        { id: 'e1', source: 'start', target: 'end', label: 'then' },
+        { id: 'e2', source: 'end', target: 'start' },
+      ],
+    }))
 
-    // The unlabelled edge still carries the transparent hit path, so a
-    // double-click anywhere on it starts a rename from an empty draft.
     const hitPath = await waitFor(() => {
       const edge = container.querySelector('.react-flow__edge[data-id="e2"]')
       const hit = edge === null
@@ -1063,80 +954,40 @@ describe('A2uiPanel', () => {
     fireEvent.change(input, { target: { value: '回流' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    // The renamed edge shows its new label; the labelled sibling is intact.
     expect(screen.getByText('回流')).toBeTruthy()
     expect(screen.getByText('then')).toBeTruthy()
   })
+})
 
-  it('hides a field while its visibleWhen expression is falsy', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [
-        { name: 'notify', label: 'Notify me', type: 'checkbox' },
-        { name: 'email', label: 'Email', type: 'text', visibleWhen: 'notify === true' },
-      ] }),
-    }, 'plain', { setDraft, submit })} />)
-    expect(screen.queryByLabelText('Email', { exact: false })).toBeNull()
-    fireEvent.click(screen.getByLabelText('Notify me', { exact: false }))
-    expect(screen.getByLabelText('Email', { exact: false })).toBeTruthy()
+describe('A2uiLauncher', () => {
+  function launcherProps(data: A2uiSurfaceChatData): A2uiLauncherProps {
+    return {
+      node: {
+        key: `12:a2ui-surface${data.surfaceId}#${data.seq}`,
+        kind: 'a2ui-surface',
+        id: `${data.surfaceId}#${data.seq}`,
+        target: 'chat',
+        anchorSeq: data.seq,
+        location: { kind: 'unresolved' },
+        visibility: 'visible',
+        data,
+      },
+      inputActions: { setDraft: vi.fn(), submit: vi.fn() },
+      t,
+    } as unknown as A2uiLauncherProps
+  }
+
+  it('renders the title, description, and an open-in-window button', () => {
+    render(<A2uiLauncher {...launcherProps({ seq: 2, surfaceId: 'a2ui-1', page: page() })} />)
+    expect(screen.getByText('Collect details')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '在窗口打开' })).toBeTruthy()
   })
 
-  it('shows a computed field derived from sibling values', () => {
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [
-        { name: 'first', label: 'First', type: 'text' },
-        { name: 'last', label: 'Last', type: 'text' },
-        { name: 'full', label: 'Full', type: 'text', compute: 'first + " " + last' },
-      ] }),
-    }, 'plain')} />)
-    fireEvent.change(screen.getByLabelText('First', { exact: false }), { target: { value: 'Ada' } })
-    fireEvent.change(screen.getByLabelText('Last', { exact: false }), { target: { value: 'Lovelace' } })
-    expect(screen.getByText('Ada Lovelace')).toBeTruthy()
-  })
-
-  it('blocks submission when a validateWhen expression is falsy, showing validateMessage', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [
-        { name: 'age', label: 'Age', type: 'number', validateWhen: 'age >= 18', validateMessage: 'You must be 18 or older' },
-      ] }),
-    }, 'plain', { setDraft, submit })} />)
-    fireEvent.change(screen.getByLabelText('Age', { exact: false }), { target: { value: '12' } })
-    fireEvent.click(screen.getByRole('button', { name: '提交' }))
-    expect(screen.getByRole('alert').textContent).toBe('You must be 18 or older')
-    expect(submit).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByLabelText('Age', { exact: false }), { target: { value: '30' } })
-    fireEvent.click(screen.getByRole('button', { name: '提交' }))
-    expect(submit).toHaveBeenCalledTimes(1)
-  })
-
-  it('submits computed values and excludes hidden fields', () => {
-    const setDraft = vi.fn()
-    const submit = vi.fn()
-    render(<A2uiPanel {...panelProps({
-      seq: 2,
-      surfaceId: 'a2ui-1',
-      page: page({ fields: [
-        { name: 'enabled', label: 'Enabled', type: 'checkbox' },
-        { name: 'label', label: 'Label', type: 'text', visibleWhen: 'enabled === true' },
-        { name: 'double', label: 'Double', type: 'text', compute: 'label.toUpperCase()' },
-      ] }),
-    }, 'plain', { setDraft, submit })} />)
-    fireEvent.click(screen.getByLabelText('Enabled', { exact: false }))
-    fireEvent.change(screen.getByLabelText('Label', { exact: false }), { target: { value: 'abc' } })
-    fireEvent.click(screen.getByRole('button', { name: '提交' }))
-    expect(setDraft).toHaveBeenCalledWith(JSON.stringify({
-      a2uiSubmit: { surfaceId: 'a2ui-1', values: { enabled: true, label: 'abc', double: 'ABC' } },
-    }))
-    expect(submit).toHaveBeenCalledTimes(1)
+  it('reports a blocked popup when the browser refuses the window', () => {
+    window.open = () => null
+    render(<A2uiLauncher {...launcherProps({ seq: 2, surfaceId: 'a2ui-1', page: page() })} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    expect(screen.getByRole('alert').textContent).toContain('拦截')
   })
 })
 
@@ -1152,7 +1003,7 @@ async function runtimeSlotRoot(ctx: Context): Promise<void> {
 }
 
 describe('plugin lifecycle', () => {
-  it('registers the Definition and keyed renderer with its fiber', async () => {
+  it('registers the Definition and the launcher with its fiber', async () => {
     const ctx = new Context()
     await ctx.plugin(SlotRegistry).await()
     new UiConversation(ctx, { binding: () => undefined } as never)
@@ -1163,7 +1014,9 @@ describe('plugin lifecycle', () => {
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(ctx.uiConversation.events.entries().map(entry => entry.kind)).toEqual(['a2ui-surface'])
-    expect(ctx.slots.entries('conversation.chat.node')).toHaveLength(1)
+    const entries = ctx.slots.entries('conversation.chat.node')
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.component).toBe(A2uiLauncher)
     await fiber.dispose()
     expect(ctx.slots.entries('conversation.chat.node')).toEqual([])
   })

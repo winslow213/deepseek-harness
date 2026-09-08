@@ -150,6 +150,11 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: src('./index.html'),
+        // The dedicated A2UI popup window: a minimal React surface the
+        // launcher opens and hands one page to. Its bootstrap is the module
+        // tag in a2ui.html; the page is leaner than the full shell (no
+        // module table, no host connection).
+        a2ui: src('./a2ui.html'),
         // Standalone entry, not an index.html script tag: Vite folds every
         // module tag of one page into a single synthetic entry, and only a
         // separate input keeps the shared page chunks bootstrap-free.

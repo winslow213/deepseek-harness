@@ -77,6 +77,12 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../web/tool-a2ui-surface"
+    },
+    {
+      "path": "../../web/tool-a2ui-store"
     }
   ]
 }
