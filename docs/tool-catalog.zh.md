@@ -7,7 +7,7 @@
 
 已发布插件向 `ctx.tools` 提供的所有面向模型的工具：模型通过系统提示词组装获得的 `name`、`description` 和 JSON Schema `parameters`。本目录是[子系统页面](subsystems/core.zh.md)（类型及每页生成的 `cordis-surface` 接线区域）的补充；本页列出的是向 agent（智能体）提供的*工具*。
 
-英文源文件由系统**生成**，并通过 `pnpm run verify-tool-catalog`（`doc-sync`（文档同步门禁）的一部分）验证新鲜度；本中文文件作为经评审对侧通过双语配对维护。与 Cordis 目录（纯源码 AST 处理）不同，英文生成器会在真实上下文中**启动**每个工具插件并读取 `ctx.tools.schemas()`，因为工具 schema 无法通过静态分析完全确定，例如运行时展开的枚举、拼接的描述、由配置决定的名称以及使用原始 JSON Schema 的 MCP 工具。完整性守卫会 glob 匹配 `packages/*/tool-*`；如果生成器的启动 manifest（元数据清单）遗漏任何包，检查就会失败，因此新工具不会在无人察觉的情况下缺少文档。参见[工具 schema 目录 Agent Note](../.agents/notes/implemented/process/2026-07-02-tool-schema-catalog.zh.md)。
+英文源文件由系统**生成**，并通过 `pnpm run verify-tool-catalog`（`doc-sync`（文档同步门禁）的一部分）验证新鲜度；本中文文件作为经评审对侧通过双语配对维护。与 Cordis 目录（纯源码 AST 处理）不同，英文生成器会在真实上下文中**启动**每个工具插件并读取 `ctx.tools.schemas()`，因为工具 schema 无法通过静态分析完全确定，例如运行时展开的枚举、拼接的描述、由配置决定的名称以及使用原始 JSON Schema 的 MCP 工具。完整性守卫会 glob 匹配 `packages/*/tool-*`；如果生成器的启动 manifest（元数据清单）遗漏任何包，检查就会失败，因此新工具不会在无人察觉的情况下缺少文档。
 
 范围：`packages/*/tool-*` 下已发布的产品工具，每个工具均使用其**默认**配置启动；但如果某个 Config 字段是**必填项**且没有默认值，生成器就必须作出选择，对应包的说明会记录本页展示的是哪个分支。注册的工具**名称**可以是加载时配置，例如 `tool-subagent` 的 `toolName`，因此部署可能以不同名称或额外名称提供某个包；如果存在随产品发布的别名，对应包的说明会予以记录。`examples/` 中的演示工具（例如 `echo`）不在范围内，这与 Cordis 目录仅涵盖包的范围一致。
 
@@ -20,6 +20,7 @@
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-tool-a2ui-surface` | `a2ui_surface` | `ctx.tools`、`a calling Agent (exec.agent writes the a2ui/surface record to its session)` | `tool/call`、`a2ui/surface (durable session record)`、`tool/result` | - | a2ui_surface 在 Web UI 中原生渲染模型生成的页面 JSON，并将其记录到持久日志；用户提交以携带 surfaceId 的普通 user/message 返回。`allowUpdate` 必填且无默认值——本目录展示随产品发布的取值（`false`，仅开页）；允许模型替换 surface 的部署应设为 `true`。 |
+| `@deepseek-ai/dsh-tool-a2ui-store` | `a2ui_export` | `ctx.tools`、`ctx.a2uiStore (self-provided)` | `tool/call`、`tool/result`、`a JSON tool file under the harness home` | - | a2ui_export 将模型生成的 A2UI 页面（与 a2ui_surface 渲染的形态相同，包括字段逻辑和 actions）在 <harness home>/a2ui-tools/ 下每个工具保存为一个 JSON 文件，并使用共享 A2UI 词汇进行规范化，使保存的文件与渲染器信任的内容一致。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`、`ctx.codeRuntime (execution time)`、`ctx.systemPrompt` | `tool/call`、`one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`、`tool/result` | - | 在 `mode: ptc`／`mode: both` 下，它由工具注册表所有，作为可过滤能力层之外的保留传输机制（参见 PTC mode Agent Note）。在 `ptc` 下，它是注册表对协议格式（wire format）的唯一贡献；其他可见能力在使用已加载运行时语言生成的 SDK 章节中声明。程序通过 binding 调用这些能力，调用按照原生并发约定调度：启动顺序和策略遵循提交顺序，并发安全的函数体最多重叠执行 `maxParallelSubCalls` 个。调用会重新进入完整且受守卫保护的工具流水线，并将每个嵌套执行关联到此外层结果。 |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`、`ctx.systemPrompt`、`ctx.userQuestions (execution time, opportunistic)` | `tool/call`、`plan/mode inactive on an approved review`、`tool/result` | - | 规划未激活时，exit_plan_mode 仍保留在面向模型的 schema 中，这样状态转换不会在规划策略变更之外额外造成工具目录变动。其执行路径会拒绝规划模式之外的调用；在规划模式下，它通过用户交互 seam 提交计划（批准／根据反馈继续规划），批准后会在步骤边界记录规划模式已停用。 |
@@ -52,7 +53,7 @@
 
 ### \`a2ui_surface\`
 
-在 Web UI 中渲染一个交互式页面。你提供的页面 JSON 由浏览器原生绘制，用户与它交互并提交，你随后会收到一条携带同一 \`surfaceId\` 以及所收集载荷的消息。选择最适合任务的页面 \`kind\`：\`"form"\` 渲染一个可填写表单来收集结构化输入——字段只保留你确实需要的那些，为每个字段提供简短唯一的 \`name\` 和人类可读的 \`label\`，且只为必填输入设置 \`required: true\`；对于 \`select\` 字段请提供 \`options\`（label/value 对）；自由文本优先用 \`text\`，更长的输入用 \`textarea\`，数值用 \`number\`，布尔值用 \`checkbox\`。\`"canvas"\` 渲染一个用户可排布并连线的可拖拽节点图——用 \`nodes\`（稳定的 \`id\`、\`label\`、可选 \`detail\` 和初始 \`position\`）以及 \`edges\`（每条含稳定的 \`id\`、\`source\` 节点 id 和 \`target\` 节点 id）作为种子；用户可在提交前移动节点、新增或移除连线。可选的 \`instruction\` 会告诉用户提交后会发生什么。
+在 Web UI 中渲染一个交互式页面。你提供的页面 JSON 由浏览器原生绘制，用户与它交互并提交，你随后会收到一条携带同一 \`surfaceId\` 以及所收集载荷的消息。选择最适合任务的页面 \`kind\`：\`"form"\` 渲染一个可填写表单来收集结构化输入——字段只保留你确实需要的那些，为每个字段提供简短唯一的 \`name\` 和人类可读的 \`label\`，且只为必填输入设置 \`required: true\`；对于 \`select\` 字段请提供 \`options\`（label/value 对）；自由文本优先用 \`text\`，更长的输入用 \`textarea\`，数值用 \`number\`，布尔值用 \`checkbox\`。\`"canvas"\` 渲染一个用户可排布并连线的可拖拽节点图——用 \`nodes\`（稳定的 \`id\`、\`label\`、可选 \`detail\` 和初始 \`position\`）以及 \`edges\`（每条含稳定的 \`id\`、\`source\` 节点 id 和 \`target\` 节点 id）作为种子；用户可在提交前移动节点、新增或移除连线。可选的 \`instruction\` 会告诉用户提交后会发生什么。字段可以携带受限且无副作用的表达式用于实时逻辑：`visibleWhen` 在兄弟字段表达式为假时隐藏该字段；`validateWhen`（配合 `validateMessage`）在其表达式为假时拒绝提交；`compute` 使字段只读并显示派生值。表达式通过裸 `name` 引用兄弟字段，支持字符串／数字／布尔值／null 字面量、`=== !== == != < <= > >= && || ! + - * / %`、圆括号，以及 `.length`／`.trim()`／`.includes(x)`／`.startsWith(x)`／`.endsWith(x)`。要暴露操作，请添加 `actions`：每个操作包含一个 `id`、一个 `label` 和一种 `execution` 模式。`execution: "model"`（默认）指定一个 `tool` 和一条 `instruction`；当用户点击时，你会收到一个携带所收集值的 action 触发器，并应使用这些值调用该工具。`execution: "local"` 在浏览器中运行，无需模型往返：给它一个 `result` 表达式（作用于所收集的值，语法与字段逻辑相同），点击后展示给用户。对确定性、无副作用的变换使用 `local`；仅当操作需要推理或真正的工具调用时才使用 `model`。
 
 ```json
 {
@@ -124,6 +125,26 @@
               "help": {
                 "type": "string",
                 "description": "Short help text under the control."
+              },
+              "visibleWhen": {
+                "type": "string",
+                "description": "Restricted expression over sibling field names; the field is hidden while it is falsy."
+              },
+              "validateWhen": {
+                "type": "string",
+                "description": "Restricted expression over sibling field names; when set it must be truthy at submit."
+              },
+              "validateMessage": {
+                "type": "string",
+                "description": "Failure message shown when validateWhen is falsy at submit."
+              },
+              "compute": {
+                "type": "string",
+                "description": "Restricted expression over sibling field names; the field becomes read-only and displays its result."
+              },
+              "optionsFrom": {
+                "type": "string",
+                "description": "Id of a `script` action whose completion populates this `select` field with options (array of `{label,value}` or `{items:[...]}`); mutually exclusive with static `options`."
               },
               "options": {
                 "type": "array",
@@ -238,6 +259,89 @@
               "target"
             ]
           }
+        },
+        "actions": {
+          "type": "array",
+          "description": "Declarative actions rendered as buttons beside the submit control; each runs locally (`local`) or triggers a model tool call (`model`).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable identity the action trigger payload carries."
+              },
+              "label": {
+                "type": "string",
+                "description": "Button label."
+              },
+              "execution": {
+                "type": "string",
+                "description": "Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`, `command` runs `command` on the harness host, `script` runs `program` on the host controlled runtime.",
+                "enum": [
+                  "local",
+                  "model",
+                  "command",
+                  "script"
+                ]
+              },
+              "tool": {
+                "type": "string",
+                "description": "Tool name the model invokes when the action is triggered (required for `model` mode)."
+              },
+              "instruction": {
+                "type": "string",
+                "description": "What invoking the tool accomplishes; the model uses this to form the call (required for `model` mode)."
+              },
+              "result": {
+                "type": "string",
+                "description": "Expression over the collected values shown after a `local` action runs."
+              },
+              "command": {
+                "type": "string",
+                "description": "Shell command template with `{fieldName}` placeholders filled from the collected values (required for `command` mode)."
+              },
+              "timeoutMs": {
+                "type": "number",
+                "description": "Run bound in milliseconds for a `command` action; absent uses the host shell default and cap."
+              },
+              "program": {
+                "type": "string",
+                "description": "Async program body run on the host controlled runtime when the action is triggered (required for `script` mode). The body calls granted `a2ui.*` bindings and returns a JSON value."
+              },
+              "binds": {
+                "type": "array",
+                "description": "Granted `a2ui.*` binding member names for a `script` action (`fetch`, `text`).",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "write": {
+                "type": "array",
+                "description": "Write-back entries applied after a `script`/`command` action completes: each names a target `field` and a dotted selector `from` into the outcome JSON (`value` or `value.<path>`).",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "from"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ]
+          }
         }
       },
       "required": [
@@ -259,6 +363,36 @@ Source: [`packages/web/tool-a2ui-surface/src/index.ts`](../packages/web/tool-a2u
 
 a2ui_surface 在 Web UI 中原生渲染模型生成的页面 JSON，并将其记录到持久日志；用户提交以携带 surfaceId 的普通 user/message 返回。`allowUpdate` 必填且无默认值——本目录展示随产品发布的取值（`false`，仅开页）；允许模型替换 surface 的部署应设为 `true`。
 
+<a id="deepseek-aidsh-tool-a2ui-store"></a>
+
+## `@deepseek-ai/dsh-tool-a2ui-store`
+
+### `a2ui_export`
+
+将你创作的 A2UI 页面保存为本地工具库中的可复用工具文件。该页面是与 `a2ui_surface` 工具渲染相同的声明式 JSON——`kind`、`title`，以及表单 `fields`（含 `visibleWhen`/`validateWhen`/`compute` 逻辑）或画布 `nodes`/`edges`，外加可选的 `actions`。保存后，该工具会列在侧边栏中，任何成员都可以重新打开而无需重新创作。请为该工具提供一个简短、稳定的 `name`，它会显示在该列表中。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Stable tool name for the saved file (letters, digits, dot, dash, underscore; no path separators)."
+    },
+    "page": {
+      "description": "The declarative A2UI page to save: the same shape as `a2ui_surface`'s `page` argument."
+    }
+  },
+  "required": [
+    "name",
+    "page"
+  ]
+}
+```
+
+来源：[`packages/web/tool-a2ui-store/src/index.ts`](../packages/web/tool-a2ui-store/src/index.ts)
+
+a2ui_export 将模型生成的 A2UI 页面（与 a2ui_surface 渲染的形态相同，包括字段逻辑和 actions）在 <harness home>/a2ui-tools/ 下每个工具保存为一个 JSON 文件，并使用共享 A2UI 词汇进行规范化，使保存的文件与渲染器信任的内容一致。
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 

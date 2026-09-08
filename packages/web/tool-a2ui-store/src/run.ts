@@ -41,11 +41,24 @@ export interface A2uiRun {
    * @throws when the shell service is absent or the template is invalid.
    */
   start(command: string, fields: A2uiRunFieldValues, timeoutMs?: number): A2uiRunHandle
-  /** The handle for one run id; throws when unknown. */
+  /**
+   * The handle for one run id.
+   * @param runId - the opaque run identity minted by the capability.
+   * @returns the live or settled run handle.
+   * @throws when the run id is unknown.
+   */
   get(runId: string): A2uiRunHandle
-  /** Read the output produced since the previous read (consuming). */
+  /**
+   * Read the output produced since the previous read, consuming it.
+   * @param runId - the opaque run identity minted by the capability.
+   * @returns the monotonic chunk sequence, the new output, and live state.
+   */
   read(runId: string): { seq: number; output: string; running: boolean; exitCode: number | null; lossy: boolean }
-  /** Kill the run's process group; false when it had already finished. */
+  /**
+   * Kill the run's process group.
+   * @param runId - the opaque run identity minted by the capability.
+   * @returns false when the run had already finished, true otherwise.
+   */
   stop(runId: string): boolean
 }
 

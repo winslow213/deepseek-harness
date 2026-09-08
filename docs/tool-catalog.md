@@ -5,7 +5,7 @@
 
 Every model-facing tool a shipped plugin contributes to `ctx.tools`: the `name`, `description`, and JSON-Schema `parameters` the model receives via the system-prompt assembly. It complements the [subsystem pages](subsystems/core.md) (the types plus each page's generated Cordis API region) — this page is the *tools* the agent is offered.
 
-This file is GENERATED and verified fresh by `pnpm run verify-tool-catalog` (part of `doc-sync`) — do not edit it by hand. Unlike the cordis catalog (a pure source-AST pass), this generator BOOTS each tool plugin on a real context and reads `ctx.tools.schemas()`, because a tool schema is not statically knowable (runtime-spread enums, concatenated descriptions, config-driven names, raw-JSON-Schema MCP tools). A completeness guard globs `packages/*/tool-*` and fails if any package is missing from the generator's boot manifest, so a new tool cannot be silently undocumented. See [the tool-schema-catalog Agent Note](../.agents/notes/implemented/process/2026-07-02-tool-schema-catalog.md).
+This file is GENERATED and verified fresh by `pnpm run verify-tool-catalog` (part of `doc-sync`) — do not edit it by hand. Unlike the cordis catalog (a pure source-AST pass), this generator BOOTS each tool plugin on a real context and reads `ctx.tools.schemas()`, because a tool schema is not statically knowable (runtime-spread enums, concatenated descriptions, config-driven names, raw-JSON-Schema MCP tools). A completeness guard globs `packages/*/tool-*` and fails if any package is missing from the generator's boot manifest, so a new tool cannot be silently undocumented.
 
 Scope: shipped product tools under `packages/*/tool-*`, each booted with its DEFAULT config, except where a Config field is REQUIRED with no default — there the generator must choose, and the per-package note records which branch this page shows. The registered tool NAME can be a load-time config (e.g. `tool-subagent`'s `toolName`), so a deployment may expose a package under a different or additional name — a per-package note records those shipped aliases where they exist. The `examples/` demo tools (e.g. `echo`) are excluded, matching the cordis catalog's packages-only scope.
 
@@ -49,7 +49,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `a2ui_surface`
 
-Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values. Fields may carry restricted, side-effect-free expressions for live logic: `visibleWhen` hides the field while a sibling-field expression is falsy, `validateWhen` (with `validateMessage`) refuses submit while its expression is falsy, and `compute` makes the field read-only and displays a derived value. Expressions reference sibling fields by bare `name` and support string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - * / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/`.startsWith(x)`/`.endsWith(x)`. To expose real operations, add `actions`: each is an `id`, a `label`, a `tool` name, and an `instruction`; when the user clicks it you receive an action trigger with the collected values and should invoke that tool with them.
+Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values. Fields may carry restricted, side-effect-free expressions for live logic: `visibleWhen` hides the field while a sibling-field expression is falsy, `validateWhen` (with `validateMessage`) refuses submit while its expression is falsy, and `compute` makes the field read-only and displays a derived value. Expressions reference sibling fields by bare `name` and support string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - * / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/`.startsWith(x)`/`.endsWith(x)`. To expose operations, add `actions`: each is an `id`, a `label`, and an `execution` mode. `execution: "model"` (the default) names a `tool` and an `instruction`, and when the user clicks it you receive an action trigger with the collected values and should invoke that tool with them. `execution: "local"` runs in the browser with no model round-trip: give it a `result` expression (over the collected values, same grammar as field logic) shown to the user after the click. Use `local` for deterministic, side-effect-free transformations and `model` only when the action needs reasoning or a real tool call.
 
 ```json
 {
@@ -137,6 +137,10 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
               "compute": {
                 "type": "string",
                 "description": "Restricted expression over sibling field names; the field becomes read-only and displays its result."
+              },
+              "optionsFrom": {
+                "type": "string",
+                "description": "Id of a `script` action whose completion populates this `select` field with options (array of `{label,value}` or `{items:[...]}`); mutually exclusive with static `options`."
               },
               "options": {
                 "type": "array",
@@ -254,7 +258,7 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
         },
         "actions": {
           "type": "array",
-          "description": "Declarative actions rendered as buttons beside the submit control; each triggers a named model tool call.",
+          "description": "Declarative actions rendered as buttons beside the submit control; each runs locally (`local`) or triggers a model tool call (`model`).",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -267,20 +271,71 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
                 "type": "string",
                 "description": "Button label."
               },
+              "execution": {
+                "type": "string",
+                "description": "Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`, `command` runs `command` on the harness host, `script` runs `program` on the host controlled runtime.",
+                "enum": [
+                  "local",
+                  "model",
+                  "command",
+                  "script"
+                ]
+              },
               "tool": {
                 "type": "string",
-                "description": "Tool name the model should invoke when the action is triggered."
+                "description": "Tool name the model invokes when the action is triggered (required for `model` mode)."
               },
               "instruction": {
                 "type": "string",
-                "description": "What invoking the tool accomplishes; the model uses this to form the call."
+                "description": "What invoking the tool accomplishes; the model uses this to form the call (required for `model` mode)."
+              },
+              "result": {
+                "type": "string",
+                "description": "Expression over the collected values shown after a `local` action runs."
+              },
+              "command": {
+                "type": "string",
+                "description": "Shell command template with `{fieldName}` placeholders filled from the collected values (required for `command` mode)."
+              },
+              "timeoutMs": {
+                "type": "number",
+                "description": "Run bound in milliseconds for a `command` action; absent uses the host shell default and cap."
+              },
+              "program": {
+                "type": "string",
+                "description": "Async program body run on the host controlled runtime when the action is triggered (required for `script` mode). The body calls granted `a2ui.*` bindings and returns a JSON value."
+              },
+              "binds": {
+                "type": "array",
+                "description": "Granted `a2ui.*` binding member names for a `script` action (`fetch`, `text`).",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "write": {
+                "type": "array",
+                "description": "Write-back entries applied after a `script`/`command` action completes: each names a target `field` and a dotted selector `from` into the outcome JSON (`value` or `value.<path>`).",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "from"
+                  ]
+                }
               }
             },
             "required": [
               "id",
-              "label",
-              "tool",
-              "instruction"
+              "label"
             ]
           }
         }

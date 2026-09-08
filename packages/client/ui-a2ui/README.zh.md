@@ -75,10 +75,8 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | node 半边：惰性宿主插件（功能完全在浏览器侧） |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器插件入口：Definition 注册、字典、keyed renderer |
 | [`src/client/a2ui-definition.ts`](src/client/a2ui-definition.ts) | `a2ui-surface` Conversation Definition 与 `ChatNodeDataMap` 载荷 |
-| [`src/client/A2uiPanel.tsx`](src/client/A2uiPanel.tsx) | 表单与 canvas 渲染器之间的类型分流器 |
-| [`src/client/a2ui-chrome.tsx`](src/client/a2ui-chrome.tsx) | 共享页面 chrome、忙碌/校验错误与提交序列化器 |
-| [`src/client/A2uiFormPanel.tsx`](src/client/A2uiFormPanel.tsx) | 表单渲染器：按类型的字段控件、必填校验、载荷转换 |
-| [`src/client/A2uiCanvasPanel.tsx`](src/client/A2uiCanvasPanel.tsx) | canvas 渲染器：React Flow 节点、可弯折边、连接/重连、提交投影 |
+| [`src/client/launcher.tsx`](src/client/launcher.tsx) | A2UI 弹出启动器：打开 `a2ui.html` 弹出窗口、转发提交／动作消息，并通过 remote 命名空间桥接命令／脚本运行 |
+| [`src/client/A2uiPanel.module.css`](src/client/A2uiPanel.module.css) | 弹出面板样式 |
 | [`src/client/locales.ts`](src/client/locales.ts) | `a2ui` 中英文词典 |
 
 </details>

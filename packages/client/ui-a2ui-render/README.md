@@ -61,3 +61,13 @@ None; this package neither assembles nor sends a provider request.
 ## Known Limitations and Deferred Work
 
 - The renderer is a component library, not a plugin; mounting and locale registration stay with `ui-a2ui`.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

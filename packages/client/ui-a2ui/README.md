@@ -75,10 +75,8 @@ The package is one deterministic projection plus one keyed renderer, registered 
 | [`src/index.ts`](src/index.ts) | Node half: inert host plugin (the feature is entirely browser-side) |
 | [`src/client/index.ts`](src/client/index.ts) | Browser plugin entry: Definition registration, dictionaries, keyed renderer |
 | [`src/client/a2ui-definition.ts`](src/client/a2ui-definition.ts) | The `a2ui-surface` Conversation Definition and `ChatNodeDataMap` payload |
-| [`src/client/A2uiPanel.tsx`](src/client/A2uiPanel.tsx) | Kind dispatcher between the form and canvas renderers |
-| [`src/client/a2ui-chrome.tsx`](src/client/a2ui-chrome.tsx) | Shared page chrome, busy/validation error, and the submission serializer |
-| [`src/client/A2uiFormPanel.tsx`](src/client/A2uiFormPanel.tsx) | Form renderer: per-kind field controls, required validation, payload coercion |
-| [`src/client/A2uiCanvasPanel.tsx`](src/client/A2uiCanvasPanel.tsx) | Canvas renderer: React Flow nodes, bendable edges, connect/reconnect, submit projection |
+| [`src/client/launcher.tsx`](src/client/launcher.tsx) | A2UI popup launcher: opens the `a2ui.html` popup, forwards submit/action messages, and bridges command/script runs over the remote namespace |
+| [`src/client/A2uiPanel.module.css`](src/client/A2uiPanel.module.css) | Popup panel styles |
 | [`src/client/locales.ts`](src/client/locales.ts) | The `a2ui` zh/en dictionaries |
 
 </details>

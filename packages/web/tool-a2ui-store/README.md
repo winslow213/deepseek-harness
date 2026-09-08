@@ -67,7 +67,33 @@ The store is a thin, dependency-light filesystem layer. `store.ts` resolves the 
 <a id="model-experience"></a>
 ## Model Experience
 
-The model sees `a2ui_export` with a `name` (a stable file stem) and a `page` (the same JSON it passes to `a2ui_surface`). Success renders ``Saved A2UI tool "<name>" to the local tool store.``; an invalid page or a non-agent caller fails with the canonicalization error. The page schema is described by the shared [A2UI page vocabulary](../../../docs/tool-catalog.md#deepseek-aidsh-tool-a2ui-surface).
+### Tool schema
+
+#### What the model sees
+
+The model sees the `a2ui_export` name, its static description, and the exact JSON schema recorded in the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-a2ui-store). The description tells it to save the page it authored as a reusable tool file under the local tool store, with a short stable `name` for the saved file and a `page` in the same shape as `a2ui_surface`'s page argument.
+
+#### Token effect
+
+Fixed description-and-schema cost on every request where the tool is visible to the agent. The `name` string and the `page` object are lightweight compared with a field-rich page tool, so this definition is cheaper than `a2ui_surface`'s schema.
+
+#### KV Cache effect
+
+Prefix-stable while the registered definition and its visibility are unchanged; plugin lifecycle or a scoped tool restriction may invalidate reuse from the first changed schema token.
+
+### Tool call and result
+
+#### What the model sees
+
+The tool call keeps the authored page JSON in history. Success renders exactly `Saved A2UI tool "<name>" to the local tool store.`; a call without an owning agent session fails with `a2ui_export requires an owning agent session`; an invalid page fails with the canonicalization error naming the violation.
+
+#### Token effect
+
+Authored page arguments stay in retained history until compaction and scale with the page the model wrote; the rendered result is short fixed text plus the saved name.
+
+#### KV Cache effect
+
+Append-only; the call and result follow the reusable request prefix and do not invalidate existing KV-cache entries.
 
 ## Known Limitations and Deferred Work
 

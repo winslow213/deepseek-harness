@@ -68,12 +68,15 @@ The plugin registers one `sidebar.footer.action` list entry (`id: a2ui-store`) w
 <a id="model-experience"></a>
 ## Model Experience
 
-The model sees no change from this plugin. Saving a page remains the `a2ui_export` tool's job; re-opening a saved tool is a human action in the sidebar that injects the same `a2ui/surface` record a model-authored page would produce, so the model observes the subsequent submission identically.
+None, as the package is a browser-side UI plugin layer whose sidebar panel lists and removes saved A2UI tools without changing model context.
 
------
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
+
+## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
-## Known Limitations and Deferred Work
 
 - The popover lists tools by their saved file name; there is no rename or preview beyond the page title.
 - Removing a tool deletes the saved file immediately; there is no confirmation.
@@ -82,6 +85,6 @@ The model sees no change from this plugin. Saving a page remains the `a2ui_expor
 -----
 
 <a id="dev-note"></a>
-## Dev Note
+### Dev Note
 
 The panel is entirely browser-side; its host twin is `dsh-tool-a2ui-store`. Keeping the Remote's wire types in `dsh-tool-a2ui-store/types` (a client-safe, value-free module) is what lets `dsh-api-remotes` re-export them for the browser without dragging host-only code across the boundary.

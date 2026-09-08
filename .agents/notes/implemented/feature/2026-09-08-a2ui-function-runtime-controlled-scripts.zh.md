@@ -17,6 +17,7 @@ A2UI 变成可执行组件运行时，分三层正交设计。后续在此之上
 - **受控 `script` 执行**（`tool-a2ui-store/script.ts`）。新增 `execution: "script"` action，携带 async `program` 主体与 `binds` 授权列表。程序在组合出的 code runtime（`ctx.codeRuntime`，web profile 中的 worker-thread 后端）上运行——绝不在浏览器、绝不在宿主进程——并受运行时墙钟/输出上限与 abort 语义约束。程序只能调用被授权的 `a2ui.*` 成员，每个成员都是现有能力之后的宿主助手：
   - `fetch` —— 通过 harness web 服务（`ctx.web.fetch`，base bundle 的 http provider）发起一次 `http(s)://` 请求；任何调用前先校验 URL scheme，JSON 摘要（url、status、content 类型/文本、truncated）穿过 code-runtime 边界。
   - `text` —— 确定性纯重塑助手（转大写）。
+
   完成值与日志穿过运行时 lossless-JSON 边界成为 action 结果，在弹窗中显示。
 
 wire 协议（`a2ui-wire.ts`）与 launcher bridge 承载新类型；Remote 命名空间 `a2uiRun` 增加 `runScript`；`ctx.a2uiRunScript` 懒解析 code runtime 与 web 服务，使 store 插件在缺任一的组合中也能挂载。

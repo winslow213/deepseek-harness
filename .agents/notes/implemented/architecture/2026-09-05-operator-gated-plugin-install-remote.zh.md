@@ -6,13 +6,13 @@
 
 ## 问题
 
-[`dsh plugin install`](../../../../apps/cli/src/plugin.ts) 只能在终端里安装插件：它把源码目录复制进 profile，或运行 `pnpm add`，然后写入运行中实例要加载的持久化 profile 文件。Web GUI 通过只读的 [`pluginInventory` 投影](2026-08-29-plugin-inventory-agent-preset-scopes.zh.md) 读同一个 profile，但 web 平面没有任何安装入口——GUI 操作者想装插件只能退出应用去开终端。补上这个缺口意味着在运行实例上暴露一个安装调用，而这个调用写的就是实例自己组合的 profile：复制目录、编辑 `cordis.patch.yml`、运行 `pnpm add`、重写 `dsh.profile.bundles`。一个有这种能力的命名空间绝不能默认可达，而且它的失败必须说清操作者能修什么。
+[`dsh plugin install`](../../../../apps/cli/src/plugin.ts) 只能在终端里安装插件：它把源码目录复制进 profile，或运行 `pnpm add`，然后写入运行中实例要加载的持久化 profile 文件。Web GUI 通过只读的 [`pluginInventory` 投影](../../archived/architecture/2026-08-29-plugin-inventory-agent-preset-scopes.md) 读同一个 profile，但 web 平面没有任何安装入口——GUI 操作者想装插件只能退出应用去开终端。补上这个缺口意味着在运行实例上暴露一个安装调用，而这个调用写的就是实例自己组合的 profile：复制目录、编辑 `cordis.patch.yml`、运行 `pnpm add`、重写 `dsh.profile.bundles`。一个有这种能力的命名空间绝不能默认可达，而且它的失败必须说清操作者能修什么。
 
 ## 决定
 
 **新宿主包 `@deepseek-ai/dsh-host-plugin-install` 在 `pluginInstall` 命名空间上暴露一个 Remote 方法。** `PluginInstallGateway extends TypertRemoteService`，注入 `loader`，通过 `('installPlugin')` 回答 `installPlugin(spec)`——这是 GUI 标签页在 Phase 4 要注册的[远程方法表面](../../../../packages/api/remotes/README.zh.md)。命名空间挂进 web-app 组合，并经 api remotes 的 `$mount` 列表到达客户端，与 `pluginInventory` 的传输方式一致。它不注册任何模型侧内容：安装调用是操作者触发的 profile 变更，不是 agent 循环调用的能力。
 
-**操作者门控在组合行上，服务自己再核验一次。** web-app 的 `cordis.patch.yml` 行仅在 `DSH_PLUGIN_INSTALL=true` 时挂载该包——一个 `disabled: !!js` 表达式，由 [Loader 自己的 disabled 插值](2026-08-11-loader-entry-disabled-interpolation.zh.md) 求值，因此默认部署根本不会加载这段代码。服务构造器在 `enabled` 配置为 false 时独立抛错，所以没有开关就挂载该包的嵌入方会在加载时大声失败，而不是默默提供命名空间。两层是因为它们门的对象不同：组合决定包里有没有这个包；构造器断言部署确实想暴露它。
+**操作者门控在组合行上，服务自己再核验一次。** web-app 的 `cordis.patch.yml` 行仅在 `DSH_PLUGIN_INSTALL=true` 时挂载该包——一个 `disabled: !!js` 表达式，由 [Loader 自己的 disabled 插值](../../archived/architecture/2026-08-11-loader-entry-disabled-interpolation.md) 求值，因此默认部署根本不会加载这段代码。服务构造器在 `enabled` 配置为 false 时独立抛错，所以没有开关就挂载该包的嵌入方会在加载时大声失败，而不是默默提供命名空间。两层是因为它们门的对象不同：组合决定包里有没有这个包；构造器断言部署确实想暴露它。
 
 **目标 profile 是运行实例自己的 profile，用两种方式定位。** 显式 `profileDir` 配置覆盖优先，供测试和面向外部目录的嵌入方使用。否则服务自定位：bootstrap 的 `mountRootInclude` 固定一个 `id: 'include'` 的 loader 条目，其 `config.path` 是 profile 的 `cordis.yml` 文件 URL，profile 目录就是该 URL 的父目录。两者皆无的部署得到一个 `plugin-install/unknown-profile` RemoteError，绝不静默回退。
 

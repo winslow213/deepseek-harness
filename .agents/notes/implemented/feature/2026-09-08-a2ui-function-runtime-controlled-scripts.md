@@ -17,6 +17,7 @@ A2UI becomes an executable-component runtime with three orthogonal layers. A fol
 - **Controlled `script` execution** (`tool-a2ui-store/script.ts`). A new `execution: "script"` action carries an async `program` body and a `binds` grant list. The program runs on the composed code runtime (`ctx.codeRuntime`, the worker-thread backend in the web profile) — never in the browser, never in the host process — with the runtime's wall-clock/output caps and abort semantics. The program may call only the granted `a2ui.*` members, each a host helper behind an existing capability:
   - `fetch` — one `http(s)://` request through the harness web service (`ctx.web.fetch`, the base bundle's http provider); the URL scheme is validated before any call, and the JSON summary (url, status, content kind/text, truncated) crosses the code-runtime boundary.
   - `text` — a deterministic pure reshape helper (uppercase).
+
   The completion value and logs cross the runtime's lossless-JSON boundary and become the action result, shown in the popup.
 
 The wire protocol (`a2ui-wire.ts`) and the launcher bridge carry the new kinds; the Remote namespace `a2uiRun` grows `runScript`; `ctx.a2uiRunScript` resolves the code runtime and web service lazily so the store plugin mounts in compositions that lack either.

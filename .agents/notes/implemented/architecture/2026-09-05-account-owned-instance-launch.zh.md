@@ -10,7 +10,7 @@ Team proxy 可以认证成员并路由请求，但成员实例未启动时路由
 
 ## 决策
 
-账号服务负责成员登录到实例的转换。`AuthService` 创建会话后，账号 HTTP handler 要求 `InstanceManager` 确保成员已有已登记的 dsh 实例。`InstanceManager` 从 `TEAM_INSTANCE_PORT_START` 到 `TEAM_INSTANCE_PORT_END` 分配未使用端口，并在进程内监督成员的实例（见[账号服务并入 shell](../../simplification/2026-09-06-merge-account-service-into-shell.md)）；它在等待第一代 URL 后才把端口、启动令牌和 PID 写入 `dsh_instances`。
+账号服务负责成员登录到实例的转换。`AuthService` 创建会话后，账号 HTTP handler 要求 `InstanceManager` 确保成员已有已登记的 dsh 实例。`InstanceManager` 从 `TEAM_INSTANCE_PORT_START` 到 `TEAM_INSTANCE_PORT_END` 分配未使用端口，并在进程内监督成员的实例（见[账号服务并入 shell](../simplification/2026-09-06-merge-account-service-into-shell.zh.md)）；它在等待第一代 URL 后才把端口、启动令牌和 PID 写入 `dsh_instances`。
 
 `InstanceManager` 合并同一用户的并发启动请求，启动期间保留端口，监督循环结束时删除实例记录，并在账号服务关闭时停止所有由账号服务拥有的 supervisor。启动失败会销毁刚创建的会话并返回明确的 503。`spawn-user.ts` 仍负责准备 `DSH_HOME`，`superviseUserInstance` 负责插件安装后的同端口重启，现在由账号服务直接驱动而非经 `spawn-user` 子进程。proxy 只负责认证与路由，不负责启动实例。
 

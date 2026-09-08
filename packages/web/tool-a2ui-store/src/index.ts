@@ -54,11 +54,23 @@ declare module '@deepseek-ai/cordis' {
 export interface A2uiStore {
   /** The resolved store directory (files live here). */
   readonly dir: string
-  /** Every saved tool, name-sorted. */
+  /**
+   * Every saved tool, name-sorted.
+   * @returns the saved A2UI tool records in name order.
+   */
   list(): Promise<A2uiToolRecord[]>
-  /** Persist one canonical page under a stable name, replacing any same-named tool. */
+  /**
+   * Persist one canonical page under a stable name, replacing any same-named tool.
+   * @param name - the stable tool name for the saved file.
+   * @param page - the declarative A2UI page to persist.
+   * @returns the recorded A2UI tool.
+   */
   save(name: string, page: A2uiPage): Promise<A2uiToolRecord>
-  /** Remove one saved tool; false when absent. */
+  /**
+   * Remove one saved tool.
+   * @param name - the stable tool name of the saved file.
+   * @returns false when the named tool is absent, true when removed.
+   */
   remove(name: string): Promise<boolean>
 }
 
