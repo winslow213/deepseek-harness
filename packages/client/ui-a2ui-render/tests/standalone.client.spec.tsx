@@ -7,6 +7,7 @@
 import { act } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiOpenerMessage } from '../src/a2ui-wire.ts'
 import { renderA2uiPopup } from '../src/standalone.tsx'
 
 /** The page the popup renders in these tests. */
@@ -30,7 +31,7 @@ function harness(): { sent: Array<{ type: string }>; root: HTMLDivElement; opene
 }
 
 /** Send one opener→popup message from the fake opener window. */
-function sendFromOpener(message: { type: string }, opener: Window): void {
+function sendFromOpener(message: A2uiOpenerMessage, opener: Window): void {
   act(() => {
     window.dispatchEvent(new MessageEvent('message', {
       origin: window.location.origin,
