@@ -6,6 +6,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { type Agent } from '@deepseek-ai/dsh-agent'
 
+import { canonicalizeA2uiPage, type A2uiPageInput } from '../src/index.ts'
 import * as tool from '../src/index.ts'
 import type { A2uiCanvasPage, A2uiFormPage } from '../src/types.ts'
 
@@ -285,6 +286,53 @@ describe('dsh-tool-a2ui-surface', () => {
     expect(ctx.tools.schemas().some(s => s.name === 'a2ui_surface')).toBe(true)
     await fiber.dispose()
     expect(ctx.tools.schemas().some(s => s.name === 'a2ui_surface')).toBe(false)
+  })
+
+
+  describe('command actions canonicalization', () => {
+    it('canonicalizes a command action with its command and optional timeout', () => {
+      const raw = {
+        kind: 'form',
+        title: 'Log',
+        fields: [{ name: 'sn', label: 'SN', type: 'text' }],
+        actions: [{ id: 'run', label: 'Run', execution: 'command', command: 'hdc -t {sn} hilog' }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      const actions = (page as { actions: Array<Record<string, unknown>> }).actions!
+      expect(actions[0]).toMatchObject({ id: 'run', execution: 'command', command: 'hdc -t {sn} hilog' })
+      expect(actions[0]).not.toHaveProperty('tool')
+    })
+
+    it('carries a timeout when supplied and preserves it', () => {
+      const raw = {
+        kind: 'form',
+        title: 'Log',
+        fields: [{ name: 'sn', label: 'SN', type: 'text' }],
+        actions: [{ id: 'run', label: 'Run', execution: 'command', command: 'sleep 2', timeoutMs: 5000 }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({ timeoutMs: 5000 })
+    })
+
+    it('rejects a command action without a command', () => {
+      const raw = {
+        kind: 'form',
+        title: 'Log',
+        fields: [{ name: 'sn', label: 'SN', type: 'text' }],
+        actions: [{ id: 'run', label: 'Run', execution: 'command' }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/command.*action must carry a `command`/)
+    })
+
+    it('rejects a non-positive timeout', () => {
+      const raw = {
+        kind: 'form',
+        title: 'Log',
+        fields: [],
+        actions: [{ id: 'run', label: 'Run', execution: 'command', command: 'echo hi', timeoutMs: 0 }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/timeoutMs/)
+    })
   })
 
   it('has the namespace-plugin export shape (no stray default) so the Loader keeps name/inject/apply', () => {

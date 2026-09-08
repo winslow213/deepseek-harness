@@ -33,7 +33,13 @@
       "path": "../../web/tool-a2ui-surface"
     },
     {
+      "path": "../../web/tool-a2ui-store"
+    },
+    {
       "path": "../ui-a2ui-render"
+    },
+    {
+      "path": "../../api/remotes/tsconfig.client.json"
     }
   ]
 }

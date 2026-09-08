@@ -9,7 +9,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  A2uiRunFieldValues, A2uiRunReadValue, A2uiRunStartValue, A2uiRunStopValue,
+} from '@deepseek-ai/dsh-tool-a2ui-store/types'
 // Type-only: the popup wire protocol lives in the zero-cordis render library,
 // so the launcher and the standalone popup share one message vocabulary
 // without dragging the renderer (or a second module-table row) across the
@@ -17,9 +20,20 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 import type { A2uiOpenerMessage, A2uiPopupMessage } from '@deepseek-ai/dsh-client-ui-a2ui-render'
 import css from './A2uiPanel.module.css'
 
+/** The command-run bridge the launcher renders against (registered by the plugin from `ctx.remote.a2uiRun`). */
+export interface A2uiRunBridge {
+  /** Start one `command`-action run on the harness host. */
+  start(request: { command: string; fields: A2uiRunFieldValues; timeoutMs?: number }): Promise<A2uiRunStartValue>
+  /** Consume one output chunk of a run. */
+  read(runId: string): Promise<A2uiRunReadValue>
+  /** Stop one run's process group. */
+  stop(runId: string): Promise<A2uiRunStopValue>
+}
+
 /** Keyed Chat renderer props for one model-opened A2UI page launcher. */
 export type A2uiLauncherProps =
   PropsRuntime<'conversation.chat.node', 'a2ui-surface'>
+  & InjectFace<{ bridge?: A2uiRunBridge }>
   & PropsLocale<'a2ui'>
 
 /** The popup URL served by the web frontend's dedicated A2UI entry. */
@@ -49,10 +63,11 @@ function a2uiActionMessage(surfaceId: string, action: A2uiAction, values: Record
  * Render the launcher card and manage its popup window.
  * @param props - the keyed Chat slot props (node data, input machine, locale).
  */
-export function A2uiLauncher({ node, inputActions, t }: A2uiLauncherProps) {
+export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProps) {
   const { page, surfaceId } = node.data
   const [blocked, setBlocked] = useState(false)
   const popupRef = useRef<Window | null>(null)
+  const runTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     console.log('[a2ui] launcher mounted', { surfaceId, kind: page.kind, origin: location.origin })
@@ -100,16 +115,79 @@ export function A2uiLauncher({ node, inputActions, t }: A2uiLauncherProps) {
         inputActions.submit()
         const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
         popup.postMessage(ack, location.origin)
-      } else {
+      } else if (data.type === 'a2ui/action') {
         inputActions.setDraft(a2uiActionMessage(surfaceId, data.action, data.values))
         inputActions.submit()
         const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
         popup.postMessage(ack, location.origin)
+      } else if (data.type === 'a2ui/run') {
+        const runBridge = bridge
+        if (runBridge !== undefined && data.action.execution === 'command') {
+          void startRun(popup, runBridge, data.action, data.values as A2uiRunFieldValues)
+        }
+      } else if (data.type === 'a2ui/runStop') {
+        const runBridge = bridge
+        if (runBridge !== undefined) void stopRun(runBridge, data.runId)
       }
     }
+
+    /** Start a command run and poll its output into the popup until it settles. */
+    const startRun = async (popup: Window, runBridge: A2uiRunBridge, action: A2uiAction, values: A2uiRunFieldValues): Promise<void> => {
+      const send = (message: A2uiOpenerMessage): void => { popup.postMessage(message, location.origin) }
+      const request = action.timeoutMs === undefined
+        ? { command: action.command ?? '', fields: values }
+        : { command: action.command ?? '', fields: values, timeoutMs: action.timeoutMs }
+      try {
+        const started = await runBridge.start(request)
+        send({ type: 'a2ui/runStarted', runId: started.runId, ok: true })
+        runTimerRef.current = setInterval(() => {
+          void (async () => {
+            try {
+              const chunk = await runBridge.read(started.runId)
+              if (chunk.output.length > 0) send({ type: 'a2ui/runChunk', runId: started.runId, output: chunk.output, running: chunk.running })
+              if (!chunk.running) {
+                if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
+                runTimerRef.current = null
+                send({ type: 'a2ui/runDone', runId: started.runId, exitCode: chunk.exitCode })
+              }
+            } catch (error) {
+              if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
+              runTimerRef.current = null
+              send({ type: 'a2ui/runFailed', message: error instanceof Error ? error.message : String(error), ok: false })
+            }
+          })()
+        }, 250)
+      } catch (error) {
+        send({ type: 'a2ui/runFailed', message: error instanceof Error ? error.message : String(error), ok: false })
+      }
+    }
+
+    /** Stop a running command, flush its tail, and settle the popup pane. */
+    const stopRun = async (runBridge: A2uiRunBridge, runId: string): Promise<void> => {
+      const popup = popupRef.current
+      if (popup === null) return
+      if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
+      runTimerRef.current = null
+      try {
+        await runBridge.stop(runId)
+        const tail = await runBridge.read(runId)
+        if (tail.output.length > 0) popup.postMessage({ type: 'a2ui/runChunk', runId, output: tail.output, running: false }, location.origin)
+        popup.postMessage({ type: 'a2ui/runDone', runId, exitCode: tail.exitCode }, location.origin)
+      } catch (error) {
+        popup.postMessage({
+          type: 'a2ui/runFailed',
+          message: error instanceof Error ? error.message : String(error),
+          ok: false,
+        }, location.origin)
+      }
+    }
+
     window.addEventListener('message', onMessage)
-    return () => { window.removeEventListener('message', onMessage) }
-  }, [surfaceId, page, inputActions])
+    return () => {
+      window.removeEventListener('message', onMessage)
+      if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
+    }
+  }, [surfaceId, page, inputActions, bridge])
 
   const openWindow = (): void => {
     console.log('[a2ui] openWindow clicked', { surfaceId, path: A2UI_POPUP_PATH })
