@@ -10,7 +10,7 @@ A2UI 页面过去有三种互斥的按钮语义——`local`（显示表达式�
 
 ## Decision
 
-A2UI 变成可执行组件运行时，分三层正交设计。
+A2UI 变成可执行组件运行时，分三层正交设计。后续在此之上增加两项渲染驱动能力：action 的完成值可按 `write: [{field, from}]`（用点号选择器解析）**写回**声明的表单字段；`select` 字段可声明 `optionsFrom` 指向某 `script` action，其完成值（`[{label,value}]` 数组或 `{items}` 包装）在打开与每次重跑时填充该字段的实时选项。
 
 - **统一调用路由**（`a2ui-runtime.ts`，零 cordis）。`invokeAction(action, values, surfaceId, evaluate, localDone)` 把一次点击解析为恰好一种调用：在浏览器计算的 `expr` 结果、运行宿主 shell 命令的 `command` 消息、运行宿主程序的 `script` 消息、或发给 agent 的 `model` 消息。渲染器不再按执行模式分支；每种后端都是这个纯函数里的一个 case。
 - **单一弹窗状态机**（`reducePopupState`）。每个 opener 回复——ack、run started/chunk/done/failed、stop、script 结果/失败——都折叠进唯一的 `A2uiPopupState`（busy、命令 console 的 `A2uiRunState`、local 结果、script 结果/错误）。独立弹窗宿主只是这个投影之上的薄 `useReducer`；组件里的散乱 `useState` 消失了。

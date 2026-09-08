@@ -10,7 +10,7 @@ A2UI pages had three mutually exclusive button semantics — `local` (show an ex
 
 ## Decision
 
-A2UI becomes an executable-component runtime with three orthogonal layers.
+A2UI becomes an executable-component runtime with three orthogonal layers. A follow-up adds two render-driving features on top: an action's completion can **write back** into declared form fields (`write: [{field, from}]`, resolved by dotted selector), and a `select` field can declare `optionsFrom` naming a `script` action whose completion (a `[{label,value}]` array or `{items}` wrapper) populates the field's live options on open and on every re-run.
 
 - **Unified invocation routing** (`a2ui-runtime.ts`, zero-cordis). `invokeAction(action, values, surfaceId, evaluate, localDone)` resolves one click into exactly one invocation: an `expr` result computed in the browser, a `command` message to run a host shell command, a `script` message to run a host program, or a `model` message to the agent. The renderer no longer branches on execution mode; each backend is a case in this pure function.
 - **One popup state machine** (`reducePopupState`). Every opener reply — ack, run started/chunk/done/failed, stop, script result/failure — folds into one `A2uiPopupState` (busy, the command console's `A2uiRunState`, the local result, the script result/error). The standalone popup host is a thin `useReducer` over this projection; component `useState`-scatter is gone.
