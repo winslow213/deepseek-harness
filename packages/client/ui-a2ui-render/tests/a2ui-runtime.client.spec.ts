@@ -121,11 +121,12 @@ describe('reducePopupState', () => {
   })
 
   it('surfaces a run failure and keeps the partial output', () => {
-    const state = [
+    const events: A2uiPopupAction[] = [
       { type: 'run-started', runId: 'r1' },
       { type: 'run-chunk', output: 'boot\n', running: true },
       { type: 'run-failed', message: 'no shell mounted' },
-    ].reduce(reducePopupState, A2UI_POPUP_IDLE)
+    ]
+    const state = events.reduce(reducePopupState, A2UI_POPUP_IDLE)
     expect(state.busy).toBe(false)
     expect(state.run.error).toBe('no shell mounted')
     expect(state.run.output).toBe('boot\n')

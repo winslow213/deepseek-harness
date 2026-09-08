@@ -26,7 +26,7 @@ import {
   A2uiCanvasPanel, A2uiFormPanel, a2uiBendForPoint, a2uiEdgeGeometry,
   type A2uiCanvasPanelProps, type A2uiFormPanelProps, type A2uiTranslate,
 } from '@deepseek-ai/dsh-client-ui-a2ui-render'
-import { A2uiLauncher, type A2uiLauncherProps } from '../src/client/launcher.tsx'
+import { A2uiLauncher, type A2uiLauncherProps, type A2uiRunBridge } from '../src/client/launcher.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 import {

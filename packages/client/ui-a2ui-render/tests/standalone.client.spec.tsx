@@ -44,7 +44,7 @@ function sendFromOpener(message: A2uiOpenerMessage, opener: Window): void {
 afterEach(() => {
   document.body.innerHTML = ''
   // @ts-expect-error resetting the opener seam
-  delete window.opener
+  Object.defineProperty(window, 'opener', { value: null, configurable: true })
 })
 
 describe('renderA2uiPopup', () => {
@@ -138,7 +138,7 @@ describe('renderA2uiPopup', () => {
     expect(sent.some(m => m.type === 'a2ui/runScript')).toBe(true)
 
     // The opener returns the completion value; the note field should take it.
-    sendFromOpener({ type: 'a2ui/scriptResult', value: { text: 'hello' }, ok: true }, opener)
+    sendFromOpener({ type: 'a2ui/scriptResult', actionId: 'go', value: { text: 'hello' }, ok: true }, opener)
     const note = root.querySelector('input[name="note"]') as HTMLInputElement | null
     expect(note?.value).toBe('hello')
   })
