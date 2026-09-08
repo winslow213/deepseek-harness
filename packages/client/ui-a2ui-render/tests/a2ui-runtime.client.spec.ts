@@ -5,6 +5,7 @@ import {
   A2UI_POPUP_IDLE, completionToOptions, invokeAction, reducePopupState, selectOutcome,
   type A2uiPopupAction, type A2uiValues,
 } from '../src/a2ui-runtime.ts'
+import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 
 const SURFACE = 'a2ui-1'
 
@@ -15,7 +16,7 @@ const evaluate = (expression: string, values: A2uiValues): string | number | boo
 
 describe('invokeAction', () => {
   it('routes a command action to a2ui/run carrying the action and collected values', () => {
-    const action = { id: 'go', label: 'Run', execution: 'command', command: 'echo {note}' }
+    const action: A2uiAction = { id: 'go', label: 'Run', execution: 'command', command: 'echo {note}' }
     const inv = invokeAction(action, { note: 'hi' }, SURFACE, evaluate, 'Done')
     expect(inv).toEqual({
       kind: 'command',
@@ -24,7 +25,7 @@ describe('invokeAction', () => {
   })
 
   it('routes a model action to a2ui/action by default when execution is absent', () => {
-    const action = { id: 'go', label: 'Ask', tool: 'run_tool', instruction: 'do it' }
+    const action: A2uiAction = { id: 'go', label: 'Ask', tool: 'run_tool', instruction: 'do it' }
     const inv = invokeAction(action, { note: 'hi' }, SURFACE, evaluate, 'Done')
     expect(inv.kind).toBe('model')
     if (inv.kind !== 'model') throw new Error('expected model')
@@ -32,18 +33,18 @@ describe('invokeAction', () => {
   })
 
   it('evaluates a local action result expression to text', () => {
-    const action = { id: 'calc', label: 'Calc', execution: 'local', result: 'prefix-{note}' }
+    const action: A2uiAction = { id: 'calc', label: 'Calc', execution: 'local', result: 'prefix-{note}' }
     const inv = invokeAction(action, { note: 'abc' }, SURFACE, evaluate, 'Done')
     expect(inv).toEqual({ kind: 'expr', result: 'prefix-abc' })
   })
 
   it('falls back to the done label when a local action has no result', () => {
-    const action = { id: 'nop', label: 'Nop', execution: 'local' }
+    const action: A2uiAction = { id: 'nop', label: 'Nop', execution: 'local' }
     expect(invokeAction(action, {}, SURFACE, evaluate, 'Done')).toEqual({ kind: 'expr', result: 'Done' })
   })
 
   it('routes a script action to a2ui/runScript', () => {
-    const action = { id: 's', label: 'Script', execution: 'script', program: 'return 1', binds: ['text'] }
+    const action: A2uiAction = { id: 's', label: 'Script', execution: 'script', program: 'return 1', binds: ['text'] }
     const inv = invokeAction(action, {}, SURFACE, evaluate, 'Done')
     expect(inv.kind).toBe('script')
     if (inv.kind !== 'script') throw new Error('expected script')

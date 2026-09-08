@@ -43,7 +43,6 @@ function sendFromOpener(message: A2uiOpenerMessage, opener: Window): void {
 
 afterEach(() => {
   document.body.innerHTML = ''
-  // @ts-expect-error resetting the opener seam
   Object.defineProperty(window, 'opener', { value: null, configurable: true })
 })
 
