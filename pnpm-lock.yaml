@@ -1870,6 +1870,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale
@@ -1897,6 +1900,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@deepseek-ai/dsh-tool-a2ui-store':
+        specifier: workspace:^
+        version: link:../../web/tool-a2ui-store
       '@deepseek-ai/dsh-tool-a2ui-surface':
         specifier: workspace:^
         version: link:../../web/tool-a2ui-surface
