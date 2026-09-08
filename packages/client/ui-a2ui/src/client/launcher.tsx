@@ -11,8 +11,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  A2uiRunFieldValues, A2uiRunReadValue, A2uiRunStartValue, A2uiRunStopValue,
+  A2uiRunFieldValues, A2uiRunReadValue, A2uiRunScriptValue,
+  A2uiRunStartValue, A2uiRunStopValue,
 } from '@deepseek-ai/dsh-tool-a2ui-store/types'
+import type { A2uiScriptBinding } from '@deepseek-ai/dsh-tool-a2ui-store/types'
 // Type-only: the popup wire protocol lives in the zero-cordis render library,
 // so the launcher and the standalone popup share one message vocabulary
 // without dragging the renderer (or a second module-table row) across the
@@ -28,6 +30,8 @@ export interface A2uiRunBridge {
   read(runId: string): Promise<A2uiRunReadValue>
   /** Stop one run's process group. */
   stop(runId: string): Promise<A2uiRunStopValue>
+  /** Run one `script`-action program on the controlled code runtime. */
+  runScript(program: string, binds: readonly A2uiScriptBinding[]): Promise<A2uiRunScriptValue>
 }
 
 /** Keyed Chat renderer props for one model-opened A2UI page launcher. */
@@ -125,6 +129,11 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
         if (runBridge !== undefined && data.action.execution === 'command') {
           void startRun(popup, runBridge, data.action, data.values as A2uiRunFieldValues)
         }
+      } else if (data.type === 'a2ui/runScript') {
+        const runBridge = bridge
+        if (runBridge !== undefined && data.action.execution === 'script') {
+          void runScript(popup, runBridge, data.action)
+        }
       } else if (data.type === 'a2ui/runStop') {
         const runBridge = bridge
         if (runBridge !== undefined) void stopRun(runBridge, data.runId)
@@ -159,6 +168,23 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
         }, 250)
       } catch (error) {
         send({ type: 'a2ui/runFailed', message: error instanceof Error ? error.message : String(error), ok: false })
+      }
+    }
+
+    /** Run one script action once and post its result/error back to the popup. */
+    const runScript = async (popup: Window, runBridge: A2uiRunBridge, action: A2uiAction): Promise<void> => {
+      const send = (message: A2uiOpenerMessage): void => { popup.postMessage(message, location.origin) }
+      try {
+        const outcome = await runBridge.runScript(action.program ?? '', action.binds as readonly A2uiScriptBinding[] ?? [])
+        if (outcome.error !== undefined) {
+          send({ type: 'a2ui/scriptFailed', message: outcome.error.message, ok: false })
+        } else {
+          send({ type: 'a2ui/scriptResult', value: outcome.value, logs: outcome.logs, ok: true })
+        }
+        const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
+        send(ack)
+      } catch (error) {
+        send({ type: 'a2ui/scriptFailed', message: error instanceof Error ? error.message : String(error), ok: false })
       }
     }
 

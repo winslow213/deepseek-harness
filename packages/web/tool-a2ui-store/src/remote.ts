@@ -13,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-agent'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   A2uiRunReadRequest, A2uiRunReadValue,
+  A2uiRunScriptRequest, A2uiRunScriptValue,
   A2uiRunStartRequest, A2uiRunStartValue,
   A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
@@ -21,6 +22,7 @@ import type {
 
 export type {
   A2uiRunReadRequest, A2uiRunReadValue,
+  A2uiRunScriptRequest, A2uiRunScriptValue,
   A2uiRunStartRequest, A2uiRunStartValue,
   A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
@@ -48,6 +50,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'a2ui-run/invalid-command': Record<string, never>
     /** No run exists under that identity. */
     'a2ui-run/not-found': { readonly runId: string }
+    /** No code runtime is mounted, so a `script` action cannot run. */
+    'a2ui-run-script/runtime-unavailable': Record<string, never>
   }
 }
 
@@ -176,6 +180,23 @@ export class A2uiRunController extends TypertRemoteService {
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('a2uiRun: unknown run')) {
         throw new RemoteError('a2ui-run/not-found', error.message, { runId: request.runId })
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Run one `script`-action program on the controlled code runtime.
+   * @param request - the program, its binding grants, and the collected values.
+   * @returns the completion value, logs, and failure detail.
+   */
+  @Remote('runScript')
+  async runScript(request: A2uiRunScriptRequest): Promise<A2uiRunScriptValue> {
+    try {
+      return await this.ctx.a2uiRunScript.run(request.program, request.binds, request.fields)
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('a2uiRunScript: no code runtime')) {
+        throw new RemoteError('a2ui-run-script/runtime-unavailable', error.message, {})
       }
       throw error
     }

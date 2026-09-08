@@ -86,7 +86,7 @@ export type A2uiExpression = string
  *   values) and shows the produced output in the page. No model round-trip;
  *   the harness shell executes the command with the composed policy.
  */
-export type A2uiExecutionMode = 'local' | 'model' | 'command'
+export type A2uiExecutionMode = 'local' | 'model' | 'command' | 'script'
 
 /**
  * One declarative action rendered as a button beside the submit control. The
@@ -127,6 +127,20 @@ export interface A2uiAction {
    * default and cap. Only meaningful when `execution` is `command`.
    */
   readonly timeoutMs?: number
+  /**
+   * `script`-mode program: an async body that runs on the host's controlled
+   * code runtime. The program calls the injected `a2ui` bindings (pure
+   * helpers the A2UI provider grants, e.g. `a2ui.fetch` or `a2ui.text`) and
+   * `return`s a JSON value that becomes the action's result. Only meaningful
+   * when `execution` is `script`.
+   */
+  readonly program?: string
+  /**
+   * `script`-mode binding grant list: the `a2ui.*` member names the program
+   * may call. An empty or absent list allows no bindings (pure computation).
+   * Only meaningful when `execution` is `script`.
+   */
+  readonly binds?: readonly string[]
 }
 
 /** The two page kinds `a2ui_surface` can render: a fillable form or a draggable node canvas. */

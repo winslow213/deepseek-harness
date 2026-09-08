@@ -174,6 +174,24 @@ function toA2uiActions(rawActions: readonly A2uiAction[]): A2uiAction[] {
         command,
         ...timeoutMs === undefined ? {} : { timeoutMs },
       })
+    } else if (execution === 'script') {
+      const program = action.program?.trim() ?? ''
+      const binds = action.binds ?? []
+      const grantable = new Set(['fetch', 'text'])
+      const unknown = binds.filter(name => !grantable.has(name))
+      if (program.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: a \`script\` action must carry a \`program\``)
+      if (unknown.length > 0) {
+        throw new Error(`invalid a2ui action ${JSON.stringify(id)}: unknown \`binds\` ${JSON.stringify(unknown)} (grantable: fetch, text)`)
+      }
+      if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
+      seen.add(id)
+      actions.push({
+        id,
+        label,
+        execution: 'script',
+        program,
+        ...binds.length === 0 ? {} : { binds: [...binds] },
+      })
     } else {
       if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
       seen.add(id)
@@ -396,12 +414,14 @@ export function apply(ctx: Context, config: Config): void {
               properties: {
                 id: { type: 'string', required: true, description: 'Stable identity the action trigger payload carries.' },
                 label: { type: 'string', required: true, description: 'Button label.' },
-                execution: { type: 'string', enum: ['local', 'model', 'command'], description: 'Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`, `command` runs `command` on the harness host.' },
+                execution: { type: 'string', enum: ['local', 'model', 'command', 'script'], description: 'Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`, `command` runs `command` on the harness host, `script` runs `program` on the host controlled runtime.' },
                 tool: { type: 'string', description: 'Tool name the model invokes when the action is triggered (required for `model` mode).' },
                 instruction: { type: 'string', description: 'What invoking the tool accomplishes; the model uses this to form the call (required for `model` mode).' },
                 result: { type: 'string', description: 'Expression over the collected values shown after a `local` action runs.' },
                 command: { type: 'string', description: 'Shell command template with `{fieldName}` placeholders filled from the collected values (required for `command` mode).' },
                 timeoutMs: { type: 'number', description: 'Run bound in milliseconds for a `command` action; absent uses the host shell default and cap.' },
+                program: { type: 'string', description: 'Async program body run on the host controlled runtime when the action is triggered (required for `script` mode). The body calls granted `a2ui.*` bindings and returns a JSON value.' },
+                binds: { type: 'array', description: 'Granted `a2ui.*` binding member names for a `script` action (`fetch`, `text`).', items: { type: 'string' } },
               },
             },
           },

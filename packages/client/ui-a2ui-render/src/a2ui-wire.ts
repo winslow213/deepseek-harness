@@ -7,12 +7,13 @@
 
 import type { A2uiAction, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 
-/** Popup → opener message: a readiness signal, a submission, a model action, or a command action. */
+/** Popup → opener message: readiness, submission, an action trigger, a command run, a script run, or a stop. */
 export type A2uiPopupMessage =
   | { readonly type: 'a2ui/ready' }
   | { readonly type: 'a2ui/submit'; readonly surfaceId: string; readonly payload: Record<string, unknown> }
   | { readonly type: 'a2ui/action'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
   | { readonly type: 'a2ui/run'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
+  | { readonly type: 'a2ui/runScript'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
   | { readonly type: 'a2ui/runStop'; readonly runId: string }
 
 /** Opener → popup message: the page to render, acknowledgements, or command-run progress. */
@@ -23,6 +24,8 @@ export type A2uiOpenerMessage =
   | { readonly type: 'a2ui/runFailed'; readonly message: string; readonly ok: false }
   | { readonly type: 'a2ui/runChunk'; readonly runId: string; readonly output: string; readonly running: boolean }
   | { readonly type: 'a2ui/runDone'; readonly runId: string; readonly exitCode: number | null }
+  | { readonly type: 'a2ui/scriptResult'; readonly ok: true; readonly value?: unknown; readonly logs?: readonly string[] }
+  | { readonly type: 'a2ui/scriptFailed'; readonly message: string; readonly ok: false }
 
 /** Progress of one command run as the popup renders it. */
 export interface A2uiRunState {

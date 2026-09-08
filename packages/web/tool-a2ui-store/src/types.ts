@@ -91,6 +91,35 @@ export interface A2uiRunReadValue {
   readonly lossy: boolean
 }
 
+/** Granted binding member a `script` action may call. */
+export type A2uiScriptBinding = 'fetch' | 'text'
+
+/** Request to run one `script`-action program on the controlled code runtime. */
+export interface A2uiRunScriptRequest {
+  /** The async program body. */
+  readonly program: string
+  /** Granted `a2ui.*` member names the program may call. */
+  readonly binds: readonly A2uiScriptBinding[]
+  /** Collected field values. */
+  readonly fields: A2uiRunFieldValues
+}
+
+/** A JSON value a script completion may carry across the wire. */
+export type A2uiScriptJson =
+  | null | boolean | number | string
+  | readonly A2uiScriptJson[]
+  | { readonly [key: string]: A2uiScriptJson }
+
+/** One completed `script` run. */
+export interface A2uiRunScriptValue {
+  /** The program's completion value (JSON), when it completed. */
+  readonly value?: A2uiScriptJson
+  /** Ordered log lines the program emitted. */
+  readonly logs: readonly string[]
+  /** Failure detail when the run did not complete. */
+  readonly error?: { readonly kind: string; readonly message: string }
+}
+
 /** Request to stop one run's process group. */
 export interface A2uiRunStopRequest {
   readonly runId: string

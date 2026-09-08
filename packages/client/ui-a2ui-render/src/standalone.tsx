@@ -65,7 +65,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
   opener: Window
 }) {
   const [state, dispatch] = useReducer(reducePopupState, A2UI_POPUP_IDLE)
-  const { busy, run, localResult } = state
+  const { busy, run, localResult, scriptResult, scriptError } = state
   const post = useCallback((message: A2uiPopupMessage): void => {
     opener.postMessage(message, location.origin)
   }, [opener])
@@ -86,7 +86,10 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         // The opener answers with runStarted (busy) and settles via runDone.
         post(invocation.message)
         break
+      case 'script':
       case 'model':
+        // The opener answers with scriptResult/scriptFailed (script) or an
+        // ack (model); both mark the popup busy until the answer arrives.
         dispatch({ type: 'submit-sent' })
         post(invocation.message)
         break
@@ -122,6 +125,14 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         case 'a2ui/runFailed':
           dispatch({ type: 'run-failed', message: data.message })
           break
+        case 'a2ui/scriptResult': {
+          const text = data.value === undefined ? '(no value)' : JSON.stringify(data.value)
+          dispatch({ type: 'script-result', text })
+          break
+        }
+        case 'a2ui/scriptFailed':
+          dispatch({ type: 'script-failed', message: data.message })
+          break
       }
     }
     window.addEventListener('message', onMessage)
@@ -137,6 +148,8 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     <>
       {panel}
       {localResult !== null && <p className={css.result} role="status">{localResult}</p>}
+      {scriptResult !== null && <p className={css.result} role="status">⇒ {scriptResult}</p>}
+      {scriptError !== null && <p className={css.error} role="alert">{scriptError}</p>}
       {active && (
         <div className={css.console} data-a2ui-console>
           <div className={css.consoleHeader}>

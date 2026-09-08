@@ -35,6 +35,9 @@
     },
     {
       "path": "../../shell/shell"
+    },
+    {
+      "path": "../../code-runtime/code-runtime"
     }
   ]
 }

@@ -18,6 +18,7 @@ import { ensureA2uiToolsDir, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir,
 import type { A2uiToolRecord } from './store.ts'
 import { A2uiStoreController, A2uiRunController } from './remote.ts'
 import { ShellA2uiRun, type A2uiRun } from './run.ts'
+import { CodeA2uiRunScript, type A2uiRunScript } from './script.ts'
 
 export type { A2uiToolRecord } from './store.ts'
 export { A2UI_TOOLS_DIR, isSafeA2uiToolName, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
@@ -44,6 +45,8 @@ declare module '@deepseek-ai/cordis' {
     a2uiStore: A2uiStore
     /** The A2UI command-run capability: start/read/stop `command` actions over the composed shell service. */
     a2uiRun: A2uiRun
+    /** The A2UI script-run capability: run `script` actions on the controlled code runtime. */
+    a2uiRunScript: A2uiRunScript
   }
 }
 
@@ -105,6 +108,7 @@ export function apply(ctx: Context, config: Config): void {
   const store = new FileA2uiStore(dir)
   ctx.provide('a2uiStore', store)
   ctx.provide('a2uiRun', new ShellA2uiRun(ctx))
+  ctx.provide('a2uiRunScript', new CodeA2uiRunScript(ctx))
   void ensureA2uiToolsDir(dir).catch(() => {
     // The first save also creates the directory; a boot-time mkdir failure
     // here must not crash the harness for a directory the next write creates.

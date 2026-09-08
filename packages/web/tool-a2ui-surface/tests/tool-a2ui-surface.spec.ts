@@ -335,6 +335,38 @@ describe('dsh-tool-a2ui-surface', () => {
     })
   })
 
+
+  describe('script actions canonicalization', () => {
+    it('canonicalizes a script action with its program and binding grants', () => {
+      const raw = {
+        kind: 'form',
+        title: 'S',
+        fields: [],
+        actions: [{ id: 's', label: 'Script', execution: 'script', program: 'return 1', binds: ['text'] }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({
+        id: 's', execution: 'script', program: 'return 1', binds: ['text'],
+      })
+    })
+
+    it('rejects a script action without a program', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [],
+        actions: [{ id: 's', label: 'Script', execution: 'script' }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/script.*action must carry a `program`/)
+    })
+
+    it('rejects an unknown binding grant', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [],
+        actions: [{ id: 's', label: 'Script', execution: 'script', program: 'x', binds: ['hack'] }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/unknown `binds`/)
+    })
+  })
+
   it('has the namespace-plugin export shape (no stray default) so the Loader keeps name/inject/apply', () => {
     // A default export would make Loader unwrap only apply and drop `inject`.
     expect('default' in tool).toBe(false)

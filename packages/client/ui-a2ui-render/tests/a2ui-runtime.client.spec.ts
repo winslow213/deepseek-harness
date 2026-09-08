@@ -41,11 +41,23 @@ describe('invokeAction', () => {
     const action = { id: 'nop', label: 'Nop', execution: 'local' }
     expect(invokeAction(action, {}, SURFACE, evaluate, 'Done')).toEqual({ kind: 'expr', result: 'Done' })
   })
+
+  it('routes a script action to a2ui/runScript', () => {
+    const action = { id: 's', label: 'Script', execution: 'script', program: 'return 1', binds: ['text'] }
+    const inv = invokeAction(action, {}, SURFACE, evaluate, 'Done')
+    expect(inv.kind).toBe('script')
+    if (inv.kind !== 'script') throw new Error('expected script')
+    expect(inv.message).toMatchObject({ type: 'a2ui/runScript', surfaceId: SURFACE, action })
+  })
 })
 
 describe('reducePopupState', () => {
   it('idle has nothing in flight', () => {
-    expect(A2UI_POPUP_IDLE).toEqual({ busy: false, run: expect.any(Object), localResult: null })
+    expect(A2UI_POPUP_IDLE.busy).toBe(false)
+    expect(A2UI_POPUP_IDLE.localResult).toBeNull()
+    expect(A2UI_POPUP_IDLE.scriptResult).toBeNull()
+    expect(A2UI_POPUP_IDLE.scriptError).toBeNull()
+    expect(A2UI_POPUP_IDLE.run.runId).toBeNull()
   })
 
   it('a submission marks busy and an ack clears it', () => {
@@ -97,5 +109,15 @@ describe('reducePopupState', () => {
     expect(state.localResult).toBe('hi')
     state = reducePopupState(state, { type: 'local-result', text: null })
     expect(state.localResult).toBeNull()
+  })
+
+  it('records a script completion and failure', () => {
+    let state = reducePopupState(A2UI_POPUP_IDLE, { type: 'submit-sent' })
+    expect(state.busy).toBe(true)
+    state = reducePopupState(state, { type: 'script-result', text: '{"ok":true}' })
+    expect(state.busy).toBe(false)
+    expect(state.scriptResult).toBe('{"ok":true}')
+    state = reducePopupState(state, { type: 'script-failed', message: 'boom' })
+    expect(state.scriptError).toBe('boom')
   })
 })

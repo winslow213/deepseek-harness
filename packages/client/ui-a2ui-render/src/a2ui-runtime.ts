@@ -29,6 +29,7 @@ export type A2uiValues = Readonly<Record<string, A2uiValue>>
 export type A2uiInvocation =
   | { readonly kind: 'expr'; readonly result: string | null }
   | { readonly kind: 'command'; readonly message: A2uiPopupMessage }
+  | { readonly kind: 'script'; readonly message: A2uiPopupMessage }
   | { readonly kind: 'model'; readonly message: A2uiPopupMessage }
 
 /** Evaluate one restricted expression over the collected values. */
@@ -74,6 +75,15 @@ export function invokeAction(
       }
       return { kind: 'command', message }
     }
+    case 'script': {
+      const message: A2uiPopupMessage = {
+        type: 'a2ui/runScript',
+        surfaceId,
+        action,
+        values: values as Record<string, unknown>,
+      }
+      return { kind: 'script', message }
+    }
     case 'model': {
       const message: A2uiPopupMessage = { type: 'a2ui/action', surfaceId, action, values: values as Record<string, unknown> }
       return { kind: 'model', message }
@@ -99,6 +109,10 @@ export interface A2uiPopupState {
   readonly run: A2uiRunState
   /** The latest `local` action's result text, if any. */
   readonly localResult: string | null
+  /** The latest `script` action's completion (JSON) text, if any. */
+  readonly scriptResult: string | null
+  /** Failure message of the latest `script`/other action, if any. */
+  readonly scriptError: string | null
 }
 
 /** The idle popup state before any action. */
@@ -106,6 +120,8 @@ export const A2UI_POPUP_IDLE: A2uiPopupState = {
   busy: false,
   run: A2UI_RUN_IDLE,
   localResult: null,
+  scriptResult: null,
+  scriptError: null,
 }
 
 /** One state-transition action the popup dispatches. */
@@ -118,6 +134,8 @@ export type A2uiPopupAction =
   | { readonly type: 'run-failed'; readonly message: string }
   | { readonly type: 'run-stop-requested' }
   | { readonly type: 'local-result'; readonly text: string | null }
+  | { readonly type: 'script-result'; readonly text: string }
+  | { readonly type: 'script-failed'; readonly message: string }
 
 /**
  * Fold one popup event into the popup state. Pure and synchronous so the
@@ -151,6 +169,10 @@ export function reducePopupState(state: A2uiPopupState, event: A2uiPopupAction):
       }
     case 'run-stop-requested':
       return { ...state, run: { ...state.run, running: false } }
+    case 'script-result':
+      return { ...state, busy: false, scriptResult: event.text, scriptError: null }
+    case 'script-failed':
+      return { ...state, busy: false, scriptError: event.message }
     case 'local-result':
       return { ...state, localResult: event.text }
     default: {

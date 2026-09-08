@@ -66,6 +66,7 @@
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-shell": "workspace:^"
+    "@deepseek-ai/dsh-shell": "workspace:^",
+    "@deepseek-ai/dsh-code-runtime": "workspace:^"
   }
 }

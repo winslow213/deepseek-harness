@@ -45,6 +45,11 @@ function buildBridge(ctx: ClientContext): A2uiRunBridge {
       if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
       return answered.value
     },
+    runScript: async (program, binds) => {
+      const answered = await ctx.remote.a2uiRun.runScript({ program, binds, fields: {} })
+      if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+      return answered.value
+    },
   }
 }
 
