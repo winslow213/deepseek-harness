@@ -232,7 +232,7 @@ describe('BrowseDirectoryPicker', () => {
   describe('confinement root', () => {
     async function withRoot(pickerRoot: string): Promise<{ picker: DirectoryPickerBrowseCapability; dispose: () => Promise<void> }> {
       const ctx = new Context()
-      const fiber = ctx.plugin(BrowseDirectoryPicker, { root: pickerRoot })
+      const fiber = ctx.plugin(BrowseDirectoryPicker, { root: pickerRoot, maxEntries: 1000 })
       await fiber.await()
       const picked = ctx.get('directoryPicker')!.capability()
       if (picked.kind !== 'browse') throw new Error('browse backend must advertise the browse capability')
