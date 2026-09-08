@@ -5,13 +5,24 @@ import type { Context } from '@deepseek-ai/cordis'
 import { CodeA2uiRunScript } from '../src/script.ts'
 
 /** A stub code runtime that resolves one program with a JSON value. */
+/** A runtime stub request whose bindings the tests inspect. */
+type StubRequest = {
+  bindings: Array<{ global: string; functions: Record<string, (a: unknown) => Promise<unknown>> }>
+}
+
+/** A stub code runtime that resolves one program with a JSON value. */
 function stubRuntime(result: { value?: unknown; logs?: string[]; error?: { kind: string; message: string } }) {
-  const run = vi.fn(async () => ({
+  const run = vi.fn(async (_request: StubRequest) => ({
     value: result.value,
     logs: result.logs ?? [],
     error: result.error,
   }))
   return { run, ctx: { get: () => ({ run }) } }
+}
+
+/** Read the bindings the runtime was invoked with, past vitest's mock typing. */
+function requestedBindings(run: { mock: { calls: Array<[StubRequest]> } }): StubRequest['bindings'] {
+  return run.mock.calls[0]![0]!.bindings
 }
 
 describe('CodeA2uiRunScript', () => {
@@ -22,10 +33,10 @@ describe('CodeA2uiRunScript', () => {
     expect(out.value).toEqual({ ok: true, n: 3 })
     expect(out.logs).toEqual([])
     expect(stub.run).toHaveBeenCalledOnce()
-    const request = stub.run.mock.calls[0]![0] as { bindings: Array<{ global: string; functions: Record<string, unknown> }> }
-    expect(request.bindings).toHaveLength(1)
-    expect(request.bindings[0]!.global).toBe('a2ui')
-    expect(Object.keys(request.bindings[0]!.functions).sort()).toEqual(['text'])
+    const bindings = requestedBindings(stub.run)
+    expect(bindings).toHaveLength(1)
+    expect(bindings[0]!.global).toBe('a2ui')
+    expect(Object.keys(bindings[0]!.functions).sort()).toEqual(['text'])
   })
 
   it('surfaces a runtime failure detail', async () => {
@@ -45,8 +56,8 @@ describe('CodeA2uiRunScript', () => {
     const stub = stubRuntime({ value: 1 })
     const cap = new CodeA2uiRunScript(stub.ctx as unknown as Context)
     await cap.run('return 1', ['text', 'fetch'], {})
-    const request = stub.run.mock.calls[0]![0] as { bindings: Array<{ functions: Record<string, unknown> }> }
-    expect(Object.keys(request.bindings[0]!.functions).sort()).toEqual(['fetch', 'text'])
+    const bindings = requestedBindings(stub.run)
+    expect(Object.keys(bindings[0]!.functions).sort()).toEqual(['fetch', 'text'])
   })
 })
 
