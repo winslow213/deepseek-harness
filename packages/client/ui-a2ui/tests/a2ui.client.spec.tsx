@@ -996,8 +996,8 @@ describe('A2uiLauncher', () => {
     const popupWindow = { postMessage: (message: { type: string }) => { sent.push(message) } } as unknown as Window
     window.open = () => popupWindow
     const start = vi.fn(async () => ({ runId: 'run-1' }))
-    const read = vi.fn(async (_runId: string) => ({ seq: 1, output: 'hello\n', running: false, exitCode: 0, lossy: false }))
-    const stop = vi.fn(async (_runId: string) => ({ requested: true }))
+    const read = vi.fn(async (_runId: string) => ({ runId: 'run-1', seq: 1, output: 'hello\n', running: false, exitCode: 0, lossy: false }))
+    const stop = vi.fn(async (_runId: string) => ({ runId: 'run-1', requested: true }))
     const runScript = vi.fn(async () => ({ logs: [] }))
     const bridge: A2uiRunBridge = { start, read, stop, runScript }
     const actionPage = page({

@@ -7,7 +7,7 @@
  */
 
 import type { A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** One saved A2UI tool: a page definition persisted under a stable name. */
 export interface A2uiToolRecord {
