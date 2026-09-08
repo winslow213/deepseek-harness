@@ -18,41 +18,30 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Required services for Definition, keyed renderer, and copy. */
-export const inject = ['uiConversation', 'slots', 'sessions', 'locale']
+/** Required services for Definition, keyed renderer, copy, and the command-run Remote. */
+export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun']
 
 /**
- * Build the command-run bridge from the api-remotes `a2uiRun` namespace. The
- * remote service is resolved lazily at call time, so the launcher registers
- * even in compositions that mount no remote; clicking a `command` action then
- * fails with a clear message instead of crashing at registration.
- * @param ctx - registrant context whose remote assembly may carry `a2uiRun`.
+ * Build the command-run bridge over the api-remotes `a2uiRun` namespace. The
+ * namespace service is required by injection (`remote.a2uiRun`); the bridge
+ * only unwraps the typed Remote results into values or thrown errors.
+ * @param ctx - registrant context carrying the typed remote assembly.
  * @returns the bridge the launcher renders against.
  */
 function buildBridge(ctx: ClientContext): A2uiRunBridge {
-  const remote = (): NonNullable<ClientContext['remote']['a2uiRun']> => {
-    const run = ctx.remote?.a2uiRun
-    if (run === undefined) {
-      throw new Error('a2ui command actions need the api-remotes assembly with the a2uiRun namespace mounted')
-    }
-    return run
-  }
   return {
     start: async (request) => {
-      const run = remote()
-      const answered = await run.start(request)
+      const answered = await ctx.remote.a2uiRun.start(request)
       if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
       return answered.value
     },
     read: async (runId) => {
-      const run = remote()
-      const answered = await run.read({ runId })
+      const answered = await ctx.remote.a2uiRun.read({ runId })
       if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
       return answered.value
     },
     stop: async (runId) => {
-      const run = remote()
-      const answered = await run.stop({ runId })
+      const answered = await ctx.remote.a2uiRun.stop({ runId })
       if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
       return answered.value
     },

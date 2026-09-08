@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ConversationNodeAssembler,
@@ -19,6 +19,7 @@ import type {
   SessionLiveEventEntry,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { A2uiAction, A2uiCanvasPage, A2uiFormPage, A2uiSurfaceData } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
@@ -989,6 +990,34 @@ describe('A2uiLauncher', () => {
     fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
     expect(screen.getByRole('alert').textContent).toContain('拦截')
   })
+
+  it('forwards a command action to the run bridge and posts progress back to the popup', async () => {
+    const sent: Array<{ type: string }> = []
+    const popupWindow = { postMessage: (message: { type: string }) => { sent.push(message) } } as unknown as Window
+    window.open = () => popupWindow
+    const start = vi.fn(async () => ({ runId: 'run-1' }))
+    const read = vi.fn(async () => ({ seq: 1, output: 'hello\n', running: false, exitCode: 0, lossy: false }))
+    const bridge: A2uiRunBridge = { start, read, stop: vi.fn(async () => ({ requested: true })) }
+    const actionPage = page({
+      actions: [{ id: 'go', label: 'Go', execution: 'command', command: 'echo {name}' }],
+    })
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-run', page: actionPage })} bridge={bridge} />)
+    await act(async () => { await new Promise(r => setTimeout(r, 300)) }) // auto-open adopts the fake window
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/run', surfaceId: 'a2ui-run', action: actionPage.actions![0], values: { name: 'X' } },
+      }))
+    })
+    await vi.waitFor(() => { expect(start).toHaveBeenCalled() })
+    expect(start).toHaveBeenCalledWith({ command: 'echo {name}', fields: { name: 'X' } })
+    await vi.waitFor(() => {
+      expect(sent.some(m => m.type === 'a2ui/runDone')).toBe(true)
+    })
+    expect(sent).toContainEqual({ type: 'a2ui/runStarted', runId: 'run-1', ok: true })
+    expect(sent).toContainEqual({ type: 'a2ui/runChunk', runId: 'run-1', output: 'hello\n', running: false })
+  })
 })
 
 async function runtimeSlotRoot(ctx: Context): Promise<void> {
@@ -1011,6 +1040,13 @@ describe('plugin lifecycle', () => {
     ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
     await runtimeSlotRoot(ctx)
     ctx.provide('locale', new LocaleRuntime(ctx))
+    new TestRemote(ctx, {
+      a2uiRun: {
+        start: async () => ({ ok: true as const, value: { runId: 'r1' } }),
+        read: async () => ({ ok: true as const, value: { runId: 'r1', seq: 1, output: 'ok', running: false, exitCode: 0, lossy: false } }),
+        stop: async () => ({ ok: true as const, value: { runId: 'r1', requested: true } }),
+      },
+    })
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(ctx.uiConversation.events.entries().map(entry => entry.kind)).toEqual(['a2ui-surface'])

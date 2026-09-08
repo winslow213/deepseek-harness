@@ -106,7 +106,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     ? <A2uiCanvasPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} />
     : <A2uiFormPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} />
 
-  const active = run.runId !== null
+  const active = run.runId !== null || run.error !== null
   return (
     <>
       {panel}
