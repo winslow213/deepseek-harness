@@ -111,7 +111,7 @@ Sources: [`packages/core/session/src/types.ts:385`](../packages/core/session/src
 'a2ui/surface': A2uiSurfaceData
 ```
 
-Source: [`packages/web/tool-a2ui-surface/src/types.ts:113`](../packages/web/tool-a2ui-surface/src/types.ts)
+Source: [`packages/web/tool-a2ui-surface/src/types.ts:240`](../packages/web/tool-a2ui-surface/src/types.ts)
 
 ### `agent/*`
 
