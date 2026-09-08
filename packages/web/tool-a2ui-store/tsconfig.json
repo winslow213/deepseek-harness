@@ -32,6 +32,9 @@
     },
     {
       "path": "../../web/tool-a2ui-surface"
+    },
+    {
+      "path": "../../shell/shell"
     }
   ]
 }

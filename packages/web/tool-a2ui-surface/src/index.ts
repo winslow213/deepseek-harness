@@ -158,6 +158,22 @@ function toA2uiActions(rawActions: readonly A2uiAction[]): A2uiAction[] {
       if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
       seen.add(id)
       actions.push({ id, label, execution: 'model', tool, instruction })
+    } else if (execution === 'command') {
+      const command = action.command?.trim() ?? ''
+      const timeoutMs = action.timeoutMs
+      if (command.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: a \`command\` action must carry a \`command\``)
+      if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+        throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`timeoutMs\` must be a positive number`)
+      }
+      if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
+      seen.add(id)
+      actions.push({
+        id,
+        label,
+        execution: 'command',
+        command,
+        ...timeoutMs === undefined ? {} : { timeoutMs },
+      })
     } else {
       if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
       seen.add(id)
@@ -380,10 +396,12 @@ export function apply(ctx: Context, config: Config): void {
               properties: {
                 id: { type: 'string', required: true, description: 'Stable identity the action trigger payload carries.' },
                 label: { type: 'string', required: true, description: 'Button label.' },
-                execution: { type: 'string', enum: ['local', 'model'], description: 'Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`.' },
+                execution: { type: 'string', enum: ['local', 'model', 'command'], description: 'Execution mode; defaults to `model`. `local` runs in the browser with no model call, `model` invokes `tool`, `command` runs `command` on the harness host.' },
                 tool: { type: 'string', description: 'Tool name the model invokes when the action is triggered (required for `model` mode).' },
                 instruction: { type: 'string', description: 'What invoking the tool accomplishes; the model uses this to form the call (required for `model` mode).' },
                 result: { type: 'string', description: 'Expression over the collected values shown after a `local` action runs.' },
+                command: { type: 'string', description: 'Shell command template with `{fieldName}` placeholders filled from the collected values (required for `command` mode).' },
+                timeoutMs: { type: 'number', description: 'Run bound in milliseconds for a `command` action; absent uses the host shell default and cap.' },
               },
             },
           },

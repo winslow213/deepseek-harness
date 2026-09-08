@@ -16,13 +16,20 @@ import { canonicalizeA2uiPage, type A2uiPageInput } from '@deepseek-ai/dsh-tool-
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ensureA2uiToolsDir, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
 import type { A2uiToolRecord } from './store.ts'
-import { A2uiStoreController } from './remote.ts'
+import { A2uiStoreController, A2uiRunController } from './remote.ts'
+import { ShellA2uiRun, type A2uiRun } from './run.ts'
 
 export type { A2uiToolRecord } from './store.ts'
 export { A2UI_TOOLS_DIR, isSafeA2uiToolName, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
-export { A2uiStoreController } from './remote.ts'
+export type { A2uiRun, A2uiRunHandle } from './run.ts'
+export { fillA2uiCommand } from './run.ts'
+export { A2uiStoreController, A2uiRunController } from './remote.ts'
 export type {
+  A2uiRunReadRequest, A2uiRunReadValue,
+  A2uiRunStartRequest, A2uiRunStartValue,
+  A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
+  A2uiRunFieldValues,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
 } from './types.ts'
 
@@ -35,6 +42,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The A2UI tool store capability: local persistence for saved pages. */
     a2uiStore: A2uiStore
+    /** The A2UI command-run capability: start/read/stop `command` actions over the composed shell service. */
+    a2uiRun: A2uiRun
   }
 }
 
@@ -95,6 +104,7 @@ export function apply(ctx: Context, config: Config): void {
   const dir = resolveA2uiToolsDir(config.dir)
   const store = new FileA2uiStore(dir)
   ctx.provide('a2uiStore', store)
+  ctx.provide('a2uiRun', new ShellA2uiRun(ctx))
   void ensureA2uiToolsDir(dir).catch(() => {
     // The first save also creates the directory; a boot-time mkdir failure
     // here must not crash the harness for a directory the next write creates.
@@ -103,6 +113,8 @@ export function apply(ctx: Context, config: Config): void {
   // and re-open saved tools; its services (`a2uiStore`, `agents`, `typert`) are
   // base-plane, so the controller mounts beside the capability.
   ctx.plugin(A2uiStoreController)
+  // The `a2uiRun` namespace drives `command` actions from the page's opener.
+  ctx.plugin(A2uiRunController)
 
   ctx.tools.register(defineTool({
     name: 'a2ui_export',

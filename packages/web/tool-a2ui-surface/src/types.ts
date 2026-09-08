@@ -81,13 +81,18 @@ export type A2uiExpression = string
  * - `model`: the browser serializes the collected values as an ordinary
  *   `user/message` carrying the action id, and the model invokes
  *   {@link A2uiAction.tool} with those values as arguments.
+ * - `command`: the browser asks the opener to run {@link A2uiAction.command}
+ *   on the harness host (a `{field}`-template command over the collected
+ *   values) and shows the produced output in the page. No model round-trip;
+ *   the harness shell executes the command with the composed policy.
  */
-export type A2uiExecutionMode = 'local' | 'model'
+export type A2uiExecutionMode = 'local' | 'model' | 'command'
 
 /**
  * One declarative action rendered as a button beside the submit control. The
  * {@link A2uiAction.execution} mode decides whether the click is resolved in
- * the browser (`local`) or routed to the model (`model`).
+ * the browser (`local`), routed to the model (`model`), or run on the harness
+ * host (`command`).
  */
 export interface A2uiAction {
   /** Stable identity the action trigger payload carries. */
@@ -96,7 +101,8 @@ export interface A2uiAction {
   readonly label: string
   /**
    * Execution mode; defaults to `model` when absent. `local` never contacts
-   * the model, `model` routes the collected values to the model.
+   * the model, `model` routes the collected values to the model, and
+   * `command` runs {@link A2uiAction.command} on the harness host.
    */
   readonly execution?: A2uiExecutionMode
   /** Tool name the model invokes when the action is triggered in `model` mode. */
@@ -109,6 +115,18 @@ export interface A2uiAction {
    * `execution` is `local`.
    */
   readonly result?: string
+  /**
+   * `command`-mode template: a shell command with `{fieldName}` placeholders
+   * that the collected field values fill in before the harness host runs it.
+   * Only meaningful when `execution` is `command`; a command action without
+   * one is rejected at canonicalization.
+   */
+  readonly command?: string
+  /**
+   * `command`-mode run bound in milliseconds; absent uses the host shell
+   * default and cap. Only meaningful when `execution` is `command`.
+   */
+  readonly timeoutMs?: number
 }
 
 /** The two page kinds `a2ui_surface` can render: a fillable form or a draggable node canvas. */
