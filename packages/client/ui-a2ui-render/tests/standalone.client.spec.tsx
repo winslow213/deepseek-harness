@@ -90,4 +90,31 @@ describe('renderA2uiPopup', () => {
     const pane = root.querySelector('[data-a2ui-console]')!
     expect(pane.textContent).toContain('no shell mounted')
   })
+
+  it('writes a script outcome back into a declared field via the action write map', () => {
+    const { sent, root, opener } = harness()
+    const withWrite: A2uiFormPage = {
+      kind: 'form',
+      title: 'Write Demo',
+      fields: [
+        { name: 'note', label: 'Note', type: 'text' },
+        { name: 'summary', label: 'Summary', type: 'text' },
+      ],
+      actions: [{
+        id: 'go', label: 'Run', execution: 'script', program: 'return { text: "hello" }', binds: [],
+        write: [{ field: 'note', from: 'value.text' }],
+      }],
+    }
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: withWrite }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: withWrite }, opener)
+
+    const run = root.querySelector('button')!
+    act(() => { run.click() })
+    expect(sent.some(m => m.type === 'a2ui/runScript')).toBe(true)
+
+    // The opener returns the completion value; the note field should take it.
+    sendFromOpener({ type: 'a2ui/scriptResult', value: { text: 'hello' }, ok: true }, opener)
+    const note = root.querySelector('input[name="note"]') as HTMLInputElement | null
+    expect(note?.value).toBe('hello')
+  })
 })

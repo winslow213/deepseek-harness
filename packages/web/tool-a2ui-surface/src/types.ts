@@ -141,6 +141,14 @@ export interface A2uiAction {
    * Only meaningful when `execution` is `script`.
    */
   readonly binds?: readonly string[]
+  /**
+   * Write-back from a completed `script`/`command` action's outcome into page
+   * field values. Each entry names a target field and a dotted selector into
+   * the outcome — `value` addresses the whole JSON completion, `value.a.b` a
+   * nested member; for `command`, `value.output` and `value.exitCode`. Absent
+   * means the outcome is only displayed.
+   */
+  readonly write?: readonly { readonly field: string; readonly from: string }[]
 }
 
 /** The two page kinds `a2ui_surface` can render: a fillable form or a draggable node canvas. */

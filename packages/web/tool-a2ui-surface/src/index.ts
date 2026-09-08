@@ -185,12 +185,23 @@ function toA2uiActions(rawActions: readonly A2uiAction[]): A2uiAction[] {
       }
       if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
       seen.add(id)
+      const write = action.write
+      if (write !== undefined) {
+        for (const entry of write) {
+          const field = entry.field.trim()
+          const from = entry.from.trim()
+          if (field.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`write\` field must be non-empty`)
+          if (from.length === 0) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`write\` selector for ${JSON.stringify(field)} must be non-empty`)
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) throw new Error(`invalid a2ui action ${JSON.stringify(id)}: \`write\` field ${JSON.stringify(field)} must be a field identifier`)
+        }
+      }
       actions.push({
         id,
         label,
         execution: 'script',
         program,
         ...binds.length === 0 ? {} : { binds: [...binds] },
+        ...write === undefined ? {} : { write: write.map(e => ({ field: e.field.trim(), from: e.from.trim() })) },
       })
     } else {
       if (seen.has(id)) throw new Error(`invalid a2ui page: duplicate action id ${JSON.stringify(id)}`)
@@ -422,6 +433,7 @@ export function apply(ctx: Context, config: Config): void {
                 timeoutMs: { type: 'number', description: 'Run bound in milliseconds for a `command` action; absent uses the host shell default and cap.' },
                 program: { type: 'string', description: 'Async program body run on the host controlled runtime when the action is triggered (required for `script` mode). The body calls granted `a2ui.*` bindings and returns a JSON value.' },
                 binds: { type: 'array', description: 'Granted `a2ui.*` binding member names for a `script` action (`fetch`, `text`).', items: { type: 'string' } },
+                write: { type: 'array', description: 'Write-back entries applied after a `script`/`command` action completes: each names a target `field` and a dotted selector `from` into the outcome JSON (`value` or `value.<path>`).', items: { type: 'object', additionalProperties: false, properties: { field: { type: 'string', required: true }, from: { type: 'string', required: true } } } },
               },
             },
           },

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { A2uiAction, A2uiField, A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
   A2uiChrome, type A2uiPageProps, type A2uiTranslate, type FormError,
@@ -10,10 +10,17 @@ import css from './A2uiPanel.module.css'
 export interface A2uiFormPanelProps extends Omit<A2uiPageProps, 'page'> {
   /** The narrowed form page this renderer draws. */
   readonly page: A2uiFormPage
+  /**
+   * An optional external value write: when the host resolves a `command`/
+   * `script` action and wants to write its outcome into a form field, it
+   * supplies a fresh patch (a new object identity each write). The panel
+   * applies it to the named field once and clears it.
+   */
+  readonly patch?: { readonly name: string; readonly value: FieldValue } | null
 }
 
 /** One collected field value: the exact type the field widget produces. */
-type FieldValue = string | number | boolean
+export type FieldValue = string | number | boolean
 
 /** All collected field values keyed by stable field `name`. */
 type FormValues = Record<string, FieldValue>
@@ -151,10 +158,22 @@ function FieldControl({ field, value, onChange }: {
 }
 
 /** Render one model-authored `form` page as a native, fillable, submittable form. */
-export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction }: A2uiFormPanelProps) {
+export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, patch }: A2uiFormPanelProps) {
   const [values, setValues] = useState<FormValues>(() => Object.fromEntries(
     page.fields.filter(field => field.compute === undefined).map(field => [field.name, initialValue(field)]),
   ))
+  // The last external patch the host applied (by object identity), so the same
+  // patch value never re-applies on a re-render that did not change it.
+  const appliedPatchRef = useRef<{ readonly name: string; readonly value: FieldValue } | null>(null)
+  useEffect(() => {
+    if (patch === null || patch === undefined) return
+    if (appliedPatchRef.current === patch) return
+    appliedPatchRef.current = patch
+    const target = page.fields.find(field => field.name === patch.name)
+    if (target !== undefined && target.compute === undefined) {
+      setValues(current => ({ ...current, [patch.name]: patch.value }))
+    }
+  }, [patch, page.fields])
   const [error, setError] = useState<FormError | null>(null)
   const [localResult, setLocalResult] = useState<string | null>(null)
 

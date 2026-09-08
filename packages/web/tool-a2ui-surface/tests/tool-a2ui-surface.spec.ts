@@ -289,6 +289,38 @@ describe('dsh-tool-a2ui-surface', () => {
   })
 
 
+  describe('script write-back canonicalization', () => {
+    it('carries a write entry trimmed on both sides', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [{ name: 'out', label: 'Out', type: 'text' }],
+        actions: [{ id: 's', label: 'Script', execution: 'script', program: 'return { x: 1 }', binds: [],
+          write: [{ field: ' out ', from: ' value.x ' }] }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({
+        write: [{ field: 'out', from: 'value.x' }],
+      })
+    })
+
+    it('rejects a write entry whose field is not an identifier', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [],
+        actions: [{ id: 's', label: 'Script', execution: 'script', program: 'x',
+          write: [{ field: 'not a name', from: 'value' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/write` field .* must be a field identifier/)
+    })
+
+    it('rejects a write entry with an empty selector', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [],
+        actions: [{ id: 's', label: 'Script', execution: 'script', program: 'x',
+          write: [{ field: 'a', from: '  ' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/selector/)
+    })
+  })
+
   describe('command actions canonicalization', () => {
     it('canonicalizes a command action with its command and optional timeout', () => {
       const raw = {

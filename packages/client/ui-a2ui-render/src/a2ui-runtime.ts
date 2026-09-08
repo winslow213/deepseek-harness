@@ -185,3 +185,26 @@ export function reducePopupState(state: A2uiPopupState, event: A2uiPopupAction):
 
 /** The opener messages the popup posts; the dispatch side mirrors `reducePopupState`. */
 export type A2uiDispatchMessage = A2uiPopupMessage | { readonly type: 'a2ui/ack-sent' }
+
+/** One JSON-ish value a selector may traverse. */
+type Selectable = unknown
+
+/**
+ * Resolve a dotted selector against an outcome value. `value` addresses the
+ * whole outcome; `value.a.b` a nested member. Returns `undefined` when the
+ * path does not exist or a segment is not an object/array.
+ * @param outcome - the outcome value (script completion or command summary).
+ * @param selector - the dotted path, starting at the root name (`value`).
+ * @returns the addressed member, or `undefined` when absent.
+ */
+export function selectOutcome(outcome: Selectable, selector: string): unknown {
+  if (selector === 'value' || selector === '') return outcome
+  if (!selector.startsWith('value.')) return undefined
+  const segments = selector.slice('value.'.length).split('.')
+  let current: Selectable = outcome
+  for (const segment of segments) {
+    if (current === null || typeof current !== 'object') return undefined
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
+}

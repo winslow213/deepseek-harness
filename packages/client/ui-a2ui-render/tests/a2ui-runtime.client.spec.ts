@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  A2UI_POPUP_IDLE, invokeAction, reducePopupState,
+  A2UI_POPUP_IDLE, invokeAction, reducePopupState, selectOutcome,
   type A2uiPopupAction, type A2uiValues,
 } from '../src/a2ui-runtime.ts'
 
@@ -48,6 +48,23 @@ describe('invokeAction', () => {
     expect(inv.kind).toBe('script')
     if (inv.kind !== 'script') throw new Error('expected script')
     expect(inv.message).toMatchObject({ type: 'a2ui/runScript', surfaceId: SURFACE, action })
+  })
+})
+
+describe('selectOutcome', () => {
+  it('addresses the whole value and nested members by dotted path', () => {
+    const value = { status: 200, body: { title: 'Example', tags: ['a', 'b'] } }
+    expect(selectOutcome(value, 'value')).toBe(value)
+    expect(selectOutcome(value, 'value.status')).toBe(200)
+    expect(selectOutcome(value, 'value.body.title')).toBe('Example')
+    expect(selectOutcome(value, 'value.body.tags.1')).toBe('b')
+  })
+
+  it('returns undefined for a missing or mistyped segment', () => {
+    expect(selectOutcome({ a: 1 }, 'value.b.c')).toBeUndefined()
+    expect(selectOutcome(null, 'value.x')).toBeUndefined()
+    expect(selectOutcome('str', 'value.x')).toBeUndefined()
+    expect(selectOutcome({ a: 1 }, 'other')).toBeUndefined()
   })
 })
 

@@ -7,7 +7,7 @@
  * @module @deepseek-ai/dsh-client-ui-a2ui/standalone
  */
 
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { A2uiAction, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import { A2uiCanvasPanel } from './A2uiCanvasPanel.tsx'
@@ -15,7 +15,7 @@ import { A2uiFormPanel } from './A2uiFormPanel.tsx'
 import type { A2uiTranslate } from './a2ui-chrome.tsx'
 import { evaluateA2uiExpression } from './a2ui-expression.ts'
 import {
-  A2UI_POPUP_IDLE, invokeAction, reducePopupState,
+  A2UI_POPUP_IDLE, invokeAction, reducePopupState, selectOutcome,
   type A2uiExpressionEvaluator, type A2uiValues,
 } from './a2ui-runtime.ts'
 import type { A2uiOpenerMessage, A2uiPopupMessage } from './a2ui-wire.ts'
@@ -66,6 +66,9 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
 }) {
   const [state, dispatch] = useReducer(reducePopupState, A2UI_POPUP_IDLE)
   const { busy, run, localResult, scriptResult, scriptError } = state
+  const [patch, setPatch] = useState<{ name: string; value: string | number | boolean } | null>(null)
+  // The action whose outcome is still pending a possible write-back.
+  const pendingActionRef = useRef<A2uiAction | null>(null)
   const post = useCallback((message: A2uiPopupMessage): void => {
     opener.postMessage(message, location.origin)
   }, [opener])
@@ -87,9 +90,11 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         post(invocation.message)
         break
       case 'script':
+        pendingActionRef.current = action
+        dispatch({ type: 'submit-sent' })
+        post(invocation.message)
+        break
       case 'model':
-        // The opener answers with scriptResult/scriptFailed (script) or an
-        // ack (model); both mark the popup busy until the answer arrives.
         dispatch({ type: 'submit-sent' })
         post(invocation.message)
         break
@@ -128,6 +133,16 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         case 'a2ui/scriptResult': {
           const text = data.value === undefined ? '(no value)' : JSON.stringify(data.value)
           dispatch({ type: 'script-result', text })
+          const action = pendingActionRef.current
+          const write = action?.write?.[0]
+          if (write !== undefined && data.value !== undefined) {
+            const selected = selectOutcome(data.value, write.from)
+            if (typeof selected === 'string' || typeof selected === 'number' || typeof selected === 'boolean') {
+              // A fresh object identity each time lets the panel apply it once.
+              setPatch({ name: write.field, value: selected })
+            }
+          }
+          pendingActionRef.current = null
           break
         }
         case 'a2ui/scriptFailed':
@@ -141,7 +156,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
 
   const panel = page.kind === 'canvas'
     ? <A2uiCanvasPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} />
-    : <A2uiFormPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} />
+    : <A2uiFormPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit} onAction={onAction} patch={patch} />
 
   const active = run.runId !== null || run.error !== null
   return (
