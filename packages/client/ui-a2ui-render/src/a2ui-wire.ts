@@ -16,6 +16,7 @@ export type A2uiPopupMessage =
   | { readonly type: 'a2ui/runScript'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
   | { readonly type: 'a2ui/data-request'; readonly surfaceId: string; readonly source: string; readonly args: Record<string, unknown> }
   | { readonly type: 'a2ui/runStop'; readonly runId: string }
+  | { readonly type: 'a2ui/stop'; readonly surfaceId: string; readonly runId: string | null }
 
 /** Opener → popup message: the page to render, acknowledgements, source data, command-run progress, or a live-result update. */
 export type A2uiOpenerMessage =

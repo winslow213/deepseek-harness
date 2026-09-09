@@ -170,4 +170,56 @@ describe('renderA2uiPopup', () => {
     const select = root.querySelector('select[name="device"]') as HTMLSelectElement | null
     expect(select?.options.length ?? 0).toBe(0)
   })
+
+  it('runs a local step list: patches fields, re-requests a source, and posts stop', () => {
+    const { sent, root, opener } = harness()
+    const steps: A2uiFormPage = {
+      kind: 'form',
+      title: 'Steps',
+      fields: [
+        { name: 'a', label: 'A', type: 'text' },
+        { name: 'dev', label: 'Dev', type: 'select', source: 'devices' },
+      ],
+      actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [
+        { kind: 'set', field: 'a', value: "'hello'" },
+        { kind: 'append', field: 'a', value: "' world'" },
+        { kind: 'refresh', source: 'devices' },
+        { kind: 'stop' },
+      ] }],
+    }
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: steps }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: steps }, opener)
+
+    const button = root.querySelector('button')!
+    act(() => { button.click() })
+
+    expect((root.querySelector('input[name="a"]') as HTMLInputElement).value).toBe('hello world')
+    expect(sent).toContainEqual({ type: 'a2ui/data-request', surfaceId: 's1', source: 'devices', args: {} })
+    expect(sent).toContainEqual({ type: 'a2ui/stop', surfaceId: 's1', runId: null })
+  })
+
+  it('posts a stop step with the active runId when a command run is in flight', () => {
+    const { sent, root, opener } = harness()
+    const stopPage: A2uiFormPage = {
+      kind: 'form',
+      title: 'Stop',
+      fields: [{ name: 'note', label: 'Note', type: 'text' }],
+      actions: [
+        { id: 'run', label: 'Run', execution: 'command', command: 'echo {note}' },
+        { id: 'halt', label: 'Halt', execution: 'local', steps: [{ kind: 'stop' }] },
+        { id: 'plain', label: 'Plain', execution: 'local' },
+      ],
+    }
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: stopPage }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: stopPage }, opener)
+
+    // Start a command run, then click the stop-step local action.
+    const runButton = root.querySelectorAll('button')[0]!
+    act(() => { runButton.click() })
+    sendFromOpener({ type: 'a2ui/runStarted', runId: 'r9', ok: true }, opener)
+
+    const haltButton = root.querySelectorAll('button')[1]!
+    act(() => { haltButton.click() })
+    expect(sent).toContainEqual({ type: 'a2ui/stop', surfaceId: 's1', runId: 'r9' })
+  })
 })

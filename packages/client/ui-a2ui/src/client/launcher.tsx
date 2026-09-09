@@ -168,6 +168,14 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
       } else if (data.type === 'a2ui/runStop') {
         const runBridge = bridge
         if (runBridge !== undefined) void stopRun(runBridge, data.runId)
+      } else if (data.type === 'a2ui/stop') {
+        // A `local` action's stop step terminates the correlated command run
+        // (when one is active). A null runId means "stop the model job", which
+        // needs a host-side live stop and is deferred.
+        const runBridge = bridge
+        if (runBridge !== undefined && data.runId !== null) {
+          void stopRun(runBridge, data.runId)
+        }
       }
     }
 

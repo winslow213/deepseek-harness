@@ -12,11 +12,13 @@ export interface A2uiFormPanelProps extends Omit<A2uiPageProps, 'page'> {
   readonly page: A2uiFormPage
   /**
    * An optional external value write: when the host resolves a `command`/
-   * `script` action and wants to write its outcome into a form field, it
-   * supplies a fresh patch (a new object identity each write). The panel
-   * applies it to the named field once and clears it.
+   * `script` action and wants to write its outcome into a form field, or a
+   * `local` action's step list mutates several fields at once, it supplies a
+   * fresh patch (a new object identity each write) mapping field name to
+   * value. The panel applies every entry to its named field once and clears
+   * it.
    */
-  readonly patch?: { readonly name: string; readonly value: FieldValue } | null
+  readonly patch?: Readonly<Record<string, FieldValue>> | null
   /**
    * Runtime option sets keyed by `select` field name, overriding static
    * `field.options` for fields whose options come from an `optionsFrom`
@@ -172,15 +174,21 @@ export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, pa
   ))
   // The last external patch the host applied (by object identity), so the same
   // patch value never re-applies on a re-render that did not change it.
-  const appliedPatchRef = useRef<{ readonly name: string; readonly value: FieldValue } | null>(null)
+  const appliedPatchRef = useRef<Readonly<Record<string, FieldValue>> | null>(null)
   useEffect(() => {
     if (patch === null || patch === undefined) return
     if (appliedPatchRef.current === patch) return
     appliedPatchRef.current = patch
-    const target = page.fields.find(field => field.name === patch.name)
-    if (target !== undefined && target.compute === undefined) {
-      setValues(current => ({ ...current, [patch.name]: patch.value }))
-    }
+    setValues((current) => {
+      let next = current
+      for (const [name, value] of Object.entries(patch)) {
+        const target = page.fields.find(field => field.name === name)
+        if (target !== undefined && target.compute === undefined) {
+          next = { ...next, [name]: value }
+        }
+      }
+      return next
+    })
   }, [patch, page.fields])
   const [error, setError] = useState<FormError | null>(null)
   const [localResult, setLocalResult] = useState<string | null>(null)
@@ -267,6 +275,14 @@ export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, pa
       return
     }
     if (action.execution === 'local') {
+      if (action.steps !== undefined && action.steps.length > 0) {
+        // A step list needs the opener (refresh/stop) and field writes, so
+        // delegate to the standalone host, which owns the popup channel and
+        // patches the resulting field values back through `patch`.
+        setError(null)
+        onAction(action, outcome.values)
+        return
+      }
       setError(null)
       setLocalResult(action.result === undefined || action.result.trim().length === 0
         ? t('action.localDone')

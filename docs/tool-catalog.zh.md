@@ -301,6 +301,41 @@
                 "type": "string",
                 "description": "Expression over the collected values shown after a `local` action runs."
               },
+              "steps": {
+                "type": "array",
+                "description": "Imperative step list a `local` action executes in order: `set` (assign a field an expression result), `append` (concatenate onto a field), `refresh` (reload a source), `stop` (terminate the correlated job).",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "description": "The step operation.",
+                      "enum": [
+                        "set",
+                        "append",
+                        "refresh",
+                        "stop"
+                      ]
+                    },
+                    "field": {
+                      "type": "string",
+                      "description": "Target form field name (required for `set`/`append`)."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "Restricted expression over the collected values whose result is assigned/concatenated (required for `set`/`append`)."
+                    },
+                    "source": {
+                      "type": "string",
+                      "description": "Host-backed source name to reload (required for `refresh`)."
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                }
+              },
               "command": {
                 "type": "string",
                 "description": "Shell command template with `{fieldName}` placeholders filled from the collected values (required for `command` mode)."

@@ -11,12 +11,12 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { A2uiAction, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import { A2uiCanvasPanel } from './A2uiCanvasPanel.tsx'
-import { A2uiFormPanel } from './A2uiFormPanel.tsx'
+import { A2uiFormPanel, type FieldValue } from './A2uiFormPanel.tsx'
 import type { A2uiTranslate } from './a2ui-chrome.tsx'
 import { evaluateA2uiExpression } from './a2ui-expression.ts'
 import {
   A2UI_POPUP_IDLE, completionToOptions, invokeAction, reducePopupState, selectOutcome,
-  type A2uiExpressionEvaluator, type A2uiResolvedOption, type A2uiValues,
+  type A2uiExpressionEvaluator, type A2uiResolvedOption, type A2uiResolvedStep, type A2uiValues,
 } from './a2ui-runtime.ts'
 import type { A2uiOpenerMessage, A2uiPopupMessage } from './a2ui-wire.ts'
 import { en, zh, type A2uiKey } from './locales.ts'
@@ -66,7 +66,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
 }) {
   const [state, dispatch] = useReducer(reducePopupState, A2UI_POPUP_IDLE)
   const { busy, run, live, localResult, scriptResult, scriptError } = state
-  const [patch, setPatch] = useState<{ name: string; value: string | number | boolean } | null>(null)
+  const [patch, setPatch] = useState<Readonly<Record<string, FieldValue>> | null>(null)
   const [optionSets, setOptionSets] = useState<Record<string, readonly A2uiResolvedOption[]>>({})
   // The action whose outcome is still pending a possible write-back.
   const pendingActionRef = useRef<A2uiAction | null>(null)
@@ -102,10 +102,32 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     post(message)
   }, [surfaceId, post])
 
+  // Execute one resolved local step list: field writes become a batch patch,
+  // `refresh` re-requests a source, and `stop` asks the opener to stop the run.
+  const runLocalSteps = useCallback((steps: readonly A2uiResolvedStep[]): void => {
+    const writes: Record<string, FieldValue> = {}
+    for (const step of steps) {
+      if (step.kind === 'set' || step.kind === 'append') {
+        writes[step.field] = step.value === null ? '' : step.value
+      } else if (step.kind === 'refresh') {
+        const message: A2uiPopupMessage = { type: 'a2ui/data-request', surfaceId, source: step.source, args: {} }
+        post(message)
+      } else {
+        const message: A2uiPopupMessage = { type: 'a2ui/stop', surfaceId, runId: run.runId }
+        post(message)
+      }
+    }
+    if (Object.keys(writes).length > 0) setPatch(writes)
+  }, [surfaceId, post, run.runId])
+
   const onAction = useCallback((action: A2uiAction, values: Record<string, unknown>): void => {
     const invocation = invokeAction(action, values as A2uiValues, surfaceId, evaluateExpression, t('action.localDone'))
     switch (invocation.kind) {
       case 'expr':
+        dispatch({ type: 'local-result', text: invocation.result })
+        break
+      case 'steps':
+        runLocalSteps(invocation.steps)
         dispatch({ type: 'local-result', text: invocation.result })
         break
       case 'command':
@@ -122,7 +144,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         post(invocation.message)
         break
     }
-  }, [surfaceId, post, t])
+  }, [surfaceId, post, t, runLocalSteps])
 
   const stopRun = useCallback((): void => {
     const current = state.run
@@ -212,7 +234,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
             const selected = selectOutcome(data.value, write.from)
             if (typeof selected === 'string' || typeof selected === 'number' || typeof selected === 'boolean') {
               // A fresh object identity each time lets the panel apply it once.
-              setPatch({ name: write.field, value: selected })
+              setPatch({ [write.field]: selected })
             }
           }
           pendingActionRef.current = null

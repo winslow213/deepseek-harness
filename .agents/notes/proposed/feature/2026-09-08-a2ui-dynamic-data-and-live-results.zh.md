@@ -22,7 +22,7 @@ A2UI 页面是一次性声明，浏览器只求值一遍。字段逻辑（`visib
 
 **2. 实时结果通道。** 已实现——见 [A2UI 实时结果流](../../implemented/feature/2026-09-09-a2ui-live-result-stream.zh.md)。已随附实现的 `a2ui/update` 事件携带 `{ surfaceId, phase, seq, delta?, totalBytes? }`；`command` action 从 `ctx.a2uiRun` 发出它，`model` action 的后台 job 经显式 `a2ui_attach_output` 绑定加独立 jobs reader 发出它——而非本提案所述由工具执行器复用单一 `readOutput` 游标，因为该游标属于 `job_output`。事件仅记录，因此本提案设想的 `ignorable: true` 标记不再需要（仅记录事件不带 surface 元数据，也无需版本提升）。
 
-**3. 脚本化 local actions。** 超出单个表达式的自定义逻辑，变成 `local` action 上的声明式**步骤列表**：`set`（给某字段赋值）、`append`（拼接到目标）、`refresh`（重新发起某数据源）、`stop`（终止关联的 job）。每个步骤是一条受限表达式或一个数据源名——与浏览器已经信任的求值器同一语法，由现有表单/画布宿主按序执行。任意 JavaScript 明确排除在范围外：页面绝不能运行模型生成的代码，只能执行渲染器能记录、能推理的声明操作。
+**3. 脚本化 local actions。** 已实现——见 [A2UI 脚本化本地动作](../../implemented/feature/2026-09-09-a2ui-scripted-local-actions.zh.md)。超出单个表达式的自定义逻辑，变成 `local` action 上的声明式**步骤列表**：`set`（给某字段赋值）、`append`（拼接到目标）、`refresh`（重新发起某数据源）、`stop`（终止关联的 job）。每个步骤是一条受限表达式或一个数据源名——与浏览器已经信任的求值器同一语法，由现有表单/画布宿主按序执行。任意 JavaScript 明确排除在范围外：页面绝不能运行模型生成的代码，只能执行渲染器能记录、能推理的声明操作。
 
 **呈现。** 当页面或 action 携带实时结果时，弹窗渲染一个控制台/日志面板：`delta` 事件到来时逐行追加，速率标签按 `totalBytes` 与经过时间显示，`stop` 映射到关联 job 的终止。该面板是对持久 `a2ui/update` 事件的可见 UI 投影；它绝不编造日志里不存在的内容。
 

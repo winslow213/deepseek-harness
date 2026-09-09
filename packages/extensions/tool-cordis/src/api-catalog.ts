@@ -3726,7 +3726,7 @@ export const EVENT_API: readonly EventApiEntry[] = [
 export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'A2uiAction',
-    declaration: 'export interface A2uiAction {\n    readonly id: string;\n    readonly label: string;\n    readonly execution?: A2uiExecutionMode;\n    readonly tool?: string;\n    readonly instruction?: string;\n    readonly result?: string;\n    readonly command?: string;\n    readonly timeoutMs?: number;\n    readonly program?: string;\n    readonly binds?: readonly string[];\n    readonly write?: readonly {\n        readonly field: string;\n        readonly from: string;\n    }[];\n}',
+    declaration: 'export interface A2uiAction {\n    readonly id: string;\n    readonly label: string;\n    readonly execution?: A2uiExecutionMode;\n    readonly tool?: string;\n    readonly instruction?: string;\n    readonly result?: string;\n    readonly steps?: readonly A2uiStep[];\n    readonly command?: string;\n    readonly timeoutMs?: number;\n    readonly program?: string;\n    readonly binds?: readonly string[];\n    readonly write?: readonly {\n        readonly field: string;\n        readonly from: string;\n    }[];\n}',
   },
   {
     name: 'A2uiCanvasEdge',
@@ -3847,6 +3847,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'A2uiScriptJson',
     declaration: 'export type A2uiScriptJson = null | boolean | number | string | readonly A2uiScriptJson[] | {\n    readonly [key: string]: A2uiScriptJson;\n};',
+  },
+  {
+    name: 'A2uiStep',
+    declaration: 'export type A2uiStep = {\n    readonly kind: \'set\';\n    readonly field: string;\n    readonly value: string;\n} | {\n    readonly kind: \'append\';\n    readonly field: string;\n    readonly value: string;\n} | {\n    readonly kind: \'refresh\';\n    readonly source: string;\n} | {\n    readonly kind: \'stop\';\n};',
   },
   {
     name: 'A2uiStoreDeleteRequest',

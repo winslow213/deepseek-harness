@@ -11,7 +11,7 @@
  * plain function a unit test can drive.
  */
 
-import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiAction, A2uiStep } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import type { A2uiPopupMessage, A2uiRunState } from './a2ui-wire.ts'
 import { A2UI_RUN_IDLE } from './a2ui-wire.ts'
 import { A2UI_LIVE_IDLE, type A2uiLiveState } from './a2ui-wire.ts'
@@ -23,12 +23,25 @@ export type A2uiValue = string | number | boolean | null
 export type A2uiValues = Readonly<Record<string, A2uiValue>>
 
 /**
+ * One `local` action step after expression resolution. `set`/`append` carry
+ * the field's final value (an `append` already concatenated onto the prior
+ * value), so the renderer only writes it back; `refresh`/`stop` pass through
+ * as opener intents.
+ */
+export type A2uiResolvedStep =
+  | { readonly kind: 'set'; readonly field: string; readonly value: A2uiValue }
+  | { readonly kind: 'append'; readonly field: string; readonly value: A2uiValue }
+  | { readonly kind: 'refresh'; readonly source: string }
+  | { readonly kind: 'stop' }
+
+/**
  * What one action click means. The renderer performs the local side (running
  * the expression and showing its text) and posts the message side to the
  * opener; it never routes `command` and `model` differently beyond this.
  */
 export type A2uiInvocation =
   | { readonly kind: 'expr'; readonly result: string | null }
+  | { readonly kind: 'steps'; readonly steps: readonly A2uiResolvedStep[]; readonly result: string | null }
   | { readonly kind: 'command'; readonly message: A2uiPopupMessage }
   | { readonly kind: 'script'; readonly message: A2uiPopupMessage }
   | { readonly kind: 'model'; readonly message: A2uiPopupMessage }
@@ -60,12 +73,11 @@ export function invokeAction(
   const execution = action.execution ?? DEFAULT_EXECUTION
   switch (execution) {
     case 'local': {
-      const source = action.result
-      if (source === undefined || source.trim().length === 0) {
-        return { kind: 'expr', result: localDone }
+      const result = resolveLocalResult(action.result, values, localDone, evaluate)
+      if (action.steps === undefined || action.steps.length === 0) {
+        return { kind: 'expr', result }
       }
-      const evaluated = evaluate(source, values)
-      return { kind: 'expr', result: evaluated === null ? null : String(evaluated) }
+      return { kind: 'steps', steps: resolveLocalSteps(action.steps, values, evaluate), result }
     }
     case 'command': {
       const message: A2uiPopupMessage = {
@@ -96,6 +108,55 @@ export function invokeAction(
       return { kind: 'model', message }
     }
   }
+}
+
+/**
+ * Resolve the display text of a `local` action: the `result` expression (or
+ * literal) over the collected values, or the locale done label when absent.
+ * A `null` result renders as `null` so the renderer can clear the pane.
+ */
+function resolveLocalResult(
+  source: string | undefined,
+  values: A2uiValues,
+  localDone: string,
+  evaluate: A2uiExpressionEvaluator,
+): string | null {
+  if (source === undefined || source.trim().length === 0) return localDone
+  const evaluated = evaluate(source, values)
+  return evaluated === null ? null : String(evaluated)
+}
+
+/**
+ * Resolve a `local` action's step list in declaration order. `set`/`append`
+ * evaluate their expression against the working values (so a later step sees
+ * an earlier step's write) and collapse to the field's final value; `refresh`
+ * and `stop` pass through as opener intents.
+ */
+function resolveLocalSteps(
+  steps: readonly A2uiStep[],
+  values: A2uiValues,
+  evaluate: A2uiExpressionEvaluator,
+): A2uiResolvedStep[] {
+  const working: Record<string, A2uiValue> = { ...values }
+  const resolved: A2uiResolvedStep[] = []
+  for (const step of steps) {
+    if (step.kind === 'set' || step.kind === 'append') {
+      const value = evaluate(step.value, working)
+      if (step.kind === 'set') {
+        working[step.field] = value
+        resolved.push({ kind: 'set', field: step.field, value })
+      } else {
+        const next = String(working[step.field] ?? '') + String(value ?? '')
+        working[step.field] = next
+        resolved.push({ kind: 'append', field: step.field, value: next })
+      }
+    } else if (step.kind === 'refresh') {
+      resolved.push({ kind: 'refresh', source: step.source })
+    } else {
+      resolved.push({ kind: 'stop' })
+    }
+  }
+  return resolved
 }
 
 /**

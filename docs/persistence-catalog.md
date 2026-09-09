@@ -111,7 +111,7 @@ Sources: [`packages/core/session/src/types.ts:385`](../packages/core/session/src
 'a2ui/surface': A2uiSurfaceData
 ```
 
-Source: [`packages/web/tool-a2ui-surface/src/types.ts:249`](../packages/web/tool-a2ui-surface/src/types.ts)
+Source: [`packages/web/tool-a2ui-surface/src/types.ts:276`](../packages/web/tool-a2ui-surface/src/types.ts)
 
 <a id="a2uiupdate--log-only"></a>
 

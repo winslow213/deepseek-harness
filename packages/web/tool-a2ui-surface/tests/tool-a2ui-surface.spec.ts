@@ -469,6 +469,93 @@ describe('dsh-tool-a2ui-surface', () => {
     })
   })
 
+  describe('local action steps canonicalization', () => {
+    it('drops an absent step list from a plain local action', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [{ name: 'a', label: 'A', type: 'text' }],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', result: '{a}' }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({ result: '{a}' })
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).not.toHaveProperty('steps')
+    })
+
+    it('canonicalizes a local action step list in order, trimmed on field/value/source', () => {
+      const raw = {
+        kind: 'form',
+        title: 'S',
+        fields: [{ name: 'a', label: 'A', type: 'text' }, { name: 'dev', label: 'Dev', type: 'select', source: 'devices' }],
+        actions: [{ id: 's', label: 'Steps', execution: 'local',
+          steps: [
+            { kind: 'set', field: ' a ', value: ' 1 ' },
+            { kind: 'append', field: 'a', value: "'x'" },
+            { kind: 'refresh', source: ' devices ' },
+            { kind: 'stop' },
+          ] }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({
+        execution: 'local',
+        steps: [
+          { kind: 'set', field: 'a', value: '1' },
+          { kind: 'append', field: 'a', value: "'x'" },
+          { kind: 'refresh', source: 'devices' },
+          { kind: 'stop' },
+        ],
+      })
+    })
+
+    it('rejects a set/append step whose field is not an identifier or whose value is empty', () => {
+      const badField = {
+        kind: 'form', title: 'S', fields: [{ name: 'a', label: 'A', type: 'text' }],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'set', field: 'not a name', value: '1' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(badField as unknown as A2uiPageInput)).toThrow(/must be a field identifier/)
+      const emptyValue = {
+        kind: 'form', title: 'S', fields: [{ name: 'a', label: 'A', type: 'text' }],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'set', field: 'a', value: '  ' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(emptyValue as unknown as A2uiPageInput)).toThrow(/non-empty `value` expression/)
+    })
+
+    it('rejects an empty refresh source and an unknown step kind', () => {
+      const emptySource = {
+        kind: 'form', title: 'S', fields: [],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'refresh', source: ' ' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(emptySource as unknown as A2uiPageInput)).toThrow(/non-empty `source`/)
+      const unknownKind = {
+        kind: 'form', title: 'S', fields: [],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'dance' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(unknownKind as unknown as A2uiPageInput)).toThrow(/unknown step kind/)
+    })
+
+    it('rejects a set/append step referencing an unknown field', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [{ name: 'a', label: 'A', type: 'text' }],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'set', field: 'nope', value: '1' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/references unknown field/)
+    })
+
+    it('rejects a refresh step referencing an unknown source', () => {
+      const raw = {
+        kind: 'form', title: 'S', fields: [{ name: 'dev', label: 'Dev', type: 'select', source: 'devices' }],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'refresh', source: 'nope' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/references unknown source/)
+    })
+
+    it('rejects a field-mutating step on a canvas page (no fields)', () => {
+      const raw = {
+        kind: 'canvas', title: 'C', nodes: [{ id: 'a', label: 'A', position: { x: 0, y: 0 } }], edges: [],
+        actions: [{ id: 's', label: 'Steps', execution: 'local', steps: [{ kind: 'set', field: 'a', value: '1' }] }],
+      }
+      expect(() => canonicalizeA2uiPage(raw as unknown as A2uiPageInput)).toThrow(/references unknown field/)
+    })
+  })
+
   it('has the namespace-plugin export shape (no stray default) so the Loader keeps name/inject/apply', () => {
     // A default export would make Loader unwrap only apply and drop `inject`.
     expect('default' in tool).toBe(false)

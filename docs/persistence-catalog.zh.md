@@ -113,7 +113,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'a2ui/surface': A2uiSurfaceData
 ```
 
-来源：[`packages/web/tool-a2ui-surface/src/types.ts:249`](../packages/web/tool-a2ui-surface/src/types.ts)
+来源：[`packages/web/tool-a2ui-surface/src/types.ts:276`](../packages/web/tool-a2ui-surface/src/types.ts)
 
 <a id="a2uiupdate--log-only"></a>
 

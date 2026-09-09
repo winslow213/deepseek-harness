@@ -50,6 +50,41 @@ describe('invokeAction', () => {
     if (inv.kind !== 'script') throw new Error('expected script')
     expect(inv.message).toMatchObject({ type: 'a2ui/runScript', surfaceId: SURFACE, action })
   })
+
+  it('resolves a local step list in order, with later steps seeing earlier writes', () => {
+    const action: A2uiAction = {
+      id: 's', label: 'Steps', execution: 'local',
+      steps: [
+        { kind: 'set', field: 'a', value: '1' },
+        { kind: 'append', field: 'a', value: '-{a}' },
+        { kind: 'refresh', source: 'devices' },
+        { kind: 'stop' },
+      ],
+    }
+    const inv = invokeAction(action, { a: '0' }, SURFACE, evaluate, 'Done')
+    expect(inv).toEqual({
+      kind: 'steps',
+      result: 'Done',
+      steps: [
+        { kind: 'set', field: 'a', value: '1' },
+        { kind: 'append', field: 'a', value: '1-1' },
+        { kind: 'refresh', source: 'devices' },
+        { kind: 'stop' },
+      ],
+    })
+  })
+
+  it('keeps the result text when a local step list also carries a result', () => {
+    const action: A2uiAction = {
+      id: 's', label: 'Steps', execution: 'local', result: 'done-{a}',
+      steps: [{ kind: 'set', field: 'a', value: '9' }],
+    }
+    const inv = invokeAction(action, { a: '0' }, SURFACE, evaluate, 'Done')
+    expect(inv.kind).toBe('steps')
+    if (inv.kind !== 'steps') throw new Error('expected steps')
+    expect(inv.result).toBe('done-0')
+    expect(inv.steps).toEqual([{ kind: 'set', field: 'a', value: '9' }])
+  })
 })
 
 describe('selectOutcome', () => {

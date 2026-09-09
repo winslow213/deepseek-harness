@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {
-  A2uiAction, A2uiCanvasEdge, A2uiCanvasNode, A2uiCanvasPage, A2uiField, A2uiPage, A2uiPageKind,
+  A2uiAction, A2uiCanvasEdge, A2uiCanvasNode, A2uiCanvasPage, A2uiField, A2uiPage, A2uiPageKind, A2uiStep,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -131,6 +131,7 @@ export function canonicalizeA2uiPage(raw: A2uiPageInput): A2uiPage {
         throw new Error(`invalid a2ui form page: \`optionsFrom\` on field ${JSON.stringify(field.name)} must reference a \`script\` action`)
       }
     }
+    validateLocalSteps(actions, fields)
     return {
       kind: 'form',
       title,
@@ -144,6 +145,8 @@ export function canonicalizeA2uiPage(raw: A2uiPageInput): A2uiPage {
   if (raw.fields !== undefined) {
     throw new Error('invalid a2ui canvas page: a `canvas` page must not carry `fields`')
   }
+  // A canvas page has no fields or sources, so only a `stop` step is valid.
+  validateLocalSteps(actions, [])
   return {
     kind: 'canvas',
     title,
@@ -152,6 +155,32 @@ export function canonicalizeA2uiPage(raw: A2uiPageInput): A2uiPage {
     ...raw.submitLabel === undefined ? {} : { submitLabel: raw.submitLabel },
     ...raw.instruction === undefined ? {} : { instruction: raw.instruction },
     ...actions.length === 0 ? {} : { actions },
+  }
+}
+
+/**
+ * Cross-reference the `local` action steps against the page's fields and
+ * sources so a step that names a missing referent fails loud at
+ * canonicalization, never at runtime halfway through a page.
+ * @param actions - the canonical actions.
+ * @param fields - the canonical form fields (empty for a canvas page).
+ */
+function validateLocalSteps(actions: readonly A2uiAction[], fields: readonly A2uiField[]): void {
+  const names = new Set(fields.map(field => field.name))
+  const sources = new Set(fields.filter(field => field.source !== undefined).map(field => field.source as string))
+  for (const action of actions) {
+    if (action.execution !== 'local' || action.steps === undefined) continue
+    for (const step of action.steps) {
+      if (step.kind === 'set' || step.kind === 'append') {
+        if (!names.has(step.field)) {
+          throw new Error(`invalid a2ui page: a \`${step.kind}\` step on action ${JSON.stringify(action.id)} references unknown field ${JSON.stringify(step.field)}`)
+        }
+      } else if (step.kind === 'refresh') {
+        if (!sources.has(step.source)) {
+          throw new Error(`invalid a2ui page: a \`refresh\` step on action ${JSON.stringify(action.id)} references unknown source ${JSON.stringify(step.source)}`)
+        }
+      }
+    }
   }
 }
 
@@ -226,10 +255,40 @@ function toA2uiActions(rawActions: readonly A2uiAction[]): A2uiAction[] {
         label,
         execution: 'local',
         ...action.result === undefined || action.result.trim().length === 0 ? {} : { result: action.result.trim() },
+        ...action.steps === undefined || action.steps.length === 0 ? {} : { steps: toA2uiSteps(action.steps, id) },
       })
     }
   }
   return actions
+}
+
+/** Canonicalize one `local` action's step list, rejecting an unknown operation. */
+function toA2uiSteps(rawSteps: readonly A2uiStep[], actionId: string): A2uiStep[] {
+  const steps: A2uiStep[] = []
+  for (const step of rawSteps) {
+    if (step.kind === 'set' || step.kind === 'append') {
+      const field = step.field.trim()
+      const value = step.value.trim()
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) {
+        throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: a \`${step.kind}\` step field ${JSON.stringify(field)} must be a field identifier`)
+      }
+      if (value.length === 0) {
+        throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: a \`${step.kind}\` step must carry a non-empty \`value\` expression`)
+      }
+      steps.push({ kind: step.kind, field, value })
+    } else if (step.kind === 'refresh') {
+      const source = step.source.trim()
+      if (source.length === 0) {
+        throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: a \`refresh\` step must carry a non-empty \`source\``)
+      }
+      steps.push({ kind: 'refresh', source })
+    } else if (step.kind === 'stop') {
+      steps.push({ kind: 'stop' })
+    } else {
+      throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: unknown step kind ${JSON.stringify((step as { kind?: unknown }).kind)}`)
+    }
+  }
+  return steps
 }
 
 /** Trim one model-supplied expression, rejecting blank text. */
@@ -474,6 +533,12 @@ export function apply(ctx: Context, config: Config): void {
                 tool: { type: 'string', description: 'Tool name the model invokes when the action is triggered (required for `model` mode).' },
                 instruction: { type: 'string', description: 'What invoking the tool accomplishes; the model uses this to form the call (required for `model` mode).' },
                 result: { type: 'string', description: 'Expression over the collected values shown after a `local` action runs.' },
+                steps: { type: 'array', description: 'Imperative step list a `local` action executes in order: `set` (assign a field an expression result), `append` (concatenate onto a field), `refresh` (reload a source), `stop` (terminate the correlated job).', items: { type: 'object', additionalProperties: false, properties: {
+                  kind: { type: 'string', required: true, enum: ['set', 'append', 'refresh', 'stop'], description: 'The step operation.' },
+                  field: { type: 'string', description: 'Target form field name (required for `set`/`append`).' },
+                  value: { type: 'string', description: 'Restricted expression over the collected values whose result is assigned/concatenated (required for `set`/`append`).' },
+                  source: { type: 'string', description: 'Host-backed source name to reload (required for `refresh`).' },
+                } } },
                 command: { type: 'string', description: 'Shell command template with `{fieldName}` placeholders filled from the collected values (required for `command` mode).' },
                 timeoutMs: { type: 'number', description: 'Run bound in milliseconds for a `command` action; absent uses the host shell default and cap.' },
                 program: { type: 'string', description: 'Async program body run on the host controlled runtime when the action is triggered (required for `script` mode). The body calls granted `a2ui.*` bindings and returns a JSON value.' },
@@ -510,7 +575,11 @@ export function apply(ctx: Context, config: Config): void {
       }],
     },
     execute(args, exec) {
-      const page = canonicalizeA2uiPage(args.page)
+      // The schema enforces the step enum and `additionalProperties: false`,
+      // but schemastery cannot express a discriminated step union, so the
+      // tool-argument type is looser than the canonical `A2uiStep` union this
+      // cast narrows toward; canonicalization re-validates every field.
+      const page = canonicalizeA2uiPage(args.page as unknown as A2uiPageInput)
       if (!exec.agent) {
         // The surface is per-agent-session state; a non-agent caller (no
         // owning session) has nowhere to write it. Reject rather than no-op.

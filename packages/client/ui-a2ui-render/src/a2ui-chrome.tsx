@@ -32,6 +32,11 @@ export interface A2uiPageProps {
   onAction(action: A2uiAction, values: Record<string, unknown>): void
 }
 
+/** Whether a `local` action's step list terminates the correlated job. */
+function hasStopStep(action: A2uiAction): boolean {
+  return action.execution === 'local' && (action.steps?.some(step => step.kind === 'stop') ?? false)
+}
+
 /** Validation failure: a locale key with its parameter or a plain text message. */
 export type FormError =
   | { key: 'error.required'; name: string }
@@ -83,7 +88,10 @@ export function A2uiChrome({ page, error, busy, localResult, t, onAction, childr
             key={action.id}
             type="button"
             variant="outline"
-            disabled={busy}
+            // A `local` action carrying a `stop` step terminates the correlated
+            // job, so it must stay clickable while a run is in flight; every
+            // other action is disabled while busy.
+            disabled={busy && !hasStopStep(action)}
             onClick={() => { onAction?.(action) }}
           >
             {action.label}

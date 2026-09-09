@@ -90,12 +90,31 @@ export interface A2uiField {
 export type A2uiExpression = string
 
 /**
+ * One declarative step a `local` action executes in order. Each step is a
+ * restricted operation the browser can perform without running model text:
+ *
+ * - `set`: assign one field the result of a restricted expression.
+ * - `append`: concatenate an expression result onto a field's current value.
+ * - `refresh`: re-issue one host-backed data source (a `select` field's
+ *   `source`) so its options reload.
+ * - `stop`: terminate the page's correlated running job (a `command` action's
+ *   run, or a `model` action's background job).
+ */
+export type A2uiStep =
+  | { readonly kind: 'set'; readonly field: string; readonly value: string }
+  | { readonly kind: 'append'; readonly field: string; readonly value: string }
+  | { readonly kind: 'refresh'; readonly source: string }
+  | { readonly kind: 'stop' }
+
+/**
  * How one declarative action executes when the user clicks it.
  *
  * - `local`: the browser runs the page's field logic over the collected
  *   values and shows {@link A2uiAction.result} (an expression over those
  *   values, or a literal) without any model round-trip. A local action is
- *   pure, deterministic, client-side logic.
+ *   pure, deterministic, client-side logic. A `local` action may also carry
+ *   a {@link A2uiAction.steps} list of imperative steps executed in order
+ *   (`set`/`append`/`refresh`/`stop`) after the result is shown.
  * - `model`: the browser serializes the collected values as an ordinary
  *   `user/message` carrying the action id, and the model invokes
  *   {@link A2uiAction.tool} with those values as arguments.
@@ -133,6 +152,14 @@ export interface A2uiAction {
    * `execution` is `local`.
    */
   readonly result?: string
+  /**
+   * `local`-mode step list: declared operations executed in order when the
+   * action runs. `set`/`append` carry a `field` (a form field name) and a
+   * `value` (a restricted expression over the collected values); `refresh`
+   * carries the `source` of a `select` field to reload; `stop` terminates the
+   * page's correlated job. Only meaningful when `execution` is `local`.
+   */
+  readonly steps?: readonly A2uiStep[]
   /**
    * `command`-mode template: a shell command with `{fieldName}` placeholders
    * that the collected field values fill in before the harness host runs it.

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-09-08-a2ui-dynamic-data-and-live-results.md
-2026-09-08-a2ui-dynamic-data-and-live-results.md: 5926c29d71021b0d68dc97faceab95fae0543726
-2026-09-08-a2ui-dynamic-data-and-live-results.zh.md: 0ed9a9bd97c83770be51b1067486b67a180b9028
+2026-09-08-a2ui-dynamic-data-and-live-results.md: 683143de80f01c9ea646702a71792ba407dac5de
+2026-09-08-a2ui-dynamic-data-and-live-results.zh.md: 50a68f3db13152962c951fbafbaa2622be445c8a

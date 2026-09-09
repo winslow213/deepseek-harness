@@ -514,6 +514,16 @@ describe('A2uiFormPanel', () => {
     expect(onAction).not.toHaveBeenCalled()
   })
 
+  it('delegates a local action with a non-stop step list to the host', () => {
+    const onAction = vi.fn()
+    renderForm(page({ actions: [
+      { id: 'setname', label: 'Set', execution: 'local', steps: [{ kind: 'set', field: 'name', value: "'x'" }] },
+    ] }), { onAction })
+    fireEvent.change(screen.getByLabelText('Name', { exact: false }), { target: { value: 'jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    expect(onAction).toHaveBeenCalled()
+  })
+
   it('blocks submission until required fields are filled', () => {
     const onSubmit = vi.fn()
     renderForm(page(), { onSubmit })
@@ -1176,6 +1186,28 @@ describe('A2uiLauncher', () => {
       expect(sent.some(m => m.type === 'a2ui/data-failed')).toBe(true)
     })
     expect(sent.find(m => m.type === 'a2ui/data-failed')).toMatchObject({ message: 'no such source' })
+  })
+
+  it('stops the active command run when a local stop step posts a2ui/stop', async () => {
+    const stop = vi.fn(async (_runId: string) => ({ runId: 'run-1', requested: true }))
+    const bridge: A2uiRunBridge = {
+      start: vi.fn(async () => ({ runId: 'run-1' })),
+      read: vi.fn(async (_runId: string) => ({ runId: 'run-1', seq: 1, output: '', running: true, exitCode: null, lossy: false })),
+      stop,
+      runScript: vi.fn(async () => ({ logs: [] })),
+    }
+    const popupWindow = { postMessage: () => {} } as unknown as Window
+    window.open = () => popupWindow
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-stop', page: page() })} bridge={bridge} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/stop', surfaceId: 'a2ui-stop', runId: 'run-1' },
+      }))
+    })
+    await vi.waitFor(() => { expect(stop).toHaveBeenCalledWith('run-1') })
   })
 })
 
