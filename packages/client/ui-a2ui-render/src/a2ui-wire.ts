@@ -9,7 +9,7 @@ import type { A2uiAction, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/ty
 
 /** Popup → opener message: readiness, submission, an action trigger, a command run, a script run, or a stop. */
 export type A2uiPopupMessage =
-  | { readonly type: 'a2ui/ready' }
+  | { readonly type: 'a2ui/ready'; readonly surfaceId: string }
   | { readonly type: 'a2ui/submit'; readonly surfaceId: string; readonly payload: Record<string, unknown> }
   | { readonly type: 'a2ui/action'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
   | { readonly type: 'a2ui/run'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }

@@ -29,6 +29,9 @@ console.log('[a2ui] popup boot', { hasOpener: opener !== null, origin: location.
 if (opener === null) {
   root.textContent = 'A2UI pages open from a dsh session; this window cannot be used directly.'
 } else {
+  // The named window (`a2ui-<surfaceId>`) carries the surface identity, so the
+  // readiness announcement can tell the opener which launcher should adopt it.
+  const windowSurfaceId = window.name.startsWith('a2ui-') ? window.name.slice('a2ui-'.length) : ''
   const onInit = (event: MessageEvent): void => {
     console.log('[a2ui] popup message', { type: (event.data as Partial<A2uiInit> | null)?.type, origin: event.origin })
     if (event.origin !== location.origin) return
@@ -45,6 +48,6 @@ if (opener === null) {
   // listener, so a single ready would be dropped and the handshake would stall.
   console.log('[a2ui] popup posting ready to opener')
   const readyTimer = window.setInterval(() => {
-    opener.postMessage({ type: 'a2ui/ready' }, location.origin)
+    opener.postMessage({ type: 'a2ui/ready', surfaceId: windowSurfaceId }, location.origin)
   }, 300)
 }

@@ -76,13 +76,21 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
         console.warn('[a2ui] ignored message: origin mismatch', { got: event.origin, want: location.origin })
         return
       }
+      const data = event.data as A2uiPopupMessage | undefined
+      if (data === undefined) return
+      // The sidebar opens the popup directly inside its click handler, before
+      // this launcher has mounted its listener; the popup announces readiness
+      // with the surfaceId it carries in its window name. Adopt that window on
+      // the matching announcement so the init handshake can complete.
+      if (data.type === 'a2ui/ready' && popupRef.current === null && data.surfaceId === surfaceId) {
+        const source = event.source as Window | null
+        if (source !== null) popupRef.current = source
+      }
       const popup = popupRef.current
       if (popup === null || event.source !== popup) {
         console.warn('[a2ui] ignored message: not from tracked popup', { hasPopup: popup !== null })
         return
       }
-      const data = event.data as A2uiPopupMessage | undefined
-      if (data === undefined) return
       console.log('[a2ui] opener received', data.type)
       if (data.type === 'a2ui/ready') {
         const init: A2uiOpenerMessage = { type: 'a2ui/init', surfaceId, page }

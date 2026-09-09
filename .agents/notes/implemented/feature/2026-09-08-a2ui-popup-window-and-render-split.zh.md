@@ -14,7 +14,7 @@ A2UI 页面改在专用弹窗窗口中渲染，同时把渲染器拆到一个零
 
 - **弹窗窗口化。** `A2uiLauncher` 取代内联面板：一张紧凑卡片，其按钮调用 `window.open('/a2ui.html', 'a2ui-<surfaceId>', …)`。弹窗与打开方共享一套带类型的 postMessage 词汇（`a2ui/ready` → 携带 `surfaceId` 与 `page` 的 `a2ui/init`；`a2ui/submit` 与 `a2ui/action` 回传给打开方），launcher 把提交与模型动作转发进 `inputActions`，行为与原先内联面板完全一致。
 - **零 cordis 渲染拆分。** 新的 `staticLinked` 包 `dsh-client-ui-a2ui-render` 拥有表单/画布渲染器、表达式求值器与独立弹窗挂载。`apps/web` 引入它来构建 `/a2ui.html`；`ui-a2ui` 只类型引用其 wire 类型，因此静态装配永远不会拉入插件的客户端 Context 合并。
-- **在点击手势内开窗。** `A2uiStorePanel` 直接在自己的点击处理器里打开具名弹窗窗口，随后重渲染投射出的聊天 launcher「收养」这个同名窗口（同名 `window.open` 无需用户激活即可返回已有引用）并完成握手，从而避免浏览器拦截弹窗。
+- **在点击手势内开窗。** `A2uiStorePanel` 直接在自己的点击处理器里打开具名弹窗窗口，因此没有任何 launcher 的 `window.open` 运行过以捕获引用。弹窗用从自身窗口名读到的 `surfaceId` 宣告 `a2ui/ready`，重渲染投射出的 launcher 通过匹配宣告中的 `surfaceId` 并取 `event.source` 作为其追踪窗口来「收养」该弹窗，从而在避免浏览器拦截弹窗的同时完成握手。
 - **静态主题样式。** 弹窗没有 `ui-theme` 插件在运行时注入设计令牌样式表，因此弹窗入口静态引入 `base.css` / `design-platform.css` / `corner-shape.css` / `scrollbar.css`；渲染组件读取的 `--dsw-alias-*` 与 `--dsw-font-*` 变量从这些样式表中解析。
 - **`a2uiStore/remove` 改名为 `a2uiStore/delete`。** `remove` 与 Cordis Remote 命名空间服务的保留成员冲突，会导致整个 `api-remotes` 插件加载中止；客户端 Remote 方法及其 wire 请求/值类型现改用 `delete`。
 

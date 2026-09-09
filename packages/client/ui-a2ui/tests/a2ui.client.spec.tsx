@@ -991,6 +991,36 @@ describe('A2uiLauncher', () => {
     expect(screen.getByRole('alert').textContent).toContain('拦截')
   })
 
+  it('adopts the sidebar-opened popup from its readiness announcement and sends init', () => {
+    const sent: Array<{ type: string; surfaceId?: string; page?: A2uiFormPage }> = []
+    const popupWindow = {
+      postMessage: (message: { type: string; surfaceId?: string; page?: A2uiFormPage }) => { sent.push(message) },
+    } as unknown as Window
+    render(<A2uiLauncher {...launcherProps({ seq: 4, surfaceId: 'a2ui-sidebar', page: page() })} />)
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/ready', surfaceId: 'a2ui-sidebar' },
+      }))
+    })
+    expect(sent).toContainEqual({ type: 'a2ui/init', surfaceId: 'a2ui-sidebar', page: page() })
+  })
+
+  it('ignores a readiness announcement for a different surface', () => {
+    const sent: Array<{ type: string }> = []
+    const popupWindow = { postMessage: (message: { type: string }) => { sent.push(message) } } as unknown as Window
+    render(<A2uiLauncher {...launcherProps({ seq: 4, surfaceId: 'a2ui-sidebar', page: page() })} />)
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/ready', surfaceId: 'a2ui-other' },
+      }))
+    })
+    expect(sent).toEqual([])
+  })
+
   it('forwards a command action to the run bridge and posts progress back to the popup', async () => {
     const sent: Array<{ type: string }> = []
     const popupWindow = { postMessage: (message: { type: string }) => { sent.push(message) } } as unknown as Window
