@@ -17,7 +17,7 @@ import type { ScopeLayer } from '@deepseek-ai/dsh-scope'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import { JobRegistry, JobId } from '@deepseek-ai/dsh-jobs'
 import type {
-  JobDoneListener, JobKind, JobOutcome, JobRead, JobSnapshot, JobStart, JobStatus,
+  JobDoneListener, JobKind, JobOutcome, JobOutputReader, JobRead, JobSnapshot, JobStart, JobStatus,
   JobsChangedListener,
 } from '@deepseek-ai/dsh-jobs'
 
@@ -46,6 +46,7 @@ interface TrackedTask {
   owner: Agent | undefined
   cancel: (reason?: string) => void
   readOutput: (() => string) | undefined
+  createOutputReader: (() => JobOutputReader) | undefined
   status: JobStatus
   detail: string | undefined
   output: string | undefined
@@ -162,6 +163,7 @@ export class LocalJobRegistry extends JobRegistry {
       owner: spec.owner,
       cancel: hooks.cancel.bind(hooks),
       readOutput: hooks.readOutput?.bind(hooks),
+      createOutputReader: hooks.createOutputReader?.bind(hooks),
       status: 'running',
       detail: undefined,
       output: undefined,
@@ -210,6 +212,15 @@ export class LocalJobRegistry extends JobRegistry {
       : isTerminal(job.status) ? job.output ?? '' : ''
     if (isTerminal(job.status)) job.reported = true
     return { text, snapshot: this.snapshot(job) }
+  }
+
+  openOutputReader(id: JobId, caller?: Agent): JobOutputReader {
+    const job = this.expect(id)
+    this.assertAccess(job, caller)
+    if (job.createOutputReader === undefined) {
+      throw new Error(`job ${job.id} offers no independent output reader (a final-output-only producer)`)
+    }
+    return job.createOutputReader()
   }
 
   kill(id: JobId, caller?: Agent, reason?: string): 'requested' | 'already-finished' {

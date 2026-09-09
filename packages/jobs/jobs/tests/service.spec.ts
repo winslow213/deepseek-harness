@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { JobId, JobRegistry } from '@deepseek-ai/dsh-jobs'
 import type {
-  JobDoneListener, JobRead, JobSnapshot, JobStart, JobsChangedListener,
+  JobDoneListener, JobOutputReader, JobRead, JobSnapshot, JobStart, JobsChangedListener,
 } from '@deepseek-ai/dsh-jobs'
 
 /**
@@ -38,6 +38,10 @@ class StubJobRegistry extends JobRegistry {
 
   read(id: JobId): JobRead {
     return { text: '', snapshot: this.snapshotOf(id) }
+  }
+
+  openOutputReader(_id: JobId): JobOutputReader {
+    return { read: () => '' }
   }
 
   kill(): 'requested' | 'already-finished' {

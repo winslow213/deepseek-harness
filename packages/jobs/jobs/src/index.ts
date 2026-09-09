@@ -9,7 +9,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {
-  JobDoneListener, JobId, JobRead, JobSnapshot, JobStart, JobsChangedListener,
+  JobDoneListener, JobId, JobOutputReader, JobRead, JobSnapshot, JobStart, JobsChangedListener,
 } from './types.ts'
 
 export { JobId } from './types.ts'
@@ -19,6 +19,7 @@ export type {
   JobKind,
   JobKindMap,
   JobOutcome,
+  JobOutputReader,
   JobRead,
   JobSnapshot,
   JobStart,
@@ -107,6 +108,16 @@ export abstract class JobRegistry extends Service {
    * @returns output text and the post-read snapshot.
    */
   abstract read(id: JobId, caller?: Agent): JobRead
+
+  /**
+   * Open an independent output reader for one job, so a second consumer can
+   * follow the stream without consuming {@link read}'s cursor. Throws for an
+   * unknown or foreign job, or when the producer offers no reader.
+   * @param id - job to read.
+   * @param caller - reading agent checked against the owner.
+   * @returns an independent reader with its own cursor.
+   */
+  abstract openOutputReader(id: JobId, caller?: Agent): JobOutputReader
 
   /**
    * Request cancellation, then mark the job stopping and reported. A producer

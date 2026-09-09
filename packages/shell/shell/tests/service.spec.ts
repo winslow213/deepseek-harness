@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ShellExecutor } from '@deepseek-ai/dsh-shell'
-import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellRunResult } from '@deepseek-ai/dsh-shell'
+import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellProcessReader, ShellRunResult } from '@deepseek-ai/dsh-shell'
 
 /**
  * Minimal concrete executor: canned foreground results, a hand-built process
@@ -40,6 +40,7 @@ class StubExecutor extends ShellExecutor {
       signal: null,
       done: Promise.resolve(),
       readOutput: (): ShellProcessRead => ({ delta: '', lossy: false }),
+      createOutputReader: (): ShellProcessReader => ({ read: () => ({ delta: '', lossy: false }) }),
       kill: (): boolean => {
         if (proc.status !== 'running') return false
         proc.status = 'killed'

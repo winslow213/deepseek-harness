@@ -153,6 +153,20 @@ export interface ShellProcessRead {
 }
 
 /**
+ * An independent, non-consuming output reader for one background process.
+ * Every reader owns its cursor, so a second consumer (a live-result stream)
+ * can follow a process without consuming the primary
+ * {@link ShellProcess.readOutput} cursor.
+ */
+export interface ShellProcessReader {
+  /**
+   * Read the output produced since this reader's previous read.
+   * @returns the delta and truncation facts since this reader's last read.
+   */
+  read(): ShellProcessRead
+}
+
+/**
  * A background process handle returned by {@link ShellExecutor.start}. It is the
  * only access path; buffered output remains readable after exit. Composition
  * teardown (the subprocess service's disposal) kills running processes and
@@ -178,6 +192,13 @@ export interface ShellProcess {
    * full-stream spill files when available.
    */
   readOutput(): ShellProcessRead
+  /**
+   * Open an independent output reader with its own cursor, so a second
+   * consumer can follow the stream without consuming {@link readOutput}'s
+   * cursor. Each reader returns the output produced since that reader's
+   * previous read.
+   */
+  createOutputReader(): ShellProcessReader
   /**
    * Terminate the provider-managed range. Returns false when it had already finished
    * (no-op); idempotent.

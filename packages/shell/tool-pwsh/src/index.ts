@@ -387,6 +387,10 @@ export function apply(ctx: Context, config: Config = {}): void {
               cancel: () => void proc.kill(),
               done: proc.done.then(() => processOutcome(proc)),
               readOutput: () => renderPwshProcessRead(proc.readOutput(), proc.sandbox, escalationModes),
+              createOutputReader: () => {
+                const reader = proc.createOutputReader()
+                return { read: () => renderPwshProcessRead(reader.read(), proc.sandbox, escalationModes) }
+              },
             }
           },
         })

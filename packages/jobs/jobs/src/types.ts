@@ -88,6 +88,12 @@ export interface JobHooks {
    * job has one consuming cursor.
    */
   readOutput?(): string
+  /**
+   * Open an independent output reader so a second consumer can follow the
+   * stream without consuming {@link readOutput}'s cursor. Absence means the
+   * producer offers only the single readOutput cursor (or none).
+   */
+  createOutputReader?(): JobOutputReader
 }
 
 /**
@@ -137,6 +143,19 @@ export interface JobRead {
   text: string
   /** The job's state at read time. */
   snapshot: JobSnapshot
+}
+
+/**
+ * An independent, non-consuming output reader for one stream job. Every
+ * reader owns its cursor, so a second consumer (a live-result stream) can
+ * follow a job without consuming the primary {@link JobRegistry.read} cursor.
+ */
+export interface JobOutputReader {
+  /**
+   * Read the output produced since this reader's previous read.
+   * @returns the next delta (empty when no new output arrived).
+   */
+  read(): string
 }
 
 /**

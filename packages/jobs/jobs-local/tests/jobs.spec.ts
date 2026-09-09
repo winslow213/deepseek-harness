@@ -326,6 +326,43 @@ describe('LocalJobRegistry reads and settlement', () => {
     expect(() => ctx.jobs.read(JobId('bash-99'))).toThrow('unknown job bash-99')
   })
 
+  it('openOutputReader yields an independent cursor that never consumes read', async () => {
+    const ctx = await harness()
+    const chunks = ['first', '', 'rest']
+    const p = producer({
+      readOutput: () => chunks.shift() ?? '',
+      createOutputReader: () => {
+        const own = ['first', '', 'rest']
+        return { read: () => own.shift() ?? '' }
+      },
+    })
+    const id = ctx.jobs.start(p.spec)
+
+    // The primary cursor consumes the first chunk.
+    expect(ctx.jobs.read(id).text).toBe('first')
+
+    // The independent reader still sees the same full stream from its own cursor.
+    const reader = ctx.jobs.openOutputReader(id)
+    expect(reader.read()).toBe('first')
+    expect(reader.read()).toBe('')
+    p.settle({ status: 'completed', detail: 'exit code: 0' })
+    await tick()
+    expect(reader.read()).toBe('rest')
+    expect(reader.read()).toBe('')
+  })
+
+  it('openOutputReader throws for a final-output producer with no reader', async () => {
+    const ctx = await harness()
+    const p = producer({ kind: 'subagent' })
+    const id = ctx.jobs.start(p.spec)
+    expect(() => ctx.jobs.openOutputReader(id)).toThrow(/offers no independent output reader/)
+  })
+
+  it('openOutputReader throws for unknown job ids', async () => {
+    const ctx = await harness()
+    expect(() => ctx.jobs.openOutputReader(JobId('bash-99'))).toThrow('unknown job bash-99')
+  })
+
   it('notifies onJobDone once per job with containment across listeners', async () => {
     const ctx = await harness()
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})

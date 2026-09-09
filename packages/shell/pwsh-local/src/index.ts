@@ -18,7 +18,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { SHELL_SETTINGS_NAMESPACE, ShellExecutor } from '@deepseek-ai/dsh-shell'
-import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellRunResult, CollectedOutput } from '@deepseek-ai/dsh-shell'
+import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellProcessReader, ShellRunResult, CollectedOutput } from '@deepseek-ai/dsh-shell'
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-settings'
 import { clampTimeout, deadline, MAX_TIMER_DELAY_MS, timeoutOf } from '@deepseek-ai/dsh-timeout'
@@ -297,8 +297,37 @@ export class PwshLocalExecutor extends ShellExecutor {
       return note
     }
 
-    let stdoutOffset = 0
-    let stderrOffset = 0
+    // Each reader owns an independent cursor over the collected streams, so a
+    // live-result consumer never consumes the primary readOutput delta.
+    const makeReader = (): ShellProcessReader => {
+      let ownStdoutOffset = 0
+      let ownStderrOffset = 0
+      return {
+        read: (): ShellProcessRead => {
+          const out = collected.stdout.readFrom(ownStdoutOffset)
+          const err = collected.stderr.readFrom(ownStderrOffset)
+          ownStdoutOffset = out.nextOffset
+          ownStderrOffset = err.nextOffset
+
+          const providerFailure = consumeProviderFailure()
+          const failureSeparator = err.text.length > 0 && !err.text.endsWith('\n') ? '\n' : ''
+          const errText = err.text
+            + (providerFailure.length > 0 ? `${failureSeparator}${providerFailure}` : '')
+          // Single newline between sections: stdout chunks usually end with one
+          // already; add it only when missing.
+          const separator = out.text.length > 0 && !out.text.endsWith('\n') ? '\n' : ''
+          const delta = out.text
+            + (errText.length > 0 ? `${separator}[stderr]\n${errText}` : '')
+          return {
+            delta,
+            lossy: out.lossy || err.lossy,
+            ...out.spillPath !== undefined ? { stdoutSpillPath: out.spillPath } : {},
+            ...err.spillPath !== undefined ? { stderrSpillPath: err.spillPath } : {},
+          }
+        },
+      }
+    }
+    const primary = makeReader()
     const proc: ShellProcess = {
       status: 'running',
       exitCode: null,
@@ -323,28 +352,8 @@ export class PwshLocalExecutor extends ShellExecutor {
         providerFailureNote = `subprocess failed before reporting an outcome: ${detail}`
         this.onProcessDone(proc, providerFailureNote, true, error)
       }),
-      readOutput: (): ShellProcessRead => {
-        const out = collected.stdout.readFrom(stdoutOffset)
-        const err = collected.stderr.readFrom(stderrOffset)
-        stdoutOffset = out.nextOffset
-        stderrOffset = err.nextOffset
-
-        const providerFailure = consumeProviderFailure()
-        const failureSeparator = err.text.length > 0 && !err.text.endsWith('\n') ? '\n' : ''
-        const errText = err.text
-          + (providerFailure.length > 0 ? `${failureSeparator}${providerFailure}` : '')
-        // Single newline between sections: stdout chunks usually end with one
-        // already; add it only when missing.
-        const separator = out.text.length > 0 && !out.text.endsWith('\n') ? '\n' : ''
-        const delta = out.text
-          + (errText.length > 0 ? `${separator}[stderr]\n${errText}` : '')
-        return {
-          delta,
-          lossy: out.lossy || err.lossy,
-          ...out.spillPath !== undefined ? { stdoutSpillPath: out.spillPath } : {},
-          ...err.spillPath !== undefined ? { stderrSpillPath: err.spillPath } : {},
-        }
-      },
+      readOutput: (): ShellProcessRead => primary.read(),
+      createOutputReader: (): ShellProcessReader => makeReader(),
       kill: (): boolean => {
         if (proc.status !== 'running') return false
         proc.status = 'killed'

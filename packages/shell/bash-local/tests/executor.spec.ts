@@ -7,7 +7,7 @@ import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import type { SubprocessHandle, SubprocessOutputReader } from '@deepseek-ai/dsh-subprocess'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
-import type { ShellProcess } from '@deepseek-ai/dsh-shell'
+import type { ShellProcess, ShellProcessReader } from '@deepseek-ai/dsh-shell'
 
 const spillDir = mkdtempSync(join(tmpdir(), 'dsh-bash-exec-spec-'))
 
@@ -39,6 +39,24 @@ async function readUntil(proc: ShellProcess, expected: string, timeoutMs = 5_000
     await new Promise(resolve => setTimeout(resolve, 20))
   }
   throw new Error(`process output did not include ${JSON.stringify(expected)}; accumulated ${JSON.stringify(all)}`)
+}
+
+/**
+ * Poll an independent reader until the ACCUMULATED delta contains `expected`.
+ * @param reader - the reader whose own cursor advances on each read.
+ * @param expected - the substring to wait for.
+ * @param timeoutMs - poll bound.
+ * @returns the accumulation up to and including the match.
+ */
+async function readUntilReader(reader: ShellProcessReader, expected: string, timeoutMs = 5_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs
+  let all = ''
+  while (Date.now() < deadline) {
+    all += reader.read().delta
+    if (all.includes(expected)) return all
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  throw new Error(`reader output did not include ${JSON.stringify(expected)}; accumulated ${JSON.stringify(all)}`)
 }
 
 describe('LocalBashExecutor.run', () => {
@@ -200,6 +218,27 @@ describe('LocalBashExecutor.start (background process handles)', () => {
     expect(second.delta).toBe('second\n')
     expect(second.lossy).toBe(false)
     expect(proc.readOutput().delta).toBe('')
+  })
+
+  it('createOutputReader is an independent cursor that never consumes readOutput', async () => {
+    const { bash } = await setup()
+    const proc = bash.start(bash.resolve({ command: 'echo first; sleep 1; echo second' }))
+    const reader = proc.createOutputReader()
+
+    // The primary cursor reads the first chunk.
+    const primary = await readUntil(proc, 'first\n')
+    expect(primary).toBe('first\n')
+
+    // The independent reader still sees the same full prefix on its first read.
+    const readerFirst = await readUntilReader(reader, 'first\n')
+    expect(readerFirst).toBe('first\n')
+
+    await proc.done
+    // Both cursors observe the remaining tail independently of each other.
+    expect(proc.readOutput().delta).toBe('second\n')
+    expect(reader.read().delta).toBe('second\n')
+    // The primary cursor's read did not consume the reader's remaining delta.
+    expect(reader.read().delta).toBe('')
   })
 
   it('readOutput marks stderr sections', async () => {

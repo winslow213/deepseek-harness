@@ -152,6 +152,12 @@ class RecordingSandboxExecutor extends ShellExecutor {
       done: Promise.resolve(),
       sandbox: { mode: spec.sandboxPolicy?.mode ?? 'read-only', denied: false },
       readOutput: () => ({ delta: '', lossy: false }),
+      createOutputReader: () => ({
+        read: () => ({
+          delta: '',
+          lossy: false,
+        }),
+      }),
       kill: () => false,
     }
   }
@@ -181,6 +187,12 @@ class CountingStartExecutor extends ShellExecutor {
       signal: null,
       done: Promise.resolve(),
       readOutput: () => ({ delta: '', lossy: false }),
+      createOutputReader: () => ({
+        read: () => ({
+          delta: '',
+          lossy: false,
+        }),
+      }),
       kill: () => false,
     }
   }
@@ -791,6 +803,12 @@ describe('processOutcome', () => {
       signal: null,
       done: Promise.resolve(),
       readOutput: () => ({ delta: '', lossy: false }),
+      createOutputReader: () => ({
+        read: () => ({
+          delta: '',
+          lossy: false,
+        }),
+      }),
       kill: () => false,
       ...over,
     }
@@ -1114,6 +1132,12 @@ describe('the model-facing bash tool builds its request from named args only (no
         signal: null,
         done: Promise.resolve(),
         readOutput: () => ({ delta: '', lossy: false }),
+        createOutputReader: () => ({
+          read: () => ({
+            delta: '',
+            lossy: false,
+          }),
+        }),
         kill: () => false,
       }
     }

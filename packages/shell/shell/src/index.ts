@@ -26,6 +26,7 @@ export type {
   ShellExecSpec,
   ShellProcess,
   ShellProcessRead,
+  ShellProcessReader,
   ShellProcessStatus,
   ShellRunResult,
   ShellSandboxInfo,
