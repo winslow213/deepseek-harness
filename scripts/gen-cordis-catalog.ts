@@ -113,6 +113,12 @@ export const SERVICE_PAGE: Record<string, string> = {
   sessionTelemetry: 'session-telemetry.md',
   agentTeams: 'agent-team.md',
   tokenMeter: 'token-meter.md',
+  a2uiData: 'tools.md',
+  a2uiDataController: 'tools.md',
+  a2uiRun: 'tools.md',
+  a2uiRunController: 'tools.md',
+  a2uiStore: 'tools.md',
+  a2uiStoreController: 'tools.md',
   toolResultPruner: 'compaction.md',
   tools: 'tools.md',
   typert: 'typert.md',
@@ -179,6 +185,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   resources: 'client-side resource model (protocol providers, pins, live sources) — packages/client/resources/README.md owns the API',
   sidebarRight: 'client-side right-Sidebar navigation face — packages/client/ui-sidebar-right/README.md owns the API',
   sidebarRightTabs: 'client-side right-Sidebar tab-type registry — packages/client/ui-sidebar-right/README.md owns the API',
+  a2uiRunScript: 'interface-typed A2UI script-run capability — packages/web/tool-a2ui-store/README.md owns the API',
 }
 
 /**
@@ -786,6 +793,10 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   A2uiStoreOpenRequest: 'A2UI store payload contract is owned by packages/web/tool-a2ui-store/src/types.ts',
   A2uiStoreOpenValue: 'A2UI store payload contract is owned by packages/web/tool-a2ui-store/src/types.ts',
   A2uiToolRecord: 'A2UI store record contract is owned by packages/web/tool-a2ui-store/src/types.ts',
+  A2uiDataSourceArgs: 'A2UI data-source payload contract is owned by packages/web/tool-a2ui-data/src/types.ts',
+  A2uiDataSourceResult: 'A2UI data-source payload contract is owned by packages/web/tool-a2ui-data/src/types.ts',
+  A2uiDataResolveRequest: 'A2UI data-source payload contract is owned by packages/web/tool-a2ui-data/src/types.ts',
+  A2uiDataResolveValue: 'A2UI data-source payload contract is owned by packages/web/tool-a2ui-data/src/types.ts',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

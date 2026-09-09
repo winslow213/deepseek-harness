@@ -16,6 +16,7 @@ import subagentsRemote from '@deepseek-ai/dsh-subagent/remote'
 import sessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
 import workspaceRemote from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import a2uiStoreRemote from '@deepseek-ai/dsh-tool-a2ui-store/remote'
+import a2uiDataRemote from '@deepseek-ai/dsh-tool-a2ui-data/remote'
 import workspaceFilesRemote from '@deepseek-ai/dsh-api-workspace-files/remote'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 
@@ -43,6 +44,10 @@ export type {
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
 } from '@deepseek-ai/dsh-tool-a2ui-store/types'
+export type {} from '@deepseek-ai/dsh-tool-a2ui-data/remote'
+export type {
+  A2uiDataResolveRequest, A2uiDataResolveValue, A2uiDataSourceArgs, A2uiDataSourceResult,
+} from '@deepseek-ai/dsh-tool-a2ui-data/types'
 export type {} from '@deepseek-ai/dsh-api-workspace-files/remote'
 export type * from '@deepseek-ai/dsh-api-workspace-files/types'
 export type { SessionJob as JobView } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -160,7 +165,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     for (const contribution of [
       agentPresetsRemote, commandsRemote, settingsControllerRemote, goalsRemote, llmRemote, dynamicRemote,
       pluginInventoryRemote, pluginInstallRemote, messageFeedbackRemote, fileUploadsRemote, sessionReferencesRemote,
-      subagentsRemote, sessionRemote, workspaceRemote, a2uiStoreRemote, workspaceFilesRemote,
+      subagentsRemote, sessionRemote, workspaceRemote, a2uiStoreRemote, a2uiDataRemote, workspaceFilesRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

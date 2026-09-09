@@ -66,6 +66,15 @@ export interface A2uiField {
    * are mutually exclusive.
    */
   readonly optionsFrom?: string
+  /**
+   * Host-backed option source: a stable source name resolved by the composed
+   * A2UI data provider (the `ctx.a2uiData` capability) when the page opens.
+   * The browser requests the source and the provider returns the select
+   * options; the model authors only the name, never the data. Only meaningful
+   * for a `select` field; `source`, `options`, and `optionsFrom` are mutually
+   * exclusive.
+   */
+  readonly source?: string
 }
 
 /**

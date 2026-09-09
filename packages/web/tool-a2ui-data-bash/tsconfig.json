@@ -1,0 +1,25 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../shell/shell"
+    },
+    {
+      "path": "../../web/tool-a2ui-data"
+    },
+    {
+      "path": "../../web/tool-a2ui-surface"
+    }
+  ]
+}

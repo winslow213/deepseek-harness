@@ -276,6 +276,8 @@
     { "path": "./packages/web/web-fetch-http" },
     { "path": "./packages/web/tool-web" },
     { "path": "./packages/web/tool-a2ui-surface" },
+    { "path": "./packages/web/tool-a2ui-data" },
+    { "path": "./packages/web/tool-a2ui-data-bash" },
     { "path": "./packages/web/tool-a2ui-store" },
     { "path": "./packages/spill/spill" },
     { "path": "./packages/spill/spill-local" },

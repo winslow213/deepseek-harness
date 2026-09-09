@@ -26,7 +26,7 @@ import {
   A2uiCanvasPanel, A2uiFormPanel, a2uiBendForPoint, a2uiEdgeGeometry,
   type A2uiCanvasPanelProps, type A2uiFormPanelProps, type A2uiTranslate,
 } from '@deepseek-ai/dsh-client-ui-a2ui-render'
-import { A2uiLauncher, type A2uiLauncherProps, type A2uiRunBridge, type A2uiSubmitNotice } from '../src/client/launcher.tsx'
+import { A2uiLauncher, type A2uiLauncherProps, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from '../src/client/launcher.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 import {
@@ -975,6 +975,7 @@ describe('A2uiLauncher', () => {
       },
       sessionId: 'session-a2ui' as never,
       submitNotice: vi.fn<A2uiSubmitNotice>(async () => {}),
+      resolveSource: vi.fn<A2uiResolveSource>(async () => []),
       t,
     } as unknown as A2uiLauncherProps
   }
@@ -1094,6 +1095,50 @@ describe('A2uiLauncher', () => {
       'Run the check',
     )
   })
+
+  it('resolves a data-request and posts the options back to the popup', async () => {
+    const resolveSource = vi.fn<A2uiResolveSource>(async () => [{ label: 'device-1', value: 'd1' }])
+    const sent: Array<{ type: string; source?: string; items?: unknown }> = []
+    const popupWindow = {
+      postMessage: (message: { type: string; source?: string; items?: unknown }) => { sent.push(message) },
+    } as unknown as Window
+    window.open = () => popupWindow
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-src', page: page() })} resolveSource={resolveSource} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/data-request', surfaceId: 'a2ui-src', source: 'hdc-devices', args: {} },
+      }))
+    })
+    await vi.waitFor(() => { expect(resolveSource).toHaveBeenCalled() })
+    expect(resolveSource).toHaveBeenCalledWith('hdc-devices', {})
+    await vi.waitFor(() => {
+      expect(sent.some(m => m.type === 'a2ui/data')).toBe(true)
+    })
+    expect(sent.find(m => m.type === 'a2ui/data')).toMatchObject({ source: 'hdc-devices', items: [{ label: 'device-1', value: 'd1' }] })
+  })
+
+  it('posts a data-failed message when a source cannot resolve', async () => {
+    const resolveSource = vi.fn<A2uiResolveSource>(async () => { throw new Error('no such source') })
+    const sent: Array<{ type: string; message?: string }> = []
+    const popupWindow = { postMessage: (message: { type: string; message?: string }) => { sent.push(message) } } as unknown as Window
+    window.open = () => popupWindow
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-src', page: page() })} resolveSource={resolveSource} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/data-request', surfaceId: 'a2ui-src', source: 'nope', args: {} },
+      }))
+    })
+    await vi.waitFor(() => {
+      expect(sent.some(m => m.type === 'a2ui/data-failed')).toBe(true)
+    })
+    expect(sent.find(m => m.type === 'a2ui/data-failed')).toMatchObject({ message: 'no such source' })
+  })
 })
 
 async function runtimeSlotRoot(ctx: Context): Promise<void> {
@@ -1124,6 +1169,9 @@ describe('plugin lifecycle', () => {
       },
       session: {
         prompt: async () => ({ ok: true as const, value: { accepted: true } }),
+      },
+      a2uiData: {
+        resolve: async () => ({ ok: true as const, value: { items: [] } }),
       },
     })
     const fiber = ctx.plugin({ inject: [...inject], apply })

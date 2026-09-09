@@ -115,30 +115,44 @@ describe('renderA2uiPopup', () => {
     expect(select?.options[0]?.text).toBe('SN-1')
   })
 
-  it('writes a script outcome back into a declared field via the action write map', () => {
+  it('requests a host-backed source on open and fills the select from the data reply', () => {
     const { sent, root, opener } = harness()
-    const withWrite: A2uiFormPage = {
+    const sourced: A2uiFormPage = {
       kind: 'form',
-      title: 'Write Demo',
+      title: 'Sourced',
       fields: [
-        { name: 'note', label: 'Note', type: 'text' },
-        { name: 'summary', label: 'Summary', type: 'text' },
+        { name: 'device', label: 'Device', type: 'select', source: 'hdc-devices' },
       ],
-      actions: [{
-        id: 'go', label: 'Run', execution: 'script', program: 'return { text: "hello" }', binds: [],
-        write: [{ field: 'note', from: 'value.text' }],
-      }],
     }
-    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: withWrite }) })
-    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: withWrite }, opener)
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: sourced }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: sourced }, opener)
+    // The open triggers one data-request for the source.
+    expect(sent.some(m => m.type === 'a2ui/data-request')).toBe(true)
 
-    const run = root.querySelector('button')!
-    act(() => { run.click() })
-    expect(sent.some(m => m.type === 'a2ui/runScript')).toBe(true)
+    sendFromOpener({
+      type: 'a2ui/data', surfaceId: 's1', source: 'hdc-devices',
+      items: [{ label: 'SN-1', value: 'sn1' }, { label: 'SN-2', value: 'sn2' }],
+    }, opener)
+    const select = root.querySelector('select[name="device"]') as HTMLSelectElement | null
+    expect(select?.options.length ?? 0).toBe(2)
+    expect(select?.options[0]?.text).toBe('SN-1')
+  })
 
-    // The opener returns the completion value; the note field should take it.
-    sendFromOpener({ type: 'a2ui/scriptResult', actionId: 'go', value: { text: 'hello' }, ok: true }, opener)
-    const note = root.querySelector('input[name="note"]') as HTMLInputElement | null
-    expect(note?.value).toBe('hello')
+  it('leaves a source-backed select empty when the source fails to resolve', () => {
+    const { sent, root, opener } = harness()
+    const sourced: A2uiFormPage = {
+      kind: 'form',
+      title: 'Sourced',
+      fields: [
+        { name: 'device', label: 'Device', type: 'select', source: 'hdc-devices' },
+      ],
+    }
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: sourced }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: sourced }, opener)
+    expect(sent.some(m => m.type === 'a2ui/data-request')).toBe(true)
+
+    sendFromOpener({ type: 'a2ui/data-failed', surfaceId: 's1', source: 'hdc-devices', message: 'no devices' }, opener)
+    const select = root.querySelector('select[name="device"]') as HTMLSelectElement | null
+    expect(select?.options.length ?? 0).toBe(0)
   })
 })

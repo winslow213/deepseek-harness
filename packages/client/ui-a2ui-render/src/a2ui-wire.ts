@@ -5,21 +5,24 @@
  * @module @deepseek-ai/dsh-client-ui-a2ui/wire
  */
 
-import type { A2uiAction, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiAction, A2uiFieldOption, A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 
-/** Popup → opener message: readiness, submission, an action trigger, a command run, a script run, or a stop. */
+/** Popup → opener message: readiness, submission, an action trigger, a command run, a script run, a source request, or a stop. */
 export type A2uiPopupMessage =
   | { readonly type: 'a2ui/ready'; readonly surfaceId: string }
   | { readonly type: 'a2ui/submit'; readonly surfaceId: string; readonly payload: Record<string, unknown> }
   | { readonly type: 'a2ui/action'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
   | { readonly type: 'a2ui/run'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
   | { readonly type: 'a2ui/runScript'; readonly surfaceId: string; readonly action: A2uiAction; readonly values: Record<string, unknown> }
+  | { readonly type: 'a2ui/data-request'; readonly surfaceId: string; readonly source: string; readonly args: Record<string, unknown> }
   | { readonly type: 'a2ui/runStop'; readonly runId: string }
 
-/** Opener → popup message: the page to render, acknowledgements, or command-run progress. */
+/** Opener → popup message: the page to render, acknowledgements, source data, or command-run progress. */
 export type A2uiOpenerMessage =
   | { readonly type: 'a2ui/init'; readonly surfaceId: string; readonly page: A2uiPage }
   | { readonly type: 'a2ui/ack' }
+  | { readonly type: 'a2ui/data'; readonly surfaceId: string; readonly source: string; readonly items: readonly A2uiFieldOption[] }
+  | { readonly type: 'a2ui/data-failed'; readonly surfaceId: string; readonly source: string; readonly message: string }
   | { readonly type: 'a2ui/runStarted'; readonly runId: string; readonly ok: true }
   | { readonly type: 'a2ui/runFailed'; readonly message: string; readonly ok: false }
   | { readonly type: 'a2ui/runChunk'; readonly runId: string; readonly output: string; readonly running: boolean }

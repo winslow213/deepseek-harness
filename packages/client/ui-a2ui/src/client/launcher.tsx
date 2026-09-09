@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { A2uiAction, A2uiFieldOption } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -39,11 +39,14 @@ export interface A2uiRunBridge {
 /** Keyed Chat renderer props for one model-opened A2UI page launcher. */
 export type A2uiLauncherProps =
   PropsRuntime<'conversation.chat.node', 'a2ui-surface'>
-  & InjectFace<{ bridge?: A2uiRunBridge; submitNotice: A2uiSubmitNotice }>
+  & InjectFace<{ bridge?: A2uiRunBridge; submitNotice: A2uiSubmitNotice; resolveSource: A2uiResolveSource }>
   & PropsLocale<'a2ui'>
 
 /** Submit an A2UI action or form submission as a logged non-user context notice. */
 export type A2uiSubmitNotice = (sessionId: SessionId, text: string, summary: string) => Promise<void>
+
+/** Resolve one host-backed data source into a select field's options. */
+export type A2uiResolveSource = (source: string, args: Record<string, unknown>) => Promise<readonly A2uiFieldOption[]>
 
 /** The popup URL served by the web frontend's dedicated A2UI entry. */
 const A2UI_POPUP_PATH = '/a2ui.html'
@@ -70,7 +73,7 @@ function noticeSummary(account: string): string {
  * Render the launcher card and manage its popup window.
  * @param props - the keyed Chat slot props (node data, input machine, locale).
  */
-export function A2uiLauncher({ node, sessionId, bridge, submitNotice, t }: A2uiLauncherProps) {
+export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSource, t }: A2uiLauncherProps) {
   const { page, surfaceId } = node.data
   const [blocked, setBlocked] = useState(false)
   const popupRef = useRef<Window | null>(null)
@@ -119,6 +122,21 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, t }: A2uiL
         )
         const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
         popup.postMessage(ack, location.origin)
+      } else if (data.type === 'a2ui/data-request') {
+        const request: A2uiPopupMessage & { type: 'a2ui/data-request' } = data
+        void resolveSource(request.source, request.args).then(
+          (items) => {
+            popup.postMessage({ type: 'a2ui/data', surfaceId, source: request.source, items }, location.origin)
+          },
+          (error: unknown) => {
+            popup.postMessage({
+              type: 'a2ui/data-failed',
+              surfaceId,
+              source: request.source,
+              message: error instanceof Error ? error.message : String(error),
+            }, location.origin)
+          },
+        )
       } else if (data.type === 'a2ui/run') {
         const runBridge = bridge
         if (runBridge !== undefined && data.action.execution === 'command') {
@@ -208,7 +226,7 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, t }: A2uiL
       window.removeEventListener('message', onMessage)
       if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
     }
-  }, [surfaceId, page, sessionId, submitNotice, bridge])
+  }, [surfaceId, page, sessionId, submitNotice, resolveSource, bridge])
 
   const openWindow = (): void => {
     console.log('[a2ui] openWindow clicked', { surfaceId, path: A2UI_POPUP_PATH })

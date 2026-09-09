@@ -7,10 +7,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the `remote` Context merge so the run bridge below reaches
 // `ctx.remote.a2uiRun` and the notice submitter reaches `ctx.remote.session`
 // (the host namespaces are mounted by api-remotes).
-import type { SessionRequestId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { A2uiDataSourceArgs, SessionRequestId } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
-import { A2uiLauncher, type A2uiRunBridge, type A2uiSubmitNotice } from './launcher.tsx'
+import { A2uiLauncher, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from './launcher.tsx'
 import { a2uiSurfaceDefinition } from './a2ui-definition.ts'
 import { en, NS, type A2uiKey, zh } from './locales.ts'
 
@@ -25,7 +25,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Required services for Definition, keyed renderer, copy, and the command-run Remote. */
-export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun', 'remote.session']
+export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun', 'remote.session', 'remote.a2uiData']
 
 /**
  * Build the command-run bridge over the api-remotes `a2uiRun` namespace. The
@@ -80,6 +80,22 @@ function buildSubmitNotice(ctx: ClientContext): A2uiSubmitNotice {
   }
 }
 
+/**
+ * Build the data-source resolver over the api-remotes `a2uiData` namespace:
+ * a `select` field declares a stable `source`, and the host provider resolves
+ * it into options. A failed resolve rejects; the launcher forwards the error
+ * to the popup as a failed source.
+ * @param ctx - registrant context carrying the typed remote assembly.
+ * @returns the resolver the launcher calls for `a2ui/data-request` messages.
+ */
+function buildResolveSource(ctx: ClientContext): A2uiResolveSource {
+  return async (source, args) => {
+    const answered = await ctx.remote.a2uiData.resolve({ source, args: args as A2uiDataSourceArgs })
+    if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+    return answered.value.items
+  }
+}
+
 /** Register the A2UI Definition, dictionary, and keyed Chat launcher. */
 export function apply(ctx: ClientContext): void {
   ctx.uiConversation.events.register(a2uiSurfaceDefinition)
@@ -88,6 +104,10 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.chat.node',
     key: 'a2ui-surface',
     locale: NS,
-    inject: () => ({ bridge: buildBridge(ctx), submitNotice: buildSubmitNotice(ctx) }),
+    inject: () => ({
+      bridge: buildBridge(ctx),
+      submitNotice: buildSubmitNotice(ctx),
+      resolveSource: buildResolveSource(ctx),
+    }),
   }, A2uiLauncher))
 }

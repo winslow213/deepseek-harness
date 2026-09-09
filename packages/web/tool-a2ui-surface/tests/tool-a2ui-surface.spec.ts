@@ -95,7 +95,7 @@ describe('dsh-tool-a2ui-surface', () => {
     const kindSpec = pageSpec.properties!.kind as { enum?: string[] }
     expect(kindSpec.enum).toEqual(['form', 'canvas'])
     const fieldProps = ((pageSpec.properties!.fields as { items: { properties: Record<string, unknown> } }).items.properties)
-    expect(Object.keys(fieldProps).sort()).toEqual(['compute', 'help', 'label', 'name', 'options', 'optionsFrom', 'placeholder', 'required', 'type', 'validateMessage', 'validateWhen', 'visibleWhen'])
+    expect(Object.keys(fieldProps).sort()).toEqual(['compute', 'help', 'label', 'name', 'options', 'optionsFrom', 'placeholder', 'required', 'source', 'type', 'validateMessage', 'validateWhen', 'visibleWhen'])
     const typeSpec = fieldProps.type as { enum?: string[] }
     expect(typeSpec.enum).toEqual(['text', 'textarea', 'select', 'number', 'checkbox'])
     const nodeSpec = ((pageSpec.properties!.nodes as { items: { properties: Record<string, unknown>; required?: string[] } }).items)
@@ -323,6 +323,39 @@ describe('dsh-tool-a2ui-surface', () => {
         actions: [{ id: 'x', label: 'X', execution: 'script', program: 'x', binds: [] }],
       }
       expect(() => canonicalizeA2uiPage(both as unknown as A2uiPageInput)).toThrow(/mutually exclusive/)
+    })
+  })
+
+  describe('source canonicalization', () => {
+    it('keeps a select source and drops the need for static options', () => {
+      const raw = {
+        kind: 'form', title: 'D', fields: [{ name: 'dev', label: 'Dev', type: 'select', source: 'hdc-devices' }],
+      }
+      const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
+      expect((page as unknown as { fields: Array<Record<string, unknown>> }).fields[0]).toMatchObject({ source: 'hdc-devices' })
+    })
+
+    it('rejects an empty source, a source on a non-select, or a source alongside options/optionsFrom', () => {
+      const empty = {
+        kind: 'form', title: 'D', fields: [{ name: 'dev', label: 'Dev', type: 'select', source: '  ' }],
+      }
+      expect(() => canonicalizeA2uiPage(empty as unknown as A2uiPageInput)).toThrow(/non-empty source name/)
+
+      const notSelect = {
+        kind: 'form', title: 'D', fields: [{ name: 't', label: 'T', type: 'text', source: 'x' }],
+      }
+      expect(() => canonicalizeA2uiPage(notSelect as unknown as A2uiPageInput)).toThrow(/only valid on a `select`/)
+
+      const withOptions = {
+        kind: 'form', title: 'D', fields: [{ name: 'd', label: 'D', type: 'select', options: [{ label: 'a', value: 'a' }], source: 'x' }],
+      }
+      expect(() => canonicalizeA2uiPage(withOptions as unknown as A2uiPageInput)).toThrow(/mutually exclusive/)
+
+      const withOptionsFrom = {
+        kind: 'form', title: 'D', fields: [{ name: 'd', label: 'D', type: 'select', optionsFrom: 'list', source: 'x' }],
+        actions: [{ id: 'list', label: 'List', execution: 'script', program: '[]' }],
+      }
+      expect(() => canonicalizeA2uiPage(withOptionsFrom as unknown as A2uiPageInput)).toThrow(/mutually exclusive/)
     })
   })
 

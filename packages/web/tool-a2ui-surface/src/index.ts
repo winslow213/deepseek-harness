@@ -58,7 +58,10 @@ const DESCRIPTION = 'Render an interactive page in the web UI. The page JSON you
   + '`"form"` renders a fillable form that collects structured input — keep '
   + 'fields to the ones you genuinely need, give every field a short unique '
   + '`name` and a human `label`, set `required: true` only for mandatory input; '
-  + 'for `select` fields provide `options` (label/value pairs); prefer `text` '
+  + 'for `select` fields provide `options` (label/value pairs), an `optionsFrom` '
+  + 'script action, or a `source` (a stable source name resolved by the '
+  + 'deployment\'s data provider — use it when options must come from a live '
+  + 'source you cannot author, such as a device list); prefer `text` '
   + 'for free text, `textarea` for longer input, `number` for numeric values, '
   + '`checkbox` for booleans. `"canvas"` renders a draggable node graph the '
   + 'user arranges and connects — seed it with `nodes` (stable `id`, `label`, '
@@ -264,8 +267,24 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
     if (optionsFrom !== undefined && field.options !== undefined && field.options.length > 0) {
       throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`optionsFrom\` and static \`options\` are mutually exclusive`)
     }
-    if (field.type === 'select' && optionsFrom === undefined && (field.options === undefined || field.options.length === 0)) {
-      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a \`select\` field needs at least one option or an \`optionsFrom\` action`)
+    const source = field.source?.trim()
+    if (source !== undefined && source.length === 0) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`source\` must be a non-empty source name`)
+    }
+    if (source !== undefined && field.type !== 'select') {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`source\` is only valid on a \`select\` field`)
+    }
+    if (source !== undefined && optionsFrom !== undefined) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`source\` and \`optionsFrom\` are mutually exclusive`)
+    }
+    if (source !== undefined && field.options !== undefined && field.options.length > 0) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: \`source\` and static \`options\` are mutually exclusive`)
+    }
+    if (field.type === 'select'
+      && optionsFrom === undefined
+      && source === undefined
+      && (field.options === undefined || field.options.length === 0)) {
+      throw new Error(`invalid a2ui field ${JSON.stringify(name)}: a \`select\` field needs at least one option, an \`optionsFrom\` action, or a \`source\``)
     }
     const visibleWhen = toA2uiExpression(field.visibleWhen, `field ${JSON.stringify(name)}`, 'visibleWhen')
     const validateWhen = toA2uiExpression(field.validateWhen, `field ${JSON.stringify(name)}`, 'validateWhen')
@@ -285,6 +304,7 @@ function toA2uiFields(rawFields: readonly A2uiField[]): A2uiField[] {
       ...field.options === undefined ? {} : { options: field.options },
       ...field.help === undefined ? {} : { help: field.help },
       ...optionsFrom === undefined ? {} : { optionsFrom },
+      ...source === undefined ? {} : { source },
       ...visibleWhen === undefined ? {} : { visibleWhen },
       ...validateWhen === undefined ? {} : { validateWhen },
       ...validateWhen === undefined ? {} : { validateMessage: field.validateMessage },
@@ -388,6 +408,7 @@ export function apply(ctx: Context, config: Config): void {
                 validateMessage: { type: 'string', description: 'Failure message shown when validateWhen is falsy at submit.' },
                 compute: { type: 'string', description: 'Restricted expression over sibling field names; the field becomes read-only and displays its result.' },
                 optionsFrom: { type: 'string', description: 'Id of a `script` action whose completion populates this `select` field with options (array of `{label,value}` or `{items:[...]}`); mutually exclusive with static `options`.' },
+                source: { type: 'string', description: 'Host-backed option source: a stable source name resolved by the composed A2UI data provider when the page opens; mutually exclusive with static `options` and `optionsFrom`.' },
                 options: {
                   type: 'array',
                   description: 'Selectable options; meaningful only for `select`.',

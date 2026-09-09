@@ -199,6 +199,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/web/web': { kind: 'indirect', reason: 'The provider registry delegates model rendering to dsh-tool-web.' },
   'packages/web/web-fetch-http': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/web/web-search-exa': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
+  'packages/web/tool-a2ui-data': { kind: 'none', reason: 'Host capability and Remote namespace only; the model sees the source field through a2ui_surface, which owns the schema.' },
+  'packages/web/tool-a2ui-data-bash': { kind: 'none', reason: 'Host provider only; it runs deployment-configured source commands and registers no tool, prompt, or result text.' },
   'packages/workflow/workflow': { kind: 'indirect', reason: 'The service delegates parent and child model rendering to its consumer and engine.' },
 }
 

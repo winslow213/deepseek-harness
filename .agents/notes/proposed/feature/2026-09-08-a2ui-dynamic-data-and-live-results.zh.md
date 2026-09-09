@@ -18,7 +18,7 @@ A2UI 页面是一次性声明，浏览器只求值一遍。字段逻辑（`visib
 
 在现有 DSL（[表单](../../implemented/feature/2026-08-20-a2ui-model-authored-form-pages.zh.md)、[字段逻辑与 actions](../../implemented/feature/2026-09-07-a2ui-field-logic-and-actions.zh.md)）之上做三个彼此可独立落地的增强，均保持可重放与弹窗的轻量性。
 
-**1. 数据源绑定。** 字段（先做 `select`，后续做由数据源派生的只读文本）可用 `source` 声明来取代静态 `options`。`source` 是一个稳定名称，由宿主侧注册在 surface 工具旁的**数据提供者**解析——例如基于 `bash` 的提供者，运行一条经白名单放行的只读命令并用校验过的参数（`hdc list targets`、列某个已配置目录）。浏览器通过新的 `a2ui/data-request` 模型消息请求数据源；提供者运行、规范化后，宿主追加一条携带 `{ surfaceId, source, kind: 'options', items }` 的持久 `a2ui/data` 事件。弹窗只在页面挂载后由 launcher 转发该事件时才得知载荷，因此重放会重新渲染相同选项而无需重跑任何东西。刷新控件会重新发起请求；提供者上的 `cache` 时长可避免反复打宿主。
+**1. 数据源绑定。** 已实现——见 [A2UI 动态数据源提供者 seam](../../implemented/feature/2026-09-09-a2ui-data-source-provider.zh.md)。字段（先做 `select`，后续做由数据源派生的只读文本）可用 `source` 声明来取代静态 `options`。已随附实现通过宿主侧**数据提供者**（基于 `bash` 的提供者运行一条经白名单放行的只读命令）解析 `source`，选项经由 Remote 往返返回，而非本提案所述持久 `a2ui/data` 事件；该事件已暂缓，因为选项列表对模型不可见。
 
 **2. 实时结果通道。** 长任务是一条 `jobs` 流。方案新增一个会话事件 `a2ui/update`，其信封载荷为 `{ surfaceId, phase: 'started' | 'delta' | 'finished' | 'aborted', seq, delta?, totalBytes? }`，其中 `delta` 是自上一事件以来的有界增量文本（字节偏移 `seq` 使重放幂等），`totalBytes` 与时间戳让客户端推导吞吐。当与页面关联的 `model` action 运行时，所属 agent 的工具执行器发出该事件，复用后台 `bash` 已产生的既有 `jobs` 流 delta（`readOutput` 返回自上次读取以来的增量）。本就跟踪弹窗的 launcher 订阅其 `surfaceId` 对应的发出事件，并把每个事件作为 `a2ui/update` postMessage 转发。事件带 `ignorable: true`，因为早于它的构建仍必须能重放周围日志（[版本机制](../../implemented/architecture/2026-08-10-session-log-version-mechanism.zh.md)）。
 

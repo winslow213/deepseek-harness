@@ -81,6 +81,17 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     }
     optionActionsRef.current = map
   }
+  // data source name -> owning select field name (static per page).
+  const sourceFieldsRef = useRef<Map<string, string> | null>(null)
+  if (sourceFieldsRef.current === null) {
+    const map = new Map<string, string>()
+    if (page.kind === 'form') {
+      for (const field of page.fields) {
+        if (field.source !== undefined) map.set(field.source, field.name)
+      }
+    }
+    sourceFieldsRef.current = map
+  }
   const post = useCallback((message: A2uiPopupMessage): void => {
     opener.postMessage(message, location.origin)
   }, [opener])
@@ -141,6 +152,22 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     }
   }, [page, runOptionSource])
 
+  // Request each host-backed data source once on open so the page starts with
+  // live options. The opener answers with a2ui/data (or a2ui/data-failed).
+  useEffect(() => {
+    if (page.kind !== 'form') return
+    for (const field of page.fields) {
+      if (field.source === undefined) continue
+      const message: A2uiPopupMessage = {
+        type: 'a2ui/data-request',
+        surfaceId,
+        source: field.source,
+        args: {},
+      }
+      post(message)
+    }
+  }, [page, surfaceId, post])
+
   useEffect(() => {
     const onMessage = (event: MessageEvent): void => {
       if (event.origin !== location.origin || event.source !== opener) return
@@ -184,6 +211,18 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         }
         case 'a2ui/scriptFailed':
           dispatch({ type: 'script-failed', message: data.message })
+          break
+        case 'a2ui/data': {
+          const field = sourceFieldsRef.current?.get(data.source)
+          if (field !== undefined) {
+            const resolved = completionToOptions(data.items)
+            setOptionSets(current => ({ ...current, [field]: resolved }))
+          }
+          break
+        }
+        case 'a2ui/data-failed':
+          // A source that cannot resolve degrades to an empty select rather
+          // than failing the page; the opener already surfaced the error.
           break
       }
     }

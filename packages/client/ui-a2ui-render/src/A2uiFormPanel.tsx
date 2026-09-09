@@ -20,7 +20,7 @@ export interface A2uiFormPanelProps extends Omit<A2uiPageProps, 'page'> {
   /**
    * Runtime option sets keyed by `select` field name, overriding static
    * `field.options` for fields whose options come from an `optionsFrom`
-   * script action.
+   * script action or a host-backed `source`.
    */
   readonly optionSets?: Readonly<Record<string, readonly A2uiFieldOption[]>>
 }
@@ -292,7 +292,7 @@ export function A2uiFormPanel({ page, surfaceId, t, busy, onSubmit, onAction, pa
                 : <FieldControl
                   field={field}
                   value={values[field.name]}
-                  {...(field.optionsFrom !== undefined && optionSets?.[field.name] !== undefined
+                  {...((field.optionsFrom !== undefined || field.source !== undefined) && optionSets?.[field.name] !== undefined
                     ? { options: optionSets[field.name] }
                     : {})}
                   onChange={(value) => { setValue(field.name, value) }}

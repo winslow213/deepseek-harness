@@ -82,6 +82,158 @@ export interface TypeApiEntry {
 /** Every harness `ctx.<key>` service, sorted by key. */
 export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
+    key: 'a2uiData',
+    summary: 'Host capability resolving a named source into select options.',
+    description: 'Host capability resolving a named source into select options.',
+    methods: [
+      {
+        signature: 'has(source: string): boolean',
+        description: 'Whether this provider knows the named source. A source outside the provider\'s whitelist is refused before any command runs.',
+        parameters: [{ name: 'source', description: 'the stable source name declared on a `select` field.' }],
+        returns: 'true when {@link resolve} can serve the source.',
+      },
+      {
+        signature: 'resolve(source: string, args: A2uiDataSourceArgs): Promise<A2uiDataSourceResult>',
+        description: 'Resolve one source into select options.',
+        parameters: [{ name: 'source', description: 'the stable source name declared on a `select` field.' }, { name: 'args', description: 'collected field values the provider may reference.' }],
+        returns: 'the resolved options.',
+        throws: ['for an unknown source or a provider that cannot serve it.'],
+      },
+    ],
+  },
+  {
+    key: 'a2uiDataController',
+    summary: 'Host service backing `ctx.remote.a2uiData`: resolve one source into select options through the composed provider.',
+    description: 'Host service backing `ctx.remote.a2uiData`: resolve one source into select options through the composed provider.',
+    methods: [
+      {
+        signature: '@Remote(\'resolve\') async resolve(request: A2uiDataResolveRequest): Promise<A2uiDataResolveValue>',
+        description: 'Resolve one source into its select options.',
+        parameters: [{ name: 'request', description: 'the source name and collected field values.' }],
+        returns: 'the resolved options.',
+      },
+    ],
+  },
+  {
+    key: 'a2uiRun',
+    summary: 'Host capability backing `ctx.a2uiRun`.',
+    description: 'Host capability backing `ctx.a2uiRun`.',
+    methods: [
+      {
+        signature: 'start(command: string, fields: A2uiRunFieldValues, timeoutMs?: number): A2uiRunHandle',
+        description: 'Fill a `{field}`-template command with single-quoted field values and start it in the background through the composed shell service.',
+        parameters: [{ name: 'command', description: 'the model-authored command template.' }, { name: 'fields', description: 'collected field values the template references.' }, { name: 'timeoutMs', description: 'run bound; absent uses the shell default and cap.' }],
+        returns: 'the live run handle.',
+        throws: ['when the shell service is absent or the template is invalid.'],
+      },
+      {
+        signature: 'get(runId: string): A2uiRunHandle',
+        description: 'The handle for one run id.',
+        parameters: [{ name: 'runId', description: 'the opaque run identity minted by the capability.' }],
+        returns: 'the live or settled run handle.',
+        throws: ['when the run id is unknown.'],
+      },
+      {
+        signature: 'read(runId: string): { seq: number; output: string; running: boolean; exitCode: number | null; lossy: boolean }',
+        description: 'Read the output produced since the previous read, consuming it.',
+        parameters: [{ name: 'runId', description: 'the opaque run identity minted by the capability.' }],
+        returns: 'the monotonic chunk sequence, the new output, and live state.',
+      },
+      {
+        signature: 'stop(runId: string): boolean',
+        description: 'Kill the run\'s process group.',
+        parameters: [{ name: 'runId', description: 'the opaque run identity minted by the capability.' }],
+        returns: 'false when the run had already finished, true otherwise.',
+      },
+    ],
+  },
+  {
+    key: 'a2uiRunController',
+    summary: 'Host service backing `ctx.remote.a2uiRun`: start a `command`-action run on the composed shell service, consume its output in chunks, and stop it.',
+    description: 'Host service backing `ctx.remote.a2uiRun`: start a `command`-action run on the composed shell service, consume its output in chunks, and stop it.',
+    methods: [
+      {
+        signature: '@Remote(\'start\') async start(request: A2uiRunStartRequest): Promise<A2uiRunStartValue>',
+        description: 'Start one command run over the composed shell service.',
+        parameters: [{ name: 'request', description: 'the command template, collected values, and optional run bound.' }],
+        returns: 'the run identity for later reads and stops.',
+      },
+      {
+        signature: '@Remote(\'read\') async read(request: A2uiRunReadRequest): Promise<A2uiRunReadValue>',
+        description: 'Read the output produced since the previous read (consuming).',
+        parameters: [{ name: 'request', description: 'the run identity.' }],
+        returns: 'the next output chunk and the process state.',
+      },
+      {
+        signature: '@Remote(\'stop\') async stop(request: A2uiRunStopRequest): Promise<A2uiRunStopValue>',
+        description: 'Stop one run\'s process group.',
+        parameters: [{ name: 'request', description: 'the run identity.' }],
+        returns: 'whether a live process was asked to terminate.',
+      },
+      {
+        signature: '@Remote(\'runScript\') async runScript(request: A2uiRunScriptRequest): Promise<A2uiRunScriptValue>',
+        description: 'Run one `script`-action program on the controlled code runtime.',
+        parameters: [{ name: 'request', description: 'the program, its binding grants, and the collected values.' }],
+        returns: 'the completion value, logs, and failure detail.',
+      },
+    ],
+  },
+  {
+    key: 'a2uiStore',
+    summary: 'The store capability every consumer reads from `ctx.a2uiStore`.',
+    description: 'The store capability every consumer reads from `ctx.a2uiStore`.',
+    methods: [
+      {
+        signature: 'readonly dir: string',
+        description: 'The resolved store directory (files live here).',
+        parameters: [],
+      },
+      {
+        signature: 'list(): Promise<A2uiToolRecord[]>',
+        description: 'Every saved tool, name-sorted.',
+        parameters: [],
+        returns: 'the saved A2UI tool records in name order.',
+      },
+      {
+        signature: 'save(name: string, page: A2uiPage): Promise<A2uiToolRecord>',
+        description: 'Persist one canonical page under a stable name, replacing any same-named tool.',
+        parameters: [{ name: 'name', description: 'the stable tool name for the saved file.' }, { name: 'page', description: 'the declarative A2UI page to persist.' }],
+        returns: 'the recorded A2UI tool.',
+      },
+      {
+        signature: 'remove(name: string): Promise<boolean>',
+        description: 'Remove one saved tool.',
+        parameters: [{ name: 'name', description: 'the stable tool name of the saved file.' }],
+        returns: 'false when the named tool is absent, true when removed.',
+      },
+    ],
+  },
+  {
+    key: 'a2uiStoreController',
+    summary: 'Host service backing `ctx.remote.a2uiStore`: list saved tools, re-render one into a session, and remove one.',
+    description: 'Host service backing `ctx.remote.a2uiStore`: list saved tools, re-render one into a session, and remove one.',
+    methods: [
+      {
+        signature: '@Remote(\'list\') async list(): Promise<A2uiStoreListValue>',
+        description: 'List every saved tool (name, page, savedAt).',
+        parameters: [],
+        returns: 'the saved tools, name-sorted.',
+      },
+      {
+        signature: '@Remote(\'open\') async open(request: A2uiStoreOpenRequest): Promise<A2uiStoreOpenValue>',
+        description: 'Re-render one saved tool into the addressed session by appending a fresh `a2ui/surface` event carrying its page. The owning agent must be live; the client then renders it through the existing A2UI surface projection.',
+        parameters: [{ name: 'request', description: 'session identity and the saved tool name.' }],
+        returns: 'the minted surface identity and the tool name.',
+      },
+      {
+        signature: '@Remote(\'delete\') async delete(request: A2uiStoreDeleteRequest): Promise<A2uiStoreDeleteValue>',
+        description: 'Delete one saved tool.',
+        parameters: [{ name: 'request', description: 'the tool name.' }],
+        returns: 'whether a tool was deleted.',
+      },
+    ],
+  },
+  {
     key: 'agentDefaultModel',
     summary: 'Owns the default model selection independently of any Host or transport.',
     description: 'Owns the default model selection independently of any Host or transport. The composition entry remains usable without a settings provider; when one is mounted, its user layer is read live.',
@@ -866,7 +1018,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: '@Remote(\'list\') async list(path: string | undefined, signal: AbortSignal): Promise<DirectoryListing>',
         description: 'List one directory level for a Remote caller\'s in-app browser.',
-        parameters: [{ name: 'path', description: 'absolute directory to list; absent lists the browse root (the home directory, or the configured confinement root).' }, { name: 'signal', description: 'caller lifetime; abort stops the backend\'s scan instead of letting it outlive a disconnected caller.' }],
+        parameters: [{ name: 'path', description: 'absolute directory to list; absent lists the home directory.' }, { name: 'signal', description: 'caller lifetime; abort stops the backend\'s scan instead of letting it outlive a disconnected caller.' }],
         returns: 'the level\'s listing with its ancestry.',
       },
       {
@@ -3535,6 +3687,138 @@ export const EVENT_API: readonly EventApiEntry[] = [
 /** Shapes of every exported type the Service and Event signatures reference (transitively), sorted by name. */
 export const TYPE_API: readonly TypeApiEntry[] = [
   {
+    name: 'A2uiAction',
+    declaration: 'export interface A2uiAction {\n    readonly id: string;\n    readonly label: string;\n    readonly execution?: A2uiExecutionMode;\n    readonly tool?: string;\n    readonly instruction?: string;\n    readonly result?: string;\n    readonly command?: string;\n    readonly timeoutMs?: number;\n    readonly program?: string;\n    readonly binds?: readonly string[];\n    readonly write?: readonly {\n        readonly field: string;\n        readonly from: string;\n    }[];\n}',
+  },
+  {
+    name: 'A2uiCanvasEdge',
+    declaration: 'export interface A2uiCanvasEdge {\n    readonly id: string;\n    readonly source: string;\n    readonly target: string;\n    readonly label?: string;\n}',
+  },
+  {
+    name: 'A2uiCanvasNode',
+    declaration: 'export interface A2uiCanvasNode {\n    readonly id: string;\n    readonly label: string;\n    readonly detail?: string;\n    readonly position: {\n        readonly x: number;\n        readonly y: number;\n    };\n    readonly role?: \'start\' | \'end\';\n}',
+  },
+  {
+    name: 'A2uiCanvasPage',
+    declaration: 'export interface A2uiCanvasPage extends A2uiPageBase {\n    readonly kind: \'canvas\';\n    readonly nodes: readonly A2uiCanvasNode[];\n    readonly edges: readonly A2uiCanvasEdge[];\n}',
+  },
+  {
+    name: 'A2uiDataResolveRequest',
+    declaration: 'export interface A2uiDataResolveRequest {\n    readonly source: string;\n    readonly args: A2uiDataSourceArgs;\n}',
+  },
+  {
+    name: 'A2uiDataResolveValue',
+    declaration: 'export interface A2uiDataResolveValue {\n    readonly items: readonly A2uiFieldOption[];\n}',
+  },
+  {
+    name: 'A2uiDataSourceArgs',
+    declaration: 'export type A2uiDataSourceArgs = Readonly<Record<string, string | number | boolean | null>>;',
+  },
+  {
+    name: 'A2uiDataSourceResult',
+    declaration: 'export interface A2uiDataSourceResult {\n    readonly items: readonly A2uiFieldOption[];\n}',
+  },
+  {
+    name: 'A2uiExecutionMode',
+    declaration: 'export type A2uiExecutionMode = \'local\' | \'model\' | \'command\' | \'script\';',
+  },
+  {
+    name: 'A2uiField',
+    declaration: 'export interface A2uiField {\n    readonly name: string;\n    readonly label: string;\n    readonly type: A2uiFieldType;\n    readonly required?: boolean;\n    readonly placeholder?: string;\n    readonly options?: readonly A2uiFieldOption[];\n    readonly help?: string;\n    readonly visibleWhen?: string;\n    readonly validateWhen?: string;\n    readonly validateMessage?: string;\n    readonly compute?: string;\n    readonly optionsFrom?: string;\n    readonly source?: string;\n}',
+  },
+  {
+    name: 'A2uiFieldOption',
+    declaration: 'export interface A2uiFieldOption {\n    readonly label: string;\n    readonly value: string;\n}',
+  },
+  {
+    name: 'A2uiFieldType',
+    declaration: 'export type A2uiFieldType = \'text\' | \'textarea\' | \'select\' | \'number\' | \'checkbox\';',
+  },
+  {
+    name: 'A2uiFormPage',
+    declaration: 'export interface A2uiFormPage extends A2uiPageBase {\n    readonly kind: \'form\';\n    readonly fields: readonly A2uiField[];\n}',
+  },
+  {
+    name: 'A2uiPage',
+    declaration: 'export type A2uiPage = A2uiFormPage | A2uiCanvasPage;',
+  },
+  {
+    name: 'A2uiPageBase',
+    declaration: 'export interface A2uiPageBase {\n    readonly title: string;\n    readonly description?: string;\n    readonly submitLabel?: string;\n    readonly instruction?: string;\n    readonly actions?: readonly A2uiAction[];\n}',
+  },
+  {
+    name: 'A2uiRunFieldValues',
+    declaration: 'export type A2uiRunFieldValues = Readonly<Record<string, string | number | boolean | null>>;',
+  },
+  {
+    name: 'A2uiRunHandle',
+    declaration: 'export interface A2uiRunHandle {\n    readonly runId: string;\n    readonly proc: ShellProcess;\n    readonly command: string;\n    seq: number;\n}',
+  },
+  {
+    name: 'A2uiRunReadRequest',
+    declaration: 'export interface A2uiRunReadRequest {\n    readonly runId: string;\n}',
+  },
+  {
+    name: 'A2uiRunReadValue',
+    declaration: 'export interface A2uiRunReadValue {\n    readonly runId: string;\n    readonly seq: number;\n    readonly output: string;\n    readonly running: boolean;\n    readonly exitCode: number | null;\n    readonly lossy: boolean;\n}',
+  },
+  {
+    name: 'A2uiRunScriptRequest',
+    declaration: 'export interface A2uiRunScriptRequest {\n    readonly program: string;\n    readonly binds: readonly A2uiScriptBinding[];\n    readonly fields: A2uiRunFieldValues;\n}',
+  },
+  {
+    name: 'A2uiRunScriptValue',
+    declaration: 'export interface A2uiRunScriptValue {\n    readonly value?: A2uiScriptJson;\n    readonly logs: readonly string[];\n    readonly error?: {\n        readonly kind: string;\n        readonly message: string;\n    };\n}',
+  },
+  {
+    name: 'A2uiRunStartRequest',
+    declaration: 'export interface A2uiRunStartRequest {\n    readonly command: string;\n    readonly fields: A2uiRunFieldValues;\n    readonly timeoutMs?: number;\n}',
+  },
+  {
+    name: 'A2uiRunStartValue',
+    declaration: 'export interface A2uiRunStartValue {\n    readonly runId: string;\n}',
+  },
+  {
+    name: 'A2uiRunStopRequest',
+    declaration: 'export interface A2uiRunStopRequest {\n    readonly runId: string;\n}',
+  },
+  {
+    name: 'A2uiRunStopValue',
+    declaration: 'export interface A2uiRunStopValue {\n    readonly runId: string;\n    readonly requested: boolean;\n}',
+  },
+  {
+    name: 'A2uiScriptJson',
+    declaration: 'export type A2uiScriptJson = null | boolean | number | string | readonly A2uiScriptJson[] | {\n    readonly [key: string]: A2uiScriptJson;\n};',
+  },
+  {
+    name: 'A2uiStoreDeleteRequest',
+    declaration: 'export interface A2uiStoreDeleteRequest {\n    readonly name: string;\n}',
+  },
+  {
+    name: 'A2uiStoreDeleteValue',
+    declaration: 'export interface A2uiStoreDeleteValue {\n    readonly removed: boolean;\n}',
+  },
+  {
+    name: 'A2uiStoreListValue',
+    declaration: 'export interface A2uiStoreListValue {\n    readonly tools: readonly A2uiToolWire[];\n}',
+  },
+  {
+    name: 'A2uiStoreOpenRequest',
+    declaration: 'export interface A2uiStoreOpenRequest {\n    readonly sessionId: SessionId;\n    readonly name: string;\n}',
+  },
+  {
+    name: 'A2uiStoreOpenValue',
+    declaration: 'export interface A2uiStoreOpenValue {\n    readonly surfaceId: string;\n    readonly name: string;\n}',
+  },
+  {
+    name: 'A2uiToolRecord',
+    declaration: 'export interface A2uiToolRecord {\n    readonly name: string;\n    readonly page: A2uiPage;\n    readonly savedAt: string;\n}',
+  },
+  {
+    name: 'A2uiToolWire',
+    declaration: 'export type A2uiToolWire = A2uiToolRecord;',
+  },
+  {
     name: 'AdapterRegistrationHandle',
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
@@ -5287,8 +5571,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SessionProjectionValues = Partial<SessionProjectionMap> & Readonly<Record<string, SessionProjectionValue>>;',
   },
   {
+    name: 'SessionPromptContext',
+    declaration: 'export interface SessionPromptContext {\n    readonly plugin: string;\n    readonly form: \'notice\';\n    readonly summary: string;\n}',
+  },
+  {
     name: 'SessionPromptRequest',
-    declaration: 'export interface SessionPromptRequest {\n    readonly requestId: SessionRequestId;\n    readonly sessionId: SessionId;\n    readonly mode: \'queue\' | \'steer\';\n    readonly content: readonly PromptContentPart[];\n    readonly clientTimeZone?: string;\n}',
+    declaration: 'export interface SessionPromptRequest {\n    readonly requestId: SessionRequestId;\n    readonly sessionId: SessionId;\n    readonly mode: \'queue\' | \'steer\';\n    readonly content: readonly PromptContentPart[];\n    readonly clientTimeZone?: string;\n    readonly context?: SessionPromptContext;\n}',
   },
   {
     name: 'SessionPromptValue',

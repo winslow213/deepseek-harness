@@ -475,6 +475,194 @@ type ObjectJsonSchema = JsonSchemaNode & { type: 'object' }
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxa2uidata--a2uidataprovider"></a>
+
+### `ctx.a2uiData` — `A2uiDataProvider`
+
+Host capability resolving a named source into select options.
+
+```ts cordis-catalog
+/**
+ * Whether this provider knows the named source. A source outside the
+ * provider's whitelist is refused before any command runs.
+ * @param source - the stable source name declared on a `select` field.
+ * @returns true when {@link resolve} can serve the source.
+ */
+has(source: string): boolean
+
+/**
+ * Resolve one source into select options.
+ * @param source - the stable source name declared on a `select` field.
+ * @param args - collected field values the provider may reference.
+ * @returns the resolved options.
+ * @throws for an unknown source or a provider that cannot serve it.
+ */
+resolve(source: string, args: A2uiDataSourceArgs): Promise<A2uiDataSourceResult>
+```
+
+Source: [`packages/web/tool-a2ui-data/src/data.ts`](../../packages/web/tool-a2ui-data/src/data.ts)
+
+<a id="ctxa2uidatacontroller--a2uidatacontroller"></a>
+
+### `ctx.a2uiDataController` — `A2uiDataController`
+
+Host service backing `ctx.remote.a2uiData`: resolve one source into select options through the composed provider.
+
+```ts cordis-catalog
+/**
+ * Resolve one source into its select options.
+ * @param request - the source name and collected field values.
+ * @returns the resolved options.
+ */
+@Remote('resolve') async resolve(request: A2uiDataResolveRequest): Promise<A2uiDataResolveValue>
+```
+
+Source: [`packages/web/tool-a2ui-data/src/remote.ts`](../../packages/web/tool-a2ui-data/src/remote.ts)
+
+<a id="ctxa2uirun--a2uirun"></a>
+
+### `ctx.a2uiRun` — `A2uiRun`
+
+Host capability backing `ctx.a2uiRun`.
+
+```ts cordis-catalog
+/**
+ * Fill a `{field}`-template command with single-quoted field values and
+ * start it in the background through the composed shell service.
+ * @param command - the model-authored command template.
+ * @param fields - collected field values the template references.
+ * @param timeoutMs - run bound; absent uses the shell default and cap.
+ * @returns the live run handle.
+ * @throws when the shell service is absent or the template is invalid.
+ */
+start(command: string, fields: A2uiRunFieldValues, timeoutMs?: number): A2uiRunHandle
+
+/**
+ * The handle for one run id.
+ * @param runId - the opaque run identity minted by the capability.
+ * @returns the live or settled run handle.
+ * @throws when the run id is unknown.
+ */
+get(runId: string): A2uiRunHandle
+
+/**
+ * Read the output produced since the previous read, consuming it.
+ * @param runId - the opaque run identity minted by the capability.
+ * @returns the monotonic chunk sequence, the new output, and live state.
+ */
+read(runId: string): { seq: number; output: string; running: boolean; exitCode: number | null; lossy: boolean }
+
+/**
+ * Kill the run's process group.
+ * @param runId - the opaque run identity minted by the capability.
+ * @returns false when the run had already finished, true otherwise.
+ */
+stop(runId: string): boolean
+```
+
+Source: [`packages/web/tool-a2ui-store/src/run.ts`](../../packages/web/tool-a2ui-store/src/run.ts)
+
+<a id="ctxa2uiruncontroller--a2uiruncontroller"></a>
+
+### `ctx.a2uiRunController` — `A2uiRunController`
+
+Host service backing `ctx.remote.a2uiRun`: start a `command`-action run on the composed shell service, consume its output in chunks, and stop it.
+
+```ts cordis-catalog
+/**
+ * Start one command run over the composed shell service.
+ * @param request - the command template, collected values, and optional run bound.
+ * @returns the run identity for later reads and stops.
+ */
+@Remote('start') async start(request: A2uiRunStartRequest): Promise<A2uiRunStartValue>
+
+/**
+ * Read the output produced since the previous read (consuming).
+ * @param request - the run identity.
+ * @returns the next output chunk and the process state.
+ */
+@Remote('read') async read(request: A2uiRunReadRequest): Promise<A2uiRunReadValue>
+
+/**
+ * Stop one run's process group.
+ * @param request - the run identity.
+ * @returns whether a live process was asked to terminate.
+ */
+@Remote('stop') async stop(request: A2uiRunStopRequest): Promise<A2uiRunStopValue>
+
+/**
+ * Run one `script`-action program on the controlled code runtime.
+ * @param request - the program, its binding grants, and the collected values.
+ * @returns the completion value, logs, and failure detail.
+ */
+@Remote('runScript') async runScript(request: A2uiRunScriptRequest): Promise<A2uiRunScriptValue>
+```
+
+Source: [`packages/web/tool-a2ui-store/src/remote.ts`](../../packages/web/tool-a2ui-store/src/remote.ts)
+
+<a id="ctxa2uistore--a2uistore"></a>
+
+### `ctx.a2uiStore` — `A2uiStore`
+
+The store capability every consumer reads from `ctx.a2uiStore`.
+
+```ts cordis-catalog
+/**
+ * Every saved tool, name-sorted.
+ * @returns the saved A2UI tool records in name order.
+ */
+list(): Promise<A2uiToolRecord[]>
+
+/**
+ * Persist one canonical page under a stable name, replacing any same-named tool.
+ * @param name - the stable tool name for the saved file.
+ * @param page - the declarative A2UI page to persist.
+ * @returns the recorded A2UI tool.
+ */
+save(name: string, page: A2uiPage): Promise<A2uiToolRecord>
+
+/**
+ * Remove one saved tool.
+ * @param name - the stable tool name of the saved file.
+ * @returns false when the named tool is absent, true when removed.
+ */
+remove(name: string): Promise<boolean>
+```
+
+Source: [`packages/web/tool-a2ui-store/src/index.ts`](../../packages/web/tool-a2ui-store/src/index.ts)
+
+<a id="ctxa2uistorecontroller--a2uistorecontroller"></a>
+
+### `ctx.a2uiStoreController` — `A2uiStoreController`
+
+Host service backing `ctx.remote.a2uiStore`: list saved tools, re-render one into a session, and remove one.
+
+```ts cordis-catalog
+/**
+ * List every saved tool (name, page, savedAt).
+ * @returns the saved tools, name-sorted.
+ */
+@Remote('list') async list(): Promise<A2uiStoreListValue>
+
+/**
+ * Re-render one saved tool into the addressed session by appending a fresh
+ * `a2ui/surface` event carrying its page. The owning agent must be live; the
+ * client then renders it through the existing A2UI surface projection.
+ * @param request - session identity and the saved tool name.
+ * @returns the minted surface identity and the tool name.
+ */
+@Remote('open') async open(request: A2uiStoreOpenRequest): Promise<A2uiStoreOpenValue>
+
+/**
+ * Delete one saved tool.
+ * @param request - the tool name.
+ * @returns whether a tool was deleted.
+ */
+@Remote('delete') async delete(request: A2uiStoreDeleteRequest): Promise<A2uiStoreDeleteValue>
+```
+
+Source: [`packages/web/tool-a2ui-store/src/remote.ts`](../../packages/web/tool-a2ui-store/src/remote.ts)
+
 <a id="ctxtools--toolruntime"></a>
 
 ### `ctx.tools` — `ToolRuntime`

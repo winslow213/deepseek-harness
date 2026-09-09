@@ -2726,6 +2726,34 @@ export type TokenMeterConfig = Record<string, never>
 
 来源：[`packages/llm/token-meter/src/types.ts:13`](../packages/llm/token-meter/src/types.ts)
 
+<a id="deepseek-aidsh-tool-a2ui-data-bash"></a>
+
+## `@deepseek-ai/dsh-tool-a2ui-data-bash`
+
+需要：`shell`
+
+```ts config-catalog
+/** Provider configuration: the source-name → command whitelist. */
+export interface Config {
+  /** Source name → operator-authored command; a page may only name a key here. */
+  readonly sources: Record<string, A2uiDataSourceSpec>
+}
+
+/** One whitelisted source: the operator-authored command and its run bound. */
+export interface A2uiDataSourceSpec {
+  /**
+   * Shell command producing the options. May use `{fieldName}` placeholders
+   * filled from the collected field values; every placeholder must name a
+   * field (an unknown one fails loud).
+   */
+  readonly command: string
+  /** Run bound in milliseconds; absent uses the shell default and cap. */
+  readonly timeoutMs?: number
+}
+```
+
+来源：[`packages/web/tool-a2ui-data-bash/src/index.ts:36`](../packages/web/tool-a2ui-data-bash/src/index.ts)
+
 <a id="deepseek-aidsh-tool-a2ui-store"></a>
 
 ## `@deepseek-ai/dsh-tool-a2ui-store`
@@ -2740,7 +2768,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/web/tool-a2ui-store/src/index.ts:83`](../packages/web/tool-a2ui-store/src/index.ts)
+来源：[`packages/web/tool-a2ui-store/src/index.ts:95`](../packages/web/tool-a2ui-store/src/index.ts)
 
 <a id="deepseek-aidsh-tool-a2ui-surface"></a>
 
@@ -3637,6 +3665,7 @@ export interface Config {
 - `@deepseek-ai/dsh-session-title-llm`（[`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts)）
 - `@deepseek-ai/dsh-subagent-in-process-driver`（[`packages/subagent/subagent-in-process-driver/src/index.ts`](../packages/subagent/subagent-in-process-driver/src/index.ts)）
 - `@deepseek-ai/dsh-timeout`（[`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts)）
+- `@deepseek-ai/dsh-tool-a2ui-data`（[`packages/web/tool-a2ui-data/src/index.ts`](../packages/web/tool-a2ui-data/src/index.ts)）
 - `@deepseek-ai/dsh-typert-generator`（[`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts)）
 - `@deepseek-ai/dsh-typert-protocol`（[`packages/typert/protocol/src/index.ts`](../packages/typert/protocol/src/index.ts)）
 - `@deepseek-ai/dsh-typert-registry`（[`packages/typert/registry/src/index.ts`](../packages/typert/registry/src/index.ts)）
