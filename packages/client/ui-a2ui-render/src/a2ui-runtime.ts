@@ -14,6 +14,7 @@
 import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import type { A2uiPopupMessage, A2uiRunState } from './a2ui-wire.ts'
 import { A2UI_RUN_IDLE } from './a2ui-wire.ts'
+import { A2UI_LIVE_IDLE, type A2uiLiveState } from './a2ui-wire.ts'
 
 /** A value field/expression may hold. */
 export type A2uiValue = string | number | boolean | null
@@ -107,6 +108,8 @@ export interface A2uiPopupState {
   readonly busy: boolean
   /** The current command run (idle until a `command` action starts). */
   readonly run: A2uiRunState
+  /** The live-result pane for a `model`-action background job stream. */
+  readonly live: A2uiLiveState
   /** The latest `local` action's result text, if any. */
   readonly localResult: string | null
   /** The latest `script` action's completion (JSON) text, if any. */
@@ -119,6 +122,7 @@ export interface A2uiPopupState {
 export const A2UI_POPUP_IDLE: A2uiPopupState = {
   busy: false,
   run: A2UI_RUN_IDLE,
+  live: A2UI_LIVE_IDLE,
   localResult: null,
   scriptResult: null,
   scriptError: null,
@@ -133,6 +137,9 @@ export type A2uiPopupAction =
   | { readonly type: 'run-done'; readonly exitCode: number | null }
   | { readonly type: 'run-failed'; readonly message: string }
   | { readonly type: 'run-stop-requested' }
+  | { readonly type: 'live-started' }
+  | { readonly type: 'live-chunk'; readonly output: string }
+  | { readonly type: 'live-done' }
   | { readonly type: 'local-result'; readonly text: string | null }
   | { readonly type: 'script-result'; readonly text: string }
   | { readonly type: 'script-failed'; readonly message: string }
@@ -169,6 +176,12 @@ export function reducePopupState(state: A2uiPopupState, event: A2uiPopupAction):
       }
     case 'run-stop-requested':
       return { ...state, run: { ...state.run, running: false } }
+    case 'live-started':
+      return { ...state, live: { active: true, output: '', running: true, settled: false } }
+    case 'live-chunk':
+      return { ...state, live: { ...state.live, output: state.live.output + event.output } }
+    case 'live-done':
+      return { ...state, live: { ...state.live, running: false, settled: true } }
     case 'script-result':
       return { ...state, busy: false, scriptResult: event.text, scriptError: null }
     case 'script-failed':

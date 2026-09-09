@@ -65,7 +65,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
   opener: Window
 }) {
   const [state, dispatch] = useReducer(reducePopupState, A2UI_POPUP_IDLE)
-  const { busy, run, localResult, scriptResult, scriptError } = state
+  const { busy, run, live, localResult, scriptResult, scriptError } = state
   const [patch, setPatch] = useState<{ name: string; value: string | number | boolean } | null>(null)
   const [optionSets, setOptionSets] = useState<Record<string, readonly A2uiResolvedOption[]>>({})
   // The action whose outcome is still pending a possible write-back.
@@ -189,6 +189,15 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
         case 'a2ui/runFailed':
           dispatch({ type: 'run-failed', message: data.message })
           break
+        case 'a2ui/liveStarted':
+          dispatch({ type: 'live-started' })
+          break
+        case 'a2ui/liveChunk':
+          dispatch({ type: 'live-chunk', output: data.output })
+          break
+        case 'a2ui/liveDone':
+          dispatch({ type: 'live-done' })
+          break
         case 'a2ui/scriptResult': {
           const text = data.value === undefined ? '(no value)' : JSON.stringify(data.value)
           dispatch({ type: 'script-result', text })
@@ -253,6 +262,14 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
           </div>
           {run.error !== null && <p className={css.consoleError}>{run.error}</p>}
           <pre className={css.consoleBody}>{run.output || t('run.waiting')}</pre>
+        </div>
+      )}
+      {live.active && (
+        <div className={css.console} data-a2ui-live>
+          <div className={css.consoleHeader}>
+            <span className={css.consoleStatus}>{live.running ? '…' : '✓'}</span>
+          </div>
+          <pre className={css.consoleBody}>{live.output || t('run.waiting')}</pre>
         </div>
       )}
     </>

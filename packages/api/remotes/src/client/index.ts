@@ -41,6 +41,7 @@ export type {} from '@deepseek-ai/dsh-api-workspace-controller/remote'
 export type * from '@deepseek-ai/dsh-api-workspace-controller/types'
 export type {} from '@deepseek-ai/dsh-tool-a2ui-store/remote'
 export type {
+  A2uiLiveReadRequest, A2uiLiveReadValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
 } from '@deepseek-ai/dsh-tool-a2ui-store/types'

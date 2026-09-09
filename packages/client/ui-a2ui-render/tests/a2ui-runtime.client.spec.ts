@@ -121,6 +121,27 @@ describe('reducePopupState', () => {
     expect(final.run.error).toBeNull()
   })
 
+  it('walks a live stream through start → chunk → done', () => {
+    const actions: A2uiPopupAction[] = [
+      { type: 'live-started' },
+      { type: 'live-chunk', output: 'one\n' },
+      { type: 'live-chunk', output: 'two\n' },
+      { type: 'live-done' },
+    ]
+    const final = actions.reduce(reducePopupState, A2UI_POPUP_IDLE)
+    expect(final.live.active).toBe(true)
+    expect(final.live.output).toBe('one\ntwo\n')
+    expect(final.live.running).toBe(false)
+    expect(final.live.settled).toBe(true)
+  })
+
+  it('a live stream starts fresh regardless of the command run state', () => {
+    const withRun = reducePopupState(A2UI_POPUP_IDLE, { type: 'run-started', runId: 'r1' })
+    const live = reducePopupState(withRun, { type: 'live-started' })
+    expect(live.run.runId).toBe('r1')
+    expect(live.live).toMatchObject({ active: true, output: '', running: true, settled: false })
+  })
+
   it('surfaces a run failure and keeps the partial output', () => {
     const events: A2uiPopupAction[] = [
       { type: 'run-started', runId: 'r1' },

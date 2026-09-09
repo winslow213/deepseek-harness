@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
+  A2uiLiveReadRequest, A2uiLiveReadValue,
   A2uiRunReadRequest, A2uiRunReadValue,
   A2uiRunScriptRequest, A2uiRunScriptValue,
   A2uiRunStartRequest, A2uiRunStartValue,
@@ -22,6 +23,7 @@ import type {
 import type { A2uiRunSession } from './run.ts'
 
 export type {
+  A2uiLiveReadRequest, A2uiLiveReadValue,
   A2uiRunReadRequest, A2uiRunReadValue,
   A2uiRunScriptRequest, A2uiRunScriptValue,
   A2uiRunStartRequest, A2uiRunStartValue,
@@ -36,6 +38,8 @@ declare module '@deepseek-ai/cordis' {
     a2uiStoreController: A2uiStoreController
     /** Host owner of the `a2uiRun` Remote namespace. */
     a2uiRunController: A2uiRunController
+    /** Host owner of the `a2uiLive` Remote namespace. */
+    a2uiLiveController: A2uiLiveController
   }
 }
 
@@ -218,5 +222,32 @@ export class A2uiRunController extends TypertRemoteService {
       }
       throw error
     }
+  }
+}
+
+/**
+ * Host service backing `ctx.remote.a2uiLive`: serve the durable live-result
+ * stream of one surface to the browser launcher so the popup can render the
+ * output a `model`-action background job produces.
+ */
+export class A2uiLiveController extends TypertRemoteService {
+  static inject = ['a2uiLive', 'typert']
+
+  /** @param ctx - Host context carrying the live-result capability. */
+  constructor(ctx: Context) {
+    super(ctx, 'a2uiLiveController', { namespace: 'a2uiLive' })
+  }
+
+  /**
+   * Read the output produced since the previous read for one surface.
+   * @param request - the stable surface identity.
+   * @returns the delta and live state; a no-stream read returns an idle value
+   *   (`running: false`, `settled: false`) so the launcher can distinguish
+   *   "nothing attached" from "attached and finished".
+   */
+  @Remote('read')
+  read(request: A2uiLiveReadRequest): A2uiLiveReadValue {
+    const read = this.ctx.a2uiLive.read(request.surfaceId)
+    return read ?? { output: '', running: false, settled: false }
   }
 }

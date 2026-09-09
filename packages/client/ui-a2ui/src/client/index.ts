@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { A2uiDataSourceArgs, SessionRequestId } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
-import { A2uiLauncher, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from './launcher.tsx'
+import { A2uiLauncher, type A2uiReadLive, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from './launcher.tsx'
 import { a2uiSurfaceDefinition } from './a2ui-definition.ts'
 import { en, NS, type A2uiKey, zh } from './locales.ts'
 
@@ -25,7 +25,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Required services for Definition, keyed renderer, copy, and the command-run Remote. */
-export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun', 'remote.session', 'remote.a2uiData']
+export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun', 'remote.a2uiLive', 'remote.session', 'remote.a2uiData']
 
 /**
  * Build the command-run bridge over the api-remotes `a2uiRun` namespace. The
@@ -96,6 +96,21 @@ function buildResolveSource(ctx: ClientContext): A2uiResolveSource {
   }
 }
 
+/**
+ * Build the live-result reader over the api-remotes `a2uiLive` namespace: the
+ * launcher polls it while a page with a `model` action is open, so a
+ * background job the model attached streams into the popup's live pane.
+ * @param ctx - registrant context carrying the typed remote assembly.
+ * @returns the reader the launcher polls for `a2ui/update` streams.
+ */
+function buildReadLive(ctx: ClientContext): A2uiReadLive {
+  return async (surfaceId) => {
+    const answered = await ctx.remote.a2uiLive.read({ surfaceId })
+    if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+    return answered.value
+  }
+}
+
 /** Register the A2UI Definition, dictionary, and keyed Chat launcher. */
 export function apply(ctx: ClientContext): void {
   ctx.uiConversation.events.register(a2uiSurfaceDefinition)
@@ -108,6 +123,7 @@ export function apply(ctx: ClientContext): void {
       bridge: buildBridge(ctx),
       submitNotice: buildSubmitNotice(ctx),
       resolveSource: buildResolveSource(ctx),
+      readLive: buildReadLive(ctx),
     }),
   }, A2uiLauncher))
 }

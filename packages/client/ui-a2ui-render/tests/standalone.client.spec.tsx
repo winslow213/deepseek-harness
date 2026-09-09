@@ -91,6 +91,21 @@ describe('renderA2uiPopup', () => {
     expect(pane.textContent).toContain('no shell mounted')
   })
 
+  it('renders the live-result pane from liveStarted/liveChunk/liveDone', () => {
+    const { root, opener } = harness()
+    act(() => { renderA2uiPopup(root, { surfaceId: 's1', page: page() }) })
+    sendFromOpener({ type: 'a2ui/init', surfaceId: 's1', page: page() }, opener)
+
+    sendFromOpener({ type: 'a2ui/liveStarted', surfaceId: 's1' }, opener)
+    sendFromOpener({ type: 'a2ui/liveChunk', surfaceId: 's1', output: 'log1\n' }, opener)
+    sendFromOpener({ type: 'a2ui/liveChunk', surfaceId: 's1', output: 'log2\n' }, opener)
+    sendFromOpener({ type: 'a2ui/liveDone', surfaceId: 's1' }, opener)
+
+    const pane = root.querySelector('[data-a2ui-live]')!
+    expect(pane.textContent).toContain('log1')
+    expect(pane.textContent).toContain('log2')
+  })
+
   it('fires optionsFrom actions on open and fills the select from their completion', () => {
     const { sent, root, opener } = harness()
     const dynamic: A2uiFormPage = {

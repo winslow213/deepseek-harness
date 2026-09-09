@@ -45,7 +45,7 @@ export interface A2uiRunBridge {
 /** Keyed Chat renderer props for one model-opened A2UI page launcher. */
 export type A2uiLauncherProps =
   PropsRuntime<'conversation.chat.node', 'a2ui-surface'>
-  & InjectFace<{ bridge?: A2uiRunBridge; submitNotice: A2uiSubmitNotice; resolveSource: A2uiResolveSource }>
+  & InjectFace<{ bridge?: A2uiRunBridge; submitNotice: A2uiSubmitNotice; resolveSource: A2uiResolveSource; readLive: A2uiReadLive }>
   & PropsLocale<'a2ui'>
 
 /** Submit an A2UI action or form submission as a logged non-user context notice. */
@@ -53,6 +53,16 @@ export type A2uiSubmitNotice = (sessionId: SessionId, text: string, summary: str
 
 /** Resolve one host-backed data source into a select field's options. */
 export type A2uiResolveSource = (source: string, args: Record<string, unknown>) => Promise<readonly A2uiFieldOption[]>
+
+/** One read of a `model`-action live-result stream. */
+export interface A2uiLiveRead {
+  readonly output: string
+  readonly running: boolean
+  readonly settled: boolean
+}
+
+/** Read the live-result stream of one surface (the model-action job output). */
+export type A2uiReadLive = (surfaceId: string) => Promise<A2uiLiveRead>
 
 /** The popup URL served by the web frontend's dedicated A2UI entry. */
 const A2UI_POPUP_PATH = '/a2ui.html'
@@ -79,11 +89,13 @@ function noticeSummary(account: string): string {
  * Render the launcher card and manage its popup window.
  * @param props - the keyed Chat slot props (node data, input machine, locale).
  */
-export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSource, t }: A2uiLauncherProps) {
+export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSource, readLive, t }: A2uiLauncherProps) {
   const { page, surfaceId } = node.data
   const [blocked, setBlocked] = useState(false)
   const popupRef = useRef<Window | null>(null)
   const runTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const liveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const liveStartedRef = useRef(false)
 
   useEffect(() => {
     console.log('[a2ui] launcher mounted', { surfaceId, kind: page.kind, origin: location.origin })
@@ -235,8 +247,46 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
     return () => {
       window.removeEventListener('message', onMessage)
       if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
+      if (liveTimerRef.current !== null) clearInterval(liveTimerRef.current)
     }
-  }, [surfaceId, page, sessionId, submitNotice, resolveSource, bridge])
+  }, [surfaceId, page, sessionId, submitNotice, resolveSource, bridge, readLive])
+
+  // Whether the page can ever produce a model-action live stream (its action
+  // set carries a model-mode action the model may bind a job to).
+  const canLiveStream = page.actions?.some(action => action.execution === undefined || action.execution === 'model') ?? false
+
+  /** Poll the live-result stream for this surface and forward its phases to the popup. */
+  const startLivePoll = (): void => {
+    if (!canLiveStream) return
+    if (liveTimerRef.current !== null) clearInterval(liveTimerRef.current)
+    liveStartedRef.current = false
+    liveTimerRef.current = setInterval(() => {
+      const popup = popupRef.current
+      if (popup === null) return
+      void readLive(surfaceId).then(
+        (read) => {
+          if (read.running && !liveStartedRef.current) {
+            liveStartedRef.current = true
+            popup.postMessage({ type: 'a2ui/liveStarted', surfaceId }, location.origin)
+          }
+          if (read.output.length > 0) {
+            popup.postMessage({ type: 'a2ui/liveChunk', surfaceId, output: read.output }, location.origin)
+          }
+          if (read.settled) {
+            popup.postMessage({ type: 'a2ui/liveDone', surfaceId }, location.origin)
+            if (liveTimerRef.current !== null) clearInterval(liveTimerRef.current)
+            liveTimerRef.current = null
+          }
+        },
+        () => {
+          // A live Remote that cannot resolve (no jobs service composed) just
+          // stops the stream; the page remains usable.
+          if (liveTimerRef.current !== null) clearInterval(liveTimerRef.current)
+          liveTimerRef.current = null
+        },
+      )
+    }, 250)
+  }
 
   const openWindow = (): void => {
     console.log('[a2ui] openWindow clicked', { surfaceId, path: A2UI_POPUP_PATH })
@@ -252,6 +302,7 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
     }
     popupRef.current = win
     setBlocked(false)
+    startLivePoll()
   }
 
   return (

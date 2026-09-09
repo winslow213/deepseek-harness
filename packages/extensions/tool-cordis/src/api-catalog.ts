@@ -125,6 +125,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'surfaceId', description: 'the stable surface identity the events correlate with.' }, { name: 'jobId', description: 'the background job the model just started.' }, { name: 'agent', description: 'the owning agent (supplies session and job authorization).' }],
         throws: ['when no jobs service is mounted or the job is unknown/foreign.'],
       },
+      {
+        signature: 'read(surfaceId: string): A2uiLiveRead | undefined',
+        description: 'Read the output emitted since the previous read for one surface, draining it. Returns `undefined` when no stream is attached (or the last read already consumed the terminal settle).',
+        parameters: [{ name: 'surfaceId', description: 'the stable surface identity to read.' }],
+        returns: 'the delta and live state, or `undefined` for no stream.',
+      },
+    ],
+  },
+  {
+    key: 'a2uiLiveController',
+    summary: 'Host service backing `ctx.remote.a2uiLive`: serve the durable live-result stream of one surface to the browser launcher so the popup can render the output a `model`-action background job produces.',
+    description: 'Host service backing `ctx.remote.a2uiLive`: serve the durable live-result stream of one surface to the browser launcher so the popup can render the output a `model`-action background job produces.',
+    methods: [
+      {
+        signature: '@Remote(\'read\') read(request: A2uiLiveReadRequest): A2uiLiveReadValue',
+        description: 'Read the output produced since the previous read for one surface.',
+        parameters: [{ name: 'request', description: 'the stable surface identity.' }],
+        returns: 'the delta and live state; a no-stream read returns an idle value (`running: false`, `settled: false`) so the launcher can distinguish "nothing attached" from "attached and finished".',
+      },
     ],
   },
   {
@@ -3756,6 +3775,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'A2uiFormPage',
     declaration: 'export interface A2uiFormPage extends A2uiPageBase {\n    readonly kind: \'form\';\n    readonly fields: readonly A2uiField[];\n}',
+  },
+  {
+    name: 'A2uiLiveRead',
+    declaration: 'export interface A2uiLiveRead {\n    readonly output: string;\n    readonly running: boolean;\n    readonly settled: boolean;\n}',
+  },
+  {
+    name: 'A2uiLiveReadRequest',
+    declaration: 'export interface A2uiLiveReadRequest {\n    readonly surfaceId: string;\n}',
+  },
+  {
+    name: 'A2uiLiveReadValue',
+    declaration: 'export interface A2uiLiveReadValue {\n    readonly output: string;\n    readonly running: boolean;\n    readonly settled: boolean;\n}',
   },
   {
     name: 'A2uiPage',

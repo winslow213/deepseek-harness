@@ -130,6 +130,38 @@ describe('ShellA2uiLive', () => {
     }
   })
 
+  it('read drains the pending delta, reports running, and deletes after settle', () => {
+    vi.useFakeTimers()
+    try {
+      const { agent } = agentStub()
+      const deltas: string[] = []
+      let status = 'running'
+      const ctx = new Context()
+      ctx.provide('jobs', {
+        get: vi.fn(() => ({ status })),
+        openOutputReader: vi.fn(() => ({ read: () => deltas.shift() ?? '' })),
+      } as never)
+      const live = new ShellA2uiLive(ctx)
+      expect(live.read('surf')).toBeUndefined()
+
+      live.attach('surf', 'bash-1' as JobId, agent)
+      // No output yet, but the stream is live.
+      expect(live.read('surf')).toEqual({ output: '', running: true, settled: false })
+
+      deltas.push('line1\n')
+      vi.advanceTimersByTime(250)
+      expect(live.read('surf')).toEqual({ output: 'line1\n', running: true, settled: false })
+
+      status = 'completed'
+      vi.advanceTimersByTime(250)
+      // The settle read drains the final state, then the stream is removed.
+      expect(live.read('surf')).toEqual({ output: '', running: false, settled: true })
+      expect(live.read('surf')).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('re-attaching a surface replaces its prior stream without duplicating settles', () => {
     vi.useFakeTimers()
     try {

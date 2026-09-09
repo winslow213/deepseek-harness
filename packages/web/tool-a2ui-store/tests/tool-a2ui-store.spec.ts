@@ -3,7 +3,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -33,6 +33,15 @@ const page: A2uiFormPage = {
     { name: 'banner', label: 'Banner', type: 'text', compute: 'env.toUpperCase()' },
   ],
   actions: [{ id: 'deploy', label: 'Deploy', tool: 'run_deploy', instruction: 'Deploy now' }],
+}
+
+/** A context carrying the tool store and the model-tool registry. */
+async function setup(): Promise<Context> {
+  const ctx = new Context()
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(tool, { dir })
+  return ctx
 }
 
 describe('a2ui store', () => {
@@ -80,14 +89,6 @@ describe('a2ui_export tool', () => {
     return { id: SessionId(id), session } as unknown as Agent & { session: Session }
   }
 
-  async function setup(): Promise<Context> {
-    const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRuntime)
-    await ctx.plugin(tool, { dir })
-    return ctx
-  }
-
   it('exports a page the model authored into the store', async () => {
     const ctx = await setup()
     const agent = agentWithSession()
@@ -119,5 +120,40 @@ describe('a2ui_export tool', () => {
       agent,
     })
     expect(result.isError).toBe(true)
+  })
+})
+
+describe('a2ui_attach_output tool', () => {
+  const agent = { id: SessionId('parent-1'), session: Session.create(SessionId('parent-1')) } as unknown as Agent & { session: Session }
+
+  it('attaches a job to a surface and reports it', async () => {
+    const ctx = await setup()
+    const attach = vi.spyOn(ctx.a2uiLive, 'attach').mockImplementation(() => {})
+    const result = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('call-1'),
+      name: 'a2ui_attach_output',
+      arguments: { surfaceId: 'surf-1', jobId: 'job-1' },
+      agent,
+    })
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected a2ui_attach_output success')
+    expect(result.value).toEqual({ surfaceId: 'surf-1', jobId: 'job-1', attached: true })
+    expect(attach).toHaveBeenCalledWith('surf-1', 'job-1', agent)
+    expect(ctx.tools.get('a2ui_attach_output')?.presentCall?.({ surfaceId: 'surf-1', jobId: 'job-1' }))
+      .toEqual({ card: 'generic', title: 'Stream job output into surf-1', kind: 'other', rawInput: { surfaceId: 'surf-1', jobId: 'job-1' } })
+  })
+
+  it('requires an owning agent', async () => {
+    const ctx = await setup()
+    const attach = vi.spyOn(ctx.a2uiLive, 'attach').mockImplementation(() => {})
+    const result = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('call-2'),
+      name: 'a2ui_attach_output',
+      arguments: { surfaceId: 'surf-1', jobId: 'job-1' },
+    } as never)
+    expect(result.isError).toBe(true)
+    expect(attach).not.toHaveBeenCalled()
   })
 })

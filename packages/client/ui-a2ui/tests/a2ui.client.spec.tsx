@@ -26,7 +26,7 @@ import {
   A2uiCanvasPanel, A2uiFormPanel, a2uiBendForPoint, a2uiEdgeGeometry,
   type A2uiCanvasPanelProps, type A2uiFormPanelProps, type A2uiTranslate,
 } from '@deepseek-ai/dsh-client-ui-a2ui-render'
-import { A2uiLauncher, type A2uiLauncherProps, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from '../src/client/launcher.tsx'
+import { A2uiLauncher, type A2uiLauncherProps, type A2uiLiveRead, type A2uiReadLive, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from '../src/client/launcher.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 import {
@@ -976,6 +976,7 @@ describe('A2uiLauncher', () => {
       sessionId: 'session-a2ui' as never,
       submitNotice: vi.fn<A2uiSubmitNotice>(async () => {}),
       resolveSource: vi.fn<A2uiResolveSource>(async () => []),
+      readLive: vi.fn<A2uiReadLive>(async () => ({ output: '', running: false, settled: false })),
       t,
     } as unknown as A2uiLauncherProps
   }
@@ -1051,6 +1052,43 @@ describe('A2uiLauncher', () => {
     })
     expect(sent).toContainEqual({ type: 'a2ui/runStarted', runId: 'run-1', ok: true })
     expect(sent).toContainEqual({ type: 'a2ui/runChunk', runId: 'run-1', output: 'hello\n', running: false })
+  })
+
+  it('polls the live stream for a model-action page and forwards its phases', async () => {
+    vi.useFakeTimers()
+    try {
+      const sent: Array<{ type: string }> = []
+      const popupWindow = { postMessage: (message: { type: string }) => { sent.push(message) } } as unknown as Window
+      window.open = () => popupWindow
+      const reads: A2uiLiveRead[] = [
+        { output: '', running: true, settled: false },
+        { output: 'one\n', running: true, settled: false },
+        { output: '', running: false, settled: true },
+      ]
+      const readLive = vi.fn<A2uiReadLive>(async () => reads.shift() ?? { output: '', running: false, settled: false })
+      const modelPage = page({
+        actions: [{ id: 'run', label: 'Run', execution: 'model', tool: 'log_capture', instruction: 'capture logs' }],
+      })
+      render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-live', page: modelPage })} readLive={readLive} />)
+      fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+
+      await vi.advanceTimersByTimeAsync(250)
+      expect(sent).toContainEqual({ type: 'a2ui/liveStarted', surfaceId: 'a2ui-live' })
+      await vi.advanceTimersByTimeAsync(250)
+      expect(sent).toContainEqual({ type: 'a2ui/liveChunk', surfaceId: 'a2ui-live', output: 'one\n' })
+      await vi.advanceTimersByTimeAsync(250)
+      expect(sent).toContainEqual({ type: 'a2ui/liveDone', surfaceId: 'a2ui-live' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not poll live for a page with no model action', () => {
+    const readLive = vi.fn<A2uiReadLive>(async () => ({ output: '', running: false, settled: false }))
+    const noModelPage = page({ actions: [{ id: 'cmd', label: 'Cmd', execution: 'command', command: 'echo hi' }] })
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-cmd', page: noModelPage })} readLive={readLive} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    expect(readLive).not.toHaveBeenCalled()
   })
 
   it('submits a form submission through submitNotice with the page title as the summary', () => {
@@ -1166,6 +1204,9 @@ describe('plugin lifecycle', () => {
         start: async () => ({ ok: true as const, value: { runId: 'r1' } }),
         read: async () => ({ ok: true as const, value: { runId: 'r1', seq: 1, output: 'ok', running: false, exitCode: 0, lossy: false } }),
         stop: async () => ({ ok: true as const, value: { runId: 'r1', requested: true } }),
+      },
+      a2uiLive: {
+        read: async () => ({ ok: true as const, value: { output: '', running: false, settled: false } }),
       },
       session: {
         prompt: async () => ({ ok: true as const, value: { accepted: true } }),

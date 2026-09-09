@@ -17,7 +17,7 @@ export type A2uiPopupMessage =
   | { readonly type: 'a2ui/data-request'; readonly surfaceId: string; readonly source: string; readonly args: Record<string, unknown> }
   | { readonly type: 'a2ui/runStop'; readonly runId: string }
 
-/** Opener → popup message: the page to render, acknowledgements, source data, or command-run progress. */
+/** Opener → popup message: the page to render, acknowledgements, source data, command-run progress, or a live-result update. */
 export type A2uiOpenerMessage =
   | { readonly type: 'a2ui/init'; readonly surfaceId: string; readonly page: A2uiPage }
   | { readonly type: 'a2ui/ack' }
@@ -29,6 +29,9 @@ export type A2uiOpenerMessage =
   | { readonly type: 'a2ui/runDone'; readonly runId: string; readonly exitCode: number | null }
   | { readonly type: 'a2ui/scriptResult'; readonly ok: true; readonly actionId: string; readonly value?: unknown; readonly logs?: readonly string[] }
   | { readonly type: 'a2ui/scriptFailed'; readonly actionId?: string; readonly message: string; readonly ok: false }
+  | { readonly type: 'a2ui/liveStarted'; readonly surfaceId: string }
+  | { readonly type: 'a2ui/liveChunk'; readonly surfaceId: string; readonly output: string }
+  | { readonly type: 'a2ui/liveDone'; readonly surfaceId: string }
 
 /** Progress of one command run as the popup renders it. */
 export interface A2uiRunState {
@@ -48,6 +51,23 @@ export interface A2uiRunState {
 /** The idle command-run state before any command action runs. */
 export const A2UI_RUN_IDLE: A2uiRunState = {
   runId: null, output: '', running: false, settled: false, exitCode: null, error: null,
+}
+
+/** Live-result pane state for a `model`-action background job stream. */
+export interface A2uiLiveState {
+  /** Whether a live stream has started for this page. */
+  readonly active: boolean
+  /** Output accumulated since the stream started. */
+  readonly output: string
+  /** Whether the job is still running. */
+  readonly running: boolean
+  /** Whether the stream reached a terminal phase. */
+  readonly settled: boolean
+}
+
+/** The idle live-result state before any `model` action attaches a job. */
+export const A2UI_LIVE_IDLE: A2uiLiveState = {
+  active: false, output: '', running: false, settled: false,
 }
 
 /**

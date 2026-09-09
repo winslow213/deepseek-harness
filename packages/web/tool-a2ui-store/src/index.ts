@@ -17,7 +17,7 @@ import { canonicalizeA2uiPage, type A2uiPageInput } from '@deepseek-ai/dsh-tool-
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ensureA2uiToolsDir, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
 import type { A2uiToolRecord } from './store.ts'
-import { A2uiStoreController, A2uiRunController } from './remote.ts'
+import { A2uiStoreController, A2uiRunController, A2uiLiveController } from './remote.ts'
 import { ShellA2uiRun, type A2uiRun } from './run.ts'
 import { CodeA2uiRunScript, type A2uiRunScript } from './script.ts'
 import { ShellA2uiLive, type A2uiLive } from './live.ts'
@@ -27,12 +27,14 @@ export { A2UI_TOOLS_DIR, isSafeA2uiToolName, listA2uiTools, removeA2uiTool, reso
 export type { A2uiRun, A2uiRunHandle, A2uiRunSession, A2uiRunStart } from './run.ts'
 export { fillA2uiCommand } from './run.ts'
 export type { A2uiLive } from './live.ts'
-export { A2uiStoreController, A2uiRunController } from './remote.ts'
+export { ShellA2uiLive, type A2uiLiveRead } from './live.ts'
+export { A2uiStoreController, A2uiRunController, A2uiLiveController } from './remote.ts'
 export type {
   A2uiRunReadRequest, A2uiRunReadValue,
   A2uiRunStartRequest, A2uiRunStartValue,
   A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
+  A2uiLiveReadRequest, A2uiLiveReadValue,
   A2uiRunFieldValues,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
   A2uiUpdateData, A2uiUpdatePhase,
@@ -138,6 +140,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.plugin(A2uiStoreController)
   // The `a2uiRun` namespace drives `command` actions from the page's opener.
   ctx.plugin(A2uiRunController)
+  // The `a2uiLive` namespace serves a `model`-action job's live-result stream.
+  ctx.plugin(A2uiLiveController)
 
   ctx.tools.register(defineTool({
     name: 'a2ui_export',

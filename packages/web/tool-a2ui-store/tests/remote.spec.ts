@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { A2uiStore } from '../src/index.ts'
 import type { A2uiRun, A2uiRunStart } from '../src/run.ts'
 import type { A2uiRunScript } from '../src/script.ts'
-import { A2uiRunController, A2uiStoreController } from '../src/remote.ts'
+import { A2uiLiveController, A2uiRunController, A2uiStoreController } from '../src/remote.ts'
+import type { A2uiLive } from '../src/live.ts'
 
 /** A minimal agent whose session records cwd and every append. */
 function agentStub(cwd?: string): {
@@ -200,5 +201,18 @@ describe('A2uiRunController', () => {
     await expect(controller.read({ runId: 'run-1' })).rejects.toThrow('read boom')
     await expect(controller.stop({ runId: 'run-1' })).rejects.toThrow('stop boom')
     await expect(controller.runScript({ program: 'x', binds: [], fields: {} })).rejects.toThrow('script boom')
+  })
+})
+
+describe('A2uiLiveController', () => {
+  it('reads the surface stream and returns an idle value when none is attached', () => {
+    const ctx = new Context()
+    const read = vi.fn()
+      .mockReturnValueOnce({ output: 'delta\n', running: true, settled: false })
+      .mockReturnValueOnce(undefined)
+    ctx.provide('a2uiLive', { read } as unknown as A2uiLive)
+    const controller = new A2uiLiveController(ctx)
+    expect(controller.read({ surfaceId: 'surf' })).toEqual({ output: 'delta\n', running: true, settled: false })
+    expect(controller.read({ surfaceId: 'surf' })).toEqual({ output: '', running: false, settled: false })
   })
 })

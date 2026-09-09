@@ -166,6 +166,21 @@ export interface A2uiRunStopValue {
   readonly requested: boolean
 }
 
+/** Request to read a live-result stream's output since the previous read. */
+export interface A2uiLiveReadRequest {
+  readonly surfaceId: string
+}
+
+/** One live-result read: the delta since the previous read plus state. */
+export interface A2uiLiveReadValue {
+  /** Output produced since the previous read (empty when none). */
+  readonly output: string
+  /** Whether the job is still running. */
+  readonly running: boolean
+  /** Whether the stream reached a terminal phase (a final `finished`/`aborted`). */
+  readonly settled: boolean
+}
+
 /**
  * A name is a single safe file stem: no separators, no `.`/`..`, no control bytes.
  * @param name - the candidate tool name.

@@ -28,8 +28,23 @@ interface LiveStream {
   seq: number
   /** Cumulative byte count of the emitted deltas. */
   totalBytes: number
-  timer: ReturnType<typeof setInterval> | null
+  /** Deltas emitted since the last {@link A2uiLive.read} drain. */
+  pending: string[]
+  /** Whether the job is still running. */
+  running: boolean
+  /** Whether the stream has reached a terminal phase. */
   settled: boolean
+  timer: ReturnType<typeof setInterval> | null
+}
+
+/** One read from a live stream: the delta since the previous read plus state. */
+export interface A2uiLiveRead {
+  /** Output produced since the previous read (empty when none). */
+  readonly output: string
+  /** Whether the job is still running. */
+  readonly running: boolean
+  /** Whether the stream reached a terminal phase (a final `finished`/`aborted`). */
+  readonly settled: boolean
 }
 
 /** Host capability backing A2UI live-result streaming over `ctx.jobs`. */
@@ -44,6 +59,14 @@ export interface A2uiLive {
    * @throws when no jobs service is mounted or the job is unknown/foreign.
    */
   attach(surfaceId: string, jobId: JobId, agent: Agent): void
+  /**
+   * Read the output emitted since the previous read for one surface, draining
+   * it. Returns `undefined` when no stream is attached (or the last read
+   * already consumed the terminal settle).
+   * @param surfaceId - the stable surface identity to read.
+   * @returns the delta and live state, or `undefined` for no stream.
+   */
+  read(surfaceId: string): A2uiLiveRead | undefined
 }
 
 /**
@@ -69,12 +92,24 @@ export class ShellA2uiLive implements A2uiLive {
     if (prior !== undefined && prior.timer !== null) clearInterval(prior.timer)
 
     const stream: LiveStream = {
-      surfaceId, jobId, reader, seq: 0, totalBytes: 0, timer: null, settled: false,
+      surfaceId, jobId, reader, seq: 0, totalBytes: 0, pending: [], running: true, settled: false, timer: null,
     }
     this.streams.set(surfaceId, stream)
     agent.session.append('a2ui/update', { surfaceId, phase: 'started', seq: 0, totalBytes: 0 })
 
     stream.timer = setInterval(() => { this.poll(stream, agent) }, POLL_MS)
+  }
+
+  read(surfaceId: string): A2uiLiveRead | undefined {
+    const stream = this.streams.get(surfaceId)
+    if (stream === undefined) return undefined
+    const output = stream.pending.join('')
+    stream.pending = []
+    const read = { output, running: stream.running, settled: stream.settled }
+    // A consumed terminal read leaves no stream behind; the next read returns
+    // undefined, signalling the launcher that nothing further will arrive.
+    if (stream.settled) this.streams.delete(surfaceId)
+    return read
   }
 
   /** Poll one stream: emit a delta, then settle when the job reaches a terminal status. */
@@ -85,6 +120,7 @@ export class ShellA2uiLive implements A2uiLive {
       stream.seq += 1
       stream.totalBytes += byteLength(delta)
       if (delta.length > 0) {
+        stream.pending.push(delta)
         agent.session.append('a2ui/update', {
           surfaceId: stream.surfaceId, phase: 'delta', seq: stream.seq, delta, totalBytes: stream.totalBytes,
         })
@@ -109,17 +145,18 @@ export class ShellA2uiLive implements A2uiLive {
 
   /** Emit the terminal event once and stop polling. */
   private settle(stream: LiveStream, agent: Agent, phase: 'finished' | 'aborted'): void {
-    // A settle clears the timer and drops the stream, so no later poll can
-    // reach a second settle for the same stream; the guard is defensive.
+    // A settle clears the timer; the stream stays in the map so a final
+    // `read` can drain its last delta and observe `settled`, after which the
+    // read deletes it. The guard is defensive against a re-entrant settle.
     /* v8 ignore next -- a settled stream is never polled again */
     if (stream.settled) return
     stream.settled = true
+    stream.running = false
     /* v8 ignore next -- settle only runs from a live poll, where the timer is set */
     if (stream.timer !== null) clearInterval(stream.timer)
     stream.timer = null
     agent.session.append('a2ui/update', {
       surfaceId: stream.surfaceId, phase, seq: stream.seq, totalBytes: stream.totalBytes,
     })
-    this.streams.delete(stream.surfaceId)
   }
 }

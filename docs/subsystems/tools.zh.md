@@ -536,11 +536,39 @@ Host capability backing A2UI live-result streaming over `ctx.jobs`.
  * @throws when no jobs service is mounted or the job is unknown/foreign.
  */
 attach(surfaceId: string, jobId: JobId, agent: Agent): void
+
+/**
+ * Read the output emitted since the previous read for one surface, draining
+ * it. Returns `undefined` when no stream is attached (or the last read
+ * already consumed the terminal settle).
+ * @param surfaceId - the stable surface identity to read.
+ * @returns the delta and live state, or `undefined` for no stream.
+ */
+read(surfaceId: string): A2uiLiveRead | undefined
 ```
 
 Types: [Agent](core.zh.md) · [JobId](jobs.zh.md)
 
 Source: [`packages/web/tool-a2ui-store/src/live.ts`](../../packages/web/tool-a2ui-store/src/live.ts)
+
+<a id="ctxa2uilivecontroller--a2uilivecontroller"></a>
+
+### `ctx.a2uiLiveController` — `A2uiLiveController`
+
+Host service backing `ctx.remote.a2uiLive`: serve the durable live-result stream of one surface to the browser launcher so the popup can render the output a `model`-action background job produces.
+
+```ts cordis-catalog
+/**
+ * Read the output produced since the previous read for one surface.
+ * @param request - the stable surface identity.
+ * @returns the delta and live state; a no-stream read returns an idle value
+ *   (`running: false`, `settled: false`) so the launcher can distinguish
+ *   "nothing attached" from "attached and finished".
+ */
+@Remote('read') read(request: A2uiLiveReadRequest): A2uiLiveReadValue
+```
+
+Source: [`packages/web/tool-a2ui-store/src/remote.ts`](../../packages/web/tool-a2ui-store/src/remote.ts)
 
 <a id="ctxa2uirun--a2uirun"></a>
 
