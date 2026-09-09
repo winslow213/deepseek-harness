@@ -312,11 +312,18 @@ export class SessionCommandController {
         { provider: selection.provider, model: selection.model },
       )
     }
-    const source: MessageSource = {
-      kind: 'user',
-      rpcId: request.requestId,
-      ...(clientTimeZone === undefined ? {} : { clientTimeZone }),
-    }
+    const source: MessageSource = request.context === undefined
+      ? {
+        kind: 'user',
+        rpcId: request.requestId,
+        ...(clientTimeZone === undefined ? {} : { clientTimeZone }),
+      }
+      : {
+        kind: 'plugin',
+        plugin: request.context.plugin,
+        form: 'notice',
+        summary: request.context.summary,
+      }
     const hasImage = request.content.some(part => part.type === 'image')
     const admit = async (): Promise<SessionPromptValue> => {
       try {

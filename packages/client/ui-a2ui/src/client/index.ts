@@ -5,11 +5,17 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the `remote` Context merge so the run bridge below reaches
-// `ctx.remote.a2uiRun` (the host namespace is mounted by api-remotes).
+// `ctx.remote.a2uiRun` and the notice submitter reaches `ctx.remote.session`
+// (the host namespaces are mounted by api-remotes).
+import type { SessionRequestId } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { A2uiLauncher, type A2uiRunBridge } from './launcher.tsx'
+import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { A2uiLauncher, type A2uiRunBridge, type A2uiSubmitNotice } from './launcher.tsx'
 import { a2uiSurfaceDefinition } from './a2ui-definition.ts'
 import { en, NS, type A2uiKey, zh } from './locales.ts'
+
+/** The producer name the chat renders on the collapsed a2ui context row. */
+const A2UI_SOURCE = 'a2ui'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -19,7 +25,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Required services for Definition, keyed renderer, copy, and the command-run Remote. */
-export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun']
+export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'remote', 'remote.a2uiRun', 'remote.session']
 
 /**
  * Build the command-run bridge over the api-remotes `a2uiRun` namespace. The
@@ -53,6 +59,27 @@ function buildBridge(ctx: ClientContext): A2uiRunBridge {
   }
 }
 
+/**
+ * Build the notice submitter over the session Remote: an A2UI action or form
+ * submission reaches the model as an ordinary user-role message, but its
+ * plugin `notice` source collapses the chat row instead of rendering a prompt
+ * bubble. A failed admission rejects; the launcher fires and forgets it.
+ * @param ctx - registrant context carrying the typed remote assembly.
+ * @returns the submitter the launcher calls for actions and submissions.
+ */
+function buildSubmitNotice(ctx: ClientContext): A2uiSubmitNotice {
+  return async (sessionId, text, summary) => {
+    const answered = await ctx.remote.session.prompt({
+      requestId: randomUUID() as SessionRequestId,
+      sessionId,
+      mode: 'queue',
+      content: [{ type: 'text', text }],
+      context: { plugin: A2UI_SOURCE, form: 'notice', summary },
+    }, new AbortController().signal)
+    if (!answered.ok) throw new Error(`a2ui submit failed: ${answered.error.code}: ${answered.error.message}`)
+  }
+}
+
 /** Register the A2UI Definition, dictionary, and keyed Chat launcher. */
 export function apply(ctx: ClientContext): void {
   ctx.uiConversation.events.register(a2uiSurfaceDefinition)
@@ -61,6 +88,6 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.chat.node',
     key: 'a2ui-surface',
     locale: NS,
-    inject: () => ({ bridge: buildBridge(ctx) }),
+    inject: () => ({ bridge: buildBridge(ctx), submitNotice: buildSubmitNotice(ctx) }),
   }, A2uiLauncher))
 }

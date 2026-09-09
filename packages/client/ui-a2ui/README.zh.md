@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-a2ui` 是在 dsh web 客户端中绘制模型创作的 A2UI 页面的浏览器插件：它把每条持久 `a2ui/surface` 会话记录投影为可交互的 Chat 节点，根据声明式页面 JSON 原生渲染。用户填写表单字段或拖拽 canvas 节点与连线后提交；面板把收集到的载荷作为携带相同 `surfaceId` 的普通 `user/message` 发回模型，因此节点打开后不再需要任何状态。投影是确定性回放：每次打开事件都成为以 `surfaceId#seq` 为键的独立会话行，因此刻意复用的 surface 身份会打开新页面，而不是修改更早的页面。轮次中途打开的页面即使在紧凑 transcript 下关闭该轮次后，仍作为独立会话行保持可见。文案位于 `a2ui` locale 命名空间（中文与英文）；插件不需要任何配置。
+`dsh-client-ui-a2ui` 是在 dsh web 客户端中绘制模型创作的 A2UI 页面的浏览器插件：它把每条持久 `a2ui/surface` 会话记录投影为可交互的 Chat 节点，根据声明式页面 JSON 原生渲染。用户填写表单字段或拖拽 canvas 节点与连线后提交；面板把收集到的载荷作为携带相同 `surfaceId` 的 `user/message` 发回模型，但以插件 `notice` 来源记录，因此聊天区把提交折叠为一行上下文行而不是完整的提示气泡，模型仍完整收到载荷。投影是确定性回放：每次打开事件都成为以 `surfaceId#seq` 为键的独立会话行，因此刻意复用的 surface 身份会打开新页面，而不是修改更早的页面。轮次中途打开的页面即使在紧凑 transcript 下关闭该轮次后，仍作为独立会话行保持可见。文案位于 `a2ui` locale 命名空间（中文与英文）；插件不需要任何配置。
 
 ## 目录
 
@@ -48,7 +48,7 @@ kind: "package-reference"
 
 ### 提交
 
-面板先校验必填字段（表单），再用 JSON 提交文本 `{"a2uiSubmit": { ... }}` 替换输入框草稿，并经由普通输入机提交。当输入机处于 adjudicating、claimed 或 submitting 时，面板禁用提交控件并以本地化忙碌错误拒绝竞争提交。提交载荷携带节点的 `surfaceId` 与收集到的 `values`（表单）或编排好的 `graph`（canvas），发送后会话行仍保持可见。
+面板先校验必填字段（表单），再经一条已记录的上下文 notice 发出 JSON 提交文本 `{"a2uiSubmit": { ... }}`：该消息以插件 `notice` 来源（`plugin: 'a2ui'`）记录，以页面标题作为其单行摘要，因此聊天区显示折叠的上下文行而不是提示气泡。提交载荷携带节点的 `surfaceId` 与收集到的 `values`（表单）或编排好的 `graph`（canvas），发送后会话行仍保持可见。
 
 -----
 
@@ -58,7 +58,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-本包是一个确定性投影加一个 keyed renderer，都以 Cordis effect 注册：浏览器 `apply` 注册 Definition、`a2ui` 字典对与 `a2ui-surface` keyed Chat renderer，dispose 该 fiber 会撤销三者。
+本包是一个确定性投影加一个 keyed renderer，都以 Cordis effect 注册：浏览器 `apply` 注册 Definition、`a2ui` 字典对、`a2ui-surface` keyed Chat renderer 与基于 `remote.session` 的 notice 提交器，dispose 该 fiber 会撤销全部。
 
 ### 投影
 
@@ -75,7 +75,7 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | node 半边：惰性宿主插件（功能完全在浏览器侧） |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器插件入口：Definition 注册、字典、keyed renderer |
 | [`src/client/a2ui-definition.ts`](src/client/a2ui-definition.ts) | `a2ui-surface` Conversation Definition 与 `ChatNodeDataMap` 载荷 |
-| [`src/client/launcher.tsx`](src/client/launcher.tsx) | A2UI 弹出启动器：打开 `a2ui.html` 弹出窗口、转发提交／动作消息，并通过 remote 命名空间桥接命令／脚本运行 |
+| [`src/client/launcher.tsx`](src/client/launcher.tsx) | A2UI 弹出启动器：打开 `a2ui.html` 弹出窗口、把提交／动作消息作为已记录 notice 上下文转发，并通过 remote 命名空间桥接命令／脚本运行 |
 | [`src/client/A2uiPanel.module.css`](src/client/A2uiPanel.module.css) | 弹出面板样式 |
 | [`src/client/locales.ts`](src/client/locales.ts) | `a2ui` 中英文词典 |
 
@@ -114,7 +114,7 @@ kind: "package-reference"
 
 - **每次打开都是独立会话行**——刻意复用的 `surfaceId` 会打开新节点，而不是合并或替换更早的页面；后来的页面到达后，每一行都保持可见且可提交。
 - **进行中的用户编辑不持久**——表单值与 canvas 编排只存在于面板状态；刷新或 renderer remount 会从日志回放模型创作的页面，并丢弃未发送的编辑。
-- **提交是普通输入框消息**——载荷以 JSON 文本经普通输入机发出，输入机忙碌时面板拒绝提交；消息循环之外没有结构化提交通道。
+- **提交是已记录上下文 notice**——载荷以 JSON 文本经带插件 `notice` 来源的 `remote.session` prompt 发出，因而渲染为折叠的一行上下文行；消息循环之外没有结构化提交通道。
 - **只有 Chat target 渲染 surface**——Definition 以 `chat` 为目标；trajectory 与其他对话视图不显示 surface 节点。
 - **渲染器只绘制声明过的词表**——表单字段与 canvas 图形原生渲染，但客户端不会在模型创作集合之外增加控件类型。
 

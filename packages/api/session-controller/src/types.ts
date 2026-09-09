@@ -302,6 +302,15 @@ export interface SessionForkValue {
   readonly sessionId: SessionId
 }
 
+/** Programmatic non-user context submitted through the prompt route. */
+export interface SessionPromptContext {
+  /** Producer identity rendered on the collapsed context row. */
+  readonly plugin: string
+  readonly form: 'notice'
+  /** One-line account of what happened, shown without expanding the row. */
+  readonly summary: string
+}
+
 /** Session prompt request. */
 export interface SessionPromptRequest {
   /** Client-minted identity persisted on the exact accepted user message. */
@@ -310,6 +319,13 @@ export interface SessionPromptRequest {
   readonly mode: 'queue' | 'steer'
   readonly content: readonly PromptContentPart[]
   readonly clientTimeZone?: string
+  /**
+   * Present for a programmatic non-user submission (an A2UI action or form
+   * submission): the message is logged with a plugin `notice` source instead
+   * of a user source, so the chat renders a collapsed context row rather than
+   * a full prompt bubble while the model still receives the content.
+   */
+  readonly context?: SessionPromptContext
 }
 
 /** Receipt after one prompt enters the target Agent inbox. */

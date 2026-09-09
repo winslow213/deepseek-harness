@@ -4,11 +4,13 @@
  * button opens the page in a dedicated popup window. The launcher owns the
  * popup handshake: it posts the page once the popup signals readiness, and
  * forwards the popup's submissions and model actions into the chat input
- * machine (`inputActions`) exactly as the inline panel used to.
+ * machine (`submitNotice`, a logged non-user context notice) exactly as the
+ * inline panel used to.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type { A2uiAction } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   A2uiRunFieldValues, A2uiRunReadValue, A2uiRunScriptValue,
@@ -37,8 +39,11 @@ export interface A2uiRunBridge {
 /** Keyed Chat renderer props for one model-opened A2UI page launcher. */
 export type A2uiLauncherProps =
   PropsRuntime<'conversation.chat.node', 'a2ui-surface'>
-  & InjectFace<{ bridge?: A2uiRunBridge }>
+  & InjectFace<{ bridge?: A2uiRunBridge; submitNotice: A2uiSubmitNotice }>
   & PropsLocale<'a2ui'>
+
+/** Submit an A2UI action or form submission as a logged non-user context notice. */
+export type A2uiSubmitNotice = (sessionId: SessionId, text: string, summary: string) => Promise<void>
 
 /** The popup URL served by the web frontend's dedicated A2UI entry. */
 const A2UI_POPUP_PATH = '/a2ui.html'
@@ -55,11 +60,17 @@ function a2uiActionMessage(surfaceId: string, action: A2uiAction, values: Record
   })
 }
 
+/** Bound the collapsed-row notice summary to the one-line account contract. */
+function noticeSummary(account: string): string {
+  const trimmed = account.trim()
+  return trimmed.length <= 120 ? trimmed : `${trimmed.slice(0, 119)}…`
+}
+
 /**
  * Render the launcher card and manage its popup window.
  * @param props - the keyed Chat slot props (node data, input machine, locale).
  */
-export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProps) {
+export function A2uiLauncher({ node, sessionId, bridge, submitNotice, t }: A2uiLauncherProps) {
   const { page, surfaceId } = node.data
   const [blocked, setBlocked] = useState(false)
   const popupRef = useRef<Window | null>(null)
@@ -97,13 +108,15 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
         popup.postMessage(init, location.origin)
         console.log('[a2ui] sent init to popup', surfaceId)
       } else if (data.type === 'a2ui/submit') {
-        inputActions.setDraft(a2uiSubmitMessage(surfaceId, data.payload))
-        inputActions.submit()
+        void submitNotice(sessionId, a2uiSubmitMessage(surfaceId, data.payload), noticeSummary(page.title))
         const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
         popup.postMessage(ack, location.origin)
       } else if (data.type === 'a2ui/action') {
-        inputActions.setDraft(a2uiActionMessage(surfaceId, data.action, data.values))
-        inputActions.submit()
+        void submitNotice(
+          sessionId,
+          a2uiActionMessage(surfaceId, data.action, data.values),
+          noticeSummary(data.action.instruction || data.action.tool || data.action.id),
+        )
         const ack: A2uiOpenerMessage = { type: 'a2ui/ack' }
         popup.postMessage(ack, location.origin)
       } else if (data.type === 'a2ui/run') {
@@ -195,7 +208,7 @@ export function A2uiLauncher({ node, inputActions, bridge, t }: A2uiLauncherProp
       window.removeEventListener('message', onMessage)
       if (runTimerRef.current !== null) clearInterval(runTimerRef.current)
     }
-  }, [surfaceId, page, inputActions, bridge])
+  }, [surfaceId, page, sessionId, submitNotice, bridge])
 
   const openWindow = (): void => {
     console.log('[a2ui] openWindow clicked', { surfaceId, path: A2UI_POPUP_PATH })

@@ -26,7 +26,7 @@ import {
   A2uiCanvasPanel, A2uiFormPanel, a2uiBendForPoint, a2uiEdgeGeometry,
   type A2uiCanvasPanelProps, type A2uiFormPanelProps, type A2uiTranslate,
 } from '@deepseek-ai/dsh-client-ui-a2ui-render'
-import { A2uiLauncher, type A2uiLauncherProps, type A2uiRunBridge } from '../src/client/launcher.tsx'
+import { A2uiLauncher, type A2uiLauncherProps, type A2uiRunBridge, type A2uiSubmitNotice } from '../src/client/launcher.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 import {
@@ -973,7 +973,8 @@ describe('A2uiLauncher', () => {
         visibility: 'visible',
         data,
       },
-      inputActions: { setDraft: vi.fn(), submit: vi.fn() },
+      sessionId: 'session-a2ui' as never,
+      submitNotice: vi.fn<A2uiSubmitNotice>(async () => {}),
       t,
     } as unknown as A2uiLauncherProps
   }
@@ -1050,6 +1051,49 @@ describe('A2uiLauncher', () => {
     expect(sent).toContainEqual({ type: 'a2ui/runStarted', runId: 'run-1', ok: true })
     expect(sent).toContainEqual({ type: 'a2ui/runChunk', runId: 'run-1', output: 'hello\n', running: false })
   })
+
+  it('submits a form submission through submitNotice with the page title as the summary', () => {
+    const submitNotice = vi.fn<A2uiSubmitNotice>(async () => {})
+    const popupWindow = { postMessage: () => {} } as unknown as Window
+    window.open = () => popupWindow
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-sub', page: page() })} submitNotice={submitNotice} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/submit', surfaceId: 'a2ui-sub', payload: { name: 'Jane', priority: 'low' } },
+      }))
+    })
+    expect(submitNotice).toHaveBeenCalledWith(
+      'session-a2ui',
+      JSON.stringify({ a2uiSubmit: { surfaceId: 'a2ui-sub', name: 'Jane', priority: 'low' } }),
+      'Collect details',
+    )
+  })
+
+  it('submits a model action through submitNotice with the instruction as the summary', () => {
+    const submitNotice = vi.fn<A2uiSubmitNotice>(async () => {})
+    const popupWindow = { postMessage: () => {} } as unknown as Window
+    window.open = () => popupWindow
+    const actionPage = page({
+      actions: [{ id: 'check', label: 'Check', execution: 'model', tool: 'bash', instruction: 'Run the check' }],
+    })
+    render(<A2uiLauncher {...launcherProps({ seq: 3, surfaceId: 'a2ui-act', page: actionPage })} submitNotice={submitNotice} />)
+    fireEvent.click(screen.getByRole('button', { name: '在窗口打开' }))
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popupWindow,
+        data: { type: 'a2ui/action', surfaceId: 'a2ui-act', action: actionPage.actions![0], values: { name: 'X' } },
+      }))
+    })
+    expect(submitNotice).toHaveBeenCalledWith(
+      'session-a2ui',
+      expect.stringContaining('"a2uiAction"'),
+      'Run the check',
+    )
+  })
 })
 
 async function runtimeSlotRoot(ctx: Context): Promise<void> {
@@ -1077,6 +1121,9 @@ describe('plugin lifecycle', () => {
         start: async () => ({ ok: true as const, value: { runId: 'r1' } }),
         read: async () => ({ ok: true as const, value: { runId: 'r1', seq: 1, output: 'ok', running: false, exitCode: 0, lossy: false } }),
         stop: async () => ({ ok: true as const, value: { runId: 'r1', requested: true } }),
+      },
+      session: {
+        prompt: async () => ({ ok: true as const, value: { accepted: true } }),
       },
     })
     const fiber = ctx.plugin({ inject: [...inject], apply })

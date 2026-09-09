@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-a2ui` is the browser plugin that draws model-authored A2UI pages in the dsh web client: it projects each durable `a2ui/surface` session record into an interactive Chat node, rendered natively from the declarative page JSON. Users fill form fields or drag canvas nodes and edges, then submit; the panel sends the collected payload back to the model as an ordinary `user/message` carrying the same `surfaceId`, so the node needs no further state after it opens. The projection is deterministic replay: every opening event becomes its own standalone transcript row keyed by `surfaceId#seq`, so a deliberately reused surface identity opens a fresh page instead of mutating an earlier one. A page opened mid-turn stays visible as an independent transcript row even after the turn closes under the compact transcript. Copy lives in the `a2ui` locale namespace (zh and en); the plugin takes no configuration.
+`dsh-client-ui-a2ui` is the browser plugin that draws model-authored A2UI pages in the dsh web client: it projects each durable `a2ui/surface` session record into an interactive Chat node, rendered natively from the declarative page JSON. Users fill form fields or drag canvas nodes and edges, then submit; the panel sends the collected payload back to the model as a `user/message` carrying the same `surfaceId` but logged with a plugin `notice` source, so the chat collapses the submission into a one-line context row instead of a full prompt bubble while the model still receives the payload. The projection is deterministic replay: every opening event becomes its own standalone transcript row keyed by `surfaceId#seq`, so a deliberately reused surface identity opens a fresh page instead of mutating an earlier one. A page opened mid-turn stays visible as an independent transcript row even after the turn closes under the compact transcript. Copy lives in the `a2ui` locale namespace (zh and en); the plugin takes no configuration.
 
 ## Table of Contents
 
@@ -48,7 +48,7 @@ A `canvas` page renders its seeded nodes on a zoomable, pannable pane: drag a no
 
 ### Submitting
 
-The panel validates required fields (forms), then replaces the composer draft with the JSON submission text `{"a2uiSubmit": { ... }}` and submits it through the ordinary input machine. While the machine is adjudicating, claimed, or submitting, the panel disables the submit control and refuses racing submits with a localized busy error. The submission payload carries the node's `surfaceId` plus the collected `values` (form) or the arranged `graph` (canvas), and the transcript row stays visible after the send.
+The panel validates required fields (forms), then sends the JSON submission text `{"a2uiSubmit": { ... }}` through a logged context notice: the message is recorded as a `user/message` with a plugin `notice` source (`plugin: 'a2ui'`) carrying the page title as its one-line summary, so the chat shows a collapsed context row instead of a prompt bubble. The submission payload carries the node's `surfaceId` plus the collected `values` (form) or the arranged `graph` (canvas), and the transcript row stays visible after the send.
 
 -----
 
@@ -58,7 +58,7 @@ The panel validates required fields (forms), then replaces the composer draft wi
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package is one deterministic projection plus one keyed renderer, registered as Cordis effects: the browser `apply` registers the Definition, the `a2ui` dictionary pair, and the `a2ui-surface` keyed Chat renderer, and disposing the fiber retracts all three.
+The package is one deterministic projection plus one keyed renderer, registered as Cordis effects: the browser `apply` registers the Definition, the `a2ui` dictionary pair, the `a2ui-surface` keyed Chat renderer, and the `remote.session`-backed notice submitter, and disposing the fiber retracts all three.
 
 ### The projection
 
@@ -75,7 +75,7 @@ The package is one deterministic projection plus one keyed renderer, registered 
 | [`src/index.ts`](src/index.ts) | Node half: inert host plugin (the feature is entirely browser-side) |
 | [`src/client/index.ts`](src/client/index.ts) | Browser plugin entry: Definition registration, dictionaries, keyed renderer |
 | [`src/client/a2ui-definition.ts`](src/client/a2ui-definition.ts) | The `a2ui-surface` Conversation Definition and `ChatNodeDataMap` payload |
-| [`src/client/launcher.tsx`](src/client/launcher.tsx) | A2UI popup launcher: opens the `a2ui.html` popup, forwards submit/action messages, and bridges command/script runs over the remote namespace |
+| [`src/client/launcher.tsx`](src/client/launcher.tsx) | A2UI popup launcher: opens the `a2ui.html` popup, forwards submit/action messages as logged notice context, and bridges command/script runs over the remote namespace |
 | [`src/client/A2uiPanel.module.css`](src/client/A2uiPanel.module.css) | Popup panel styles |
 | [`src/client/locales.ts`](src/client/locales.ts) | The `a2ui` zh/en dictionaries |
 
@@ -114,7 +114,7 @@ These limits define what the renderer can draw and how far user work survives; t
 
 - **Each opening is its own transcript row** — a deliberately reused `surfaceId` opens a fresh node instead of merging or replacing the earlier page, and every row stays visible and submittable after later pages arrive.
 - **In-progress user edits are not durable** — form values and canvas arrangements live in panel state; a reload or renderer remount replays the model-authored page from the log and discards unsent edits.
-- **Submission is a plain composer message** — the payload leaves as JSON text through the ordinary input machine, and the panel refuses to submit while the machine is busy; there is no structured submission channel outside the message loop.
+- **Submission is a logged context notice** — the payload leaves as JSON text through a `remote.session` prompt carrying a plugin `notice` source, so it renders as a collapsed one-line context row; there is no structured submission channel outside the message loop.
 - **Only the Chat target renders surfaces** — the Definition targets `chat`; the trajectory and other conversation views show no surface node.
 - **The renderer draws only the declared vocabulary** — form fields and canvas graphs render natively, but the client adds no widget kinds beyond the model-authored set.
 

@@ -470,3 +470,31 @@ describe('Session file uploads', () => {
       })
   })
 })
+
+describe('Session prompt context submission', () => {
+  it('logs a context prompt with a plugin notice source instead of a user source', async () => {
+    const { controller, followup, disposeAgent } = await uploadHarness()
+    try {
+      await controller.prompt({
+        ...promptRequest([{ type: 'text', text: '{"a2uiAction":{}}' }]),
+        context: { plugin: 'a2ui', form: 'notice', summary: 'Run the check' },
+      })
+      expect(followup).toHaveBeenCalledTimes(1)
+      const message = followup.mock.calls[0]?.[0] as UserMessage
+      expect(message.source).toEqual({ kind: 'plugin', plugin: 'a2ui', form: 'notice', summary: 'Run the check' })
+    } finally {
+      disposeAgent()
+    }
+  })
+
+  it('keeps the user source for a prompt without context', async () => {
+    const { controller, followup, disposeAgent } = await uploadHarness()
+    try {
+      await controller.prompt(promptRequest([{ type: 'text', text: 'plain' }]))
+      const message = followup.mock.calls[0]?.[0] as UserMessage
+      expect(message.source).toMatchObject({ kind: 'user', rpcId: 'req-1' })
+    } finally {
+      disposeAgent()
+    }
+  })
+})

@@ -12,7 +12,7 @@ Status: implemented
 
 A2UI 页面改在专用弹窗窗口中渲染，同时把渲染器拆到一个零 cordis 的包里，使插件与静态装配都能消费它。
 
-- **弹窗窗口化。** `A2uiLauncher` 取代内联面板：一张紧凑卡片，其按钮调用 `window.open('/a2ui.html', 'a2ui-<surfaceId>', …)`。弹窗与打开方共享一套带类型的 postMessage 词汇（`a2ui/ready` → 携带 `surfaceId` 与 `page` 的 `a2ui/init`；`a2ui/submit` 与 `a2ui/action` 回传给打开方），launcher 把提交与模型动作转发进 `inputActions`，行为与原先内联面板完全一致。
+- **弹窗窗口化。** `A2uiLauncher` 取代内联面板：一张紧凑卡片，其按钮调用 `window.open('/a2ui.html', 'a2ui-<surfaceId>', …)`。弹窗与打开方共享一套带类型的 postMessage 词汇（`a2ui/ready` → 携带 `surfaceId` 与 `page` 的 `a2ui/init`；`a2ui/submit` 与 `a2ui/action` 回传给打开方），launcher 把提交与模型动作转发进一条已记录的上下文 notice（见[提交 notice 记录](2026-09-09-a2ui-submission-notice-context.zh.md)），正如原先内联面板把它们转发进输入机。
 - **零 cordis 渲染拆分。** 新的 `staticLinked` 包 `dsh-client-ui-a2ui-render` 拥有表单/画布渲染器、表达式求值器与独立弹窗挂载。`apps/web` 引入它来构建 `/a2ui.html`；`ui-a2ui` 只类型引用其 wire 类型，因此静态装配永远不会拉入插件的客户端 Context 合并。
 - **在点击手势内开窗。** `A2uiStorePanel` 直接在自己的点击处理器里打开具名弹窗窗口，因此没有任何 launcher 的 `window.open` 运行过以捕获引用。弹窗用从自身窗口名读到的 `surfaceId` 宣告 `a2ui/ready`，重渲染投射出的 launcher 通过匹配宣告中的 `surfaceId` 并取 `event.source` 作为其追踪窗口来「收养」该弹窗，从而在避免浏览器拦截弹窗的同时完成握手。
 - **静态主题样式。** 弹窗没有 `ui-theme` 插件在运行时注入设计令牌样式表，因此弹窗入口静态引入 `base.css` / `design-platform.css` / `corner-shape.css` / `scrollbar.css`；渲染组件读取的 `--dsw-alias-*` 与 `--dsw-font-*` 变量从这些样式表中解析。

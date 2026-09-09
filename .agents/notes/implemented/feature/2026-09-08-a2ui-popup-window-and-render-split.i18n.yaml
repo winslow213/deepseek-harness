@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-08-a2ui-popup-window-and-render-split.md
-2026-09-08-a2ui-popup-window-and-render-split.md: c6b8077e3a65f97ce40c479e883165b3ac396681
-2026-09-08-a2ui-popup-window-and-render-split.zh.md: 0e8b55646431e107b7fe820e67204f597b65d41e
+2026-09-08-a2ui-popup-window-and-render-split.md: 97021357bb225f53d7a4b9ff26833bd33ea2963d
+2026-09-08-a2ui-popup-window-and-render-split.zh.md: c7d92fe1f2f81ce020943fb09ebda0ccaf55073d
