@@ -11,6 +11,8 @@ kind: "package-reference"
 
 借助 `dsh-tool-a2ui-store`，模型用 `a2ui_surface` 生成的页面可以保存为独立文件并分享：`a2ui_export` 工具与 `ctx.a2uiStore` 能力把规范的页面定义——声明式 DSL、字段逻辑（`visibleWhen`/`validateWhen`/`compute`）以及 `actions`——按「每个工具一个 JSON 文档」持久化到 `<harness home>/a2ui-tools/`。每次写入都是原子替换，读取时畸形的文档会被跳过而不遮蔽其余文件。存储层就是分发边界：保存的文件可在部署之间复制、重新导入，而无需重新生成页面。
 
+本包还拥有两条页面关联的执行通道：`ctx.a2uiRun` 在会话工作区内通过组合的 shell 服务启动 `command` action，并把其输出记录为持久的 `a2ui/update` 流；`ctx.a2uiLive` 则把 `model` action 的后台 job 流式进入同一持久流（经 `a2ui_attach_output` 工具，模型用其刚启动的 job id 调用它）。
+
 ## 目录
 
 - [使用本包](#use-this-package)
@@ -50,15 +52,17 @@ kind: "package-reference"
 <details>
 <summary>实现内部 —— 点击展开</summary>
 
-存储层是轻量、依赖极少的文件系统层。`store.ts` 解析目录（显式覆盖优先，否则 `$DSH_HOME/a2ui-tools`），用 `writeFileAtomic`（临时兄弟文件 + rename，文件 `0o600`／目录 `0o700`）写入每个工具，使并发读者始终看到完整文档，并按名称排序的 `.json` 词干列举。工具名必须是单一安全文件词干（无分隔符、非 `.`/`..`、至多 64 字符）。`index.ts` 在 `ctx` 上提供能力并注册 `a2ui_export`，后者复用 `dsh-tool-a2ui-surface` 的 `canonicalizeA2uiPage`，使保存的页面与浏览器渲染器所信任的内容逐字节一致。
+存储层是轻量、依赖极少的文件系统层。`store.ts` 解析目录（显式覆盖优先，否则 `$DSH_HOME/a2ui-tools`），用 `writeFileAtomic`（临时兄弟文件 + rename，文件 `0o600`／目录 `0o700`）写入每个工具，使并发读者始终看到完整文档，并按名称排序的 `.json` 词干列举。工具名必须是单一安全文件词干（无分隔符、非 `.`/`..`、至多 64 字符）。`index.ts` 在 `ctx` 上提供能力并注册工具。`run.ts` 在会话工作区内通过 shell 服务启动 `command` action，并把其输出追加为 `a2ui/update` 事件；`live.ts` 通过独立 jobs reader 把 `model` action 的后台 job 输出流式进入同一事件流。两者都复用 `dsh-tool-a2ui-surface` 的 `canonicalizeA2uiPage`，使保存与渲染的页面逐字节一致。
 
 ### 源码地图
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：`ctx.a2uiStore` 能力、`a2ui_export` 工具注册 |
+| [`src/index.ts`](src/index.ts) | 插件入口：`ctx.a2uiStore`/`ctx.a2uiRun`/`ctx.a2uiLive` 能力、`a2ui_export` + `a2ui_attach_output` 工具注册 |
 | [`src/store.ts`](src/store.ts) | 文件系统持久化：带原子写的 resolve/save/list/remove |
-| [`src/types.ts`](src/types.ts) | 客户端安全的 `A2uiToolRecord` 与名称安全规则 |
+| [`src/run.ts`](src/run.ts) | `command` action 运行器：shell 引用、工作区 workdir、`a2ui/update` 发出 |
+| [`src/live.ts`](src/live.ts) | 经 `ctx.jobs` 的 `model` action 实时结果流式 |
+| [`src/types.ts`](src/types.ts) | 客户端安全的 `A2uiToolRecord`、`A2uiUpdateData` 与名称安全规则 |
 
 </details>
 
@@ -71,11 +75,11 @@ kind: "package-reference"
 
 #### 模型看到的内容
 
-模型看到 `a2ui_export` 名称、其静态描述，以及生成的[工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-a2ui-store)中记录的确切 JSON schema。描述告诉它把所创作的页面保存为本地工具库中的可复用工具文件，为已保存文件提供一个简短稳定的 `name`，以及一个与 `a2ui_surface` 的 page 参数形态相同的 `page`。
+模型看到两个工具。`a2ui_export` 携带其静态描述以及生成的[工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-a2ui-store)中记录的确切 JSON schema；描述告诉它把所创作的页面保存为本地工具库中的可复用工具文件，为已保存文件提供一个简短稳定的 `name`，以及一个与 `a2ui_surface` 的 page 参数形态相同的 `page`。`a2ui_attach_output` 接收 `surfaceId` 与 `jobId`，并告诉它在 A2UI action 中启动后台 job 后调用它，使页面的实时结果面板跟随该 job 的输出。
 
 #### Token 影响
 
-每次工具对 agent 可见的请求都承担固定的描述与 schema 开销。`name` 字符串与 `page` 对象比字段丰富的页面工具更轻量，因此该定义比 `a2ui_surface` 的 schema 更便宜。
+每次工具对 agent 可见的请求都承担固定的描述与 schema 开销。`name` 字符串与 `page` 对象比字段丰富的页面工具更轻量，因此该定义比 `a2ui_surface` 的 schema 更便宜；`a2ui_attach_output` 只增加两个短字符串。
 
 #### KV Cache 影响
 

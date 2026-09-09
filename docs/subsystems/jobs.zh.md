@@ -80,6 +80,12 @@ interface JobHooks {
    * job has one consuming cursor.
    */
   readOutput?(): string
+  /**
+   * Open an independent output reader so a second consumer can follow the
+   * stream without consuming {@link readOutput}'s cursor. Absence means the
+   * producer offers only the single readOutput cursor (or none).
+   */
+  createOutputReader?(): JobOutputReader
 }
 ```
 
@@ -215,6 +221,16 @@ abstract get(id: JobId, caller?: Agent): JobSnapshot
  * @returns output text and the post-read snapshot.
  */
 abstract read(id: JobId, caller?: Agent): JobRead
+
+/**
+ * Open an independent output reader for one job, so a second consumer can
+ * follow the stream without consuming {@link read}'s cursor. Throws for an
+ * unknown or foreign job, or when the producer offers no reader.
+ * @param id - job to read.
+ * @param caller - reading agent checked against the owner.
+ * @returns an independent reader with its own cursor.
+ */
+abstract openOutputReader(id: JobId, caller?: Agent): JobOutputReader
 
 /**
  * Request cancellation, then mark the job stopping and reported. A producer

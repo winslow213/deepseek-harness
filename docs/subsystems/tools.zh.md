@@ -519,6 +519,29 @@ Host service backing `ctx.remote.a2uiData`: resolve one source into select optio
 
 Source: [`packages/web/tool-a2ui-data/src/remote.ts`](../../packages/web/tool-a2ui-data/src/remote.ts)
 
+<a id="ctxa2uilive--a2uilive"></a>
+
+### `ctx.a2uiLive` — `A2uiLive`
+
+Host capability backing A2UI live-result streaming over `ctx.jobs`.
+
+```ts cordis-catalog
+/**
+ * Attach one background job's output to a surface: emits a `started` event
+ * now, then one `delta` per polled output chunk, then `finished`/`aborted`
+ * when the job settles. Re-attaching a surface replaces its prior stream.
+ * @param surfaceId - the stable surface identity the events correlate with.
+ * @param jobId - the background job the model just started.
+ * @param agent - the owning agent (supplies session and job authorization).
+ * @throws when no jobs service is mounted or the job is unknown/foreign.
+ */
+attach(surfaceId: string, jobId: JobId, agent: Agent): void
+```
+
+Types: [Agent](core.zh.md) · [JobId](jobs.zh.md)
+
+Source: [`packages/web/tool-a2ui-store/src/live.ts`](../../packages/web/tool-a2ui-store/src/live.ts)
+
 <a id="ctxa2uirun--a2uirun"></a>
 
 ### `ctx.a2uiRun` — `A2uiRun`
@@ -527,15 +550,14 @@ Host capability backing `ctx.a2uiRun`.
 
 ```ts cordis-catalog
 /**
- * Fill a `{field}`-template command with single-quoted field values and
- * start it in the background through the composed shell service.
- * @param command - the model-authored command template.
- * @param fields - collected field values the template references.
- * @param timeoutMs - run bound; absent uses the shell default and cap.
+ * Fill a `{field}`-template command with single-quoted field values, start
+ * it in the composed shell service with the session's workspace as workdir,
+ * and append the run's `a2ui/update` `started` event to the session.
+ * @param request - the command, its correlation and session, and optional bound.
  * @returns the live run handle.
  * @throws when the shell service is absent or the template is invalid.
  */
-start(command: string, fields: A2uiRunFieldValues, timeoutMs?: number): A2uiRunHandle
+start(request: A2uiRunStart): A2uiRunHandle
 
 /**
  * The handle for one run id.
@@ -546,14 +568,16 @@ start(command: string, fields: A2uiRunFieldValues, timeoutMs?: number): A2uiRunH
 get(runId: string): A2uiRunHandle
 
 /**
- * Read the output produced since the previous read, consuming it.
+ * Read the output produced since the previous read, consuming it. Each read
+ * appends the matching `a2ui/update` event (a `delta` when output arrived, a
+ * `finished`/`aborted` settle when the process left `running`).
  * @param runId - the opaque run identity minted by the capability.
  * @returns the monotonic chunk sequence, the new output, and live state.
  */
 read(runId: string): { seq: number; output: string; running: boolean; exitCode: number | null; lossy: boolean }
 
 /**
- * Kill the run's process group.
+ * Kill the run's process group and append the `a2ui/update` `aborted` event.
  * @param runId - the opaque run identity minted by the capability.
  * @returns false when the run had already finished, true otherwise.
  */
@@ -570,8 +594,9 @@ Host service backing `ctx.remote.a2uiRun`: start a `command`-action run on the c
 
 ```ts cordis-catalog
 /**
- * Start one command run over the composed shell service.
- * @param request - the command template, collected values, and optional run bound.
+ * Start one command run over the composed shell service, correlated to the
+ * addressed session's workspace and the opening surface.
+ * @param request - the command template, collected values, optional run bound, and correlation.
  * @returns the run identity for later reads and stops.
  */
 @Remote('start') async start(request: A2uiRunStartRequest): Promise<A2uiRunStartValue>

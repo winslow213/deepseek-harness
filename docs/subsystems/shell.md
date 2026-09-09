@@ -196,6 +196,13 @@ interface ShellProcess {
    */
   readOutput(): ShellProcessRead
   /**
+   * Open an independent output reader with its own cursor, so a second
+   * consumer can follow the stream without consuming {@link readOutput}'s
+   * cursor. Each reader returns the output produced since that reader's
+   * previous read.
+   */
+  createOutputReader(): ShellProcessReader
+  /**
    * Terminate the provider-managed range. Returns false when it had already finished
    * (no-op); idempotent.
    */

@@ -20,7 +20,7 @@ A2UI 页面是一次性声明，浏览器只求值一遍。字段逻辑（`visib
 
 **1. 数据源绑定。** 已实现——见 [A2UI 动态数据源提供者 seam](../../implemented/feature/2026-09-09-a2ui-data-source-provider.zh.md)。字段（先做 `select`，后续做由数据源派生的只读文本）可用 `source` 声明来取代静态 `options`。已随附实现通过宿主侧**数据提供者**（基于 `bash` 的提供者运行一条经白名单放行的只读命令）解析 `source`，选项经由 Remote 往返返回，而非本提案所述持久 `a2ui/data` 事件；该事件已暂缓，因为选项列表对模型不可见。
 
-**2. 实时结果通道。** 长任务是一条 `jobs` 流。方案新增一个会话事件 `a2ui/update`，其信封载荷为 `{ surfaceId, phase: 'started' | 'delta' | 'finished' | 'aborted', seq, delta?, totalBytes? }`，其中 `delta` 是自上一事件以来的有界增量文本（字节偏移 `seq` 使重放幂等），`totalBytes` 与时间戳让客户端推导吞吐。当与页面关联的 `model` action 运行时，所属 agent 的工具执行器发出该事件，复用后台 `bash` 已产生的既有 `jobs` 流 delta（`readOutput` 返回自上次读取以来的增量）。本就跟踪弹窗的 launcher 订阅其 `surfaceId` 对应的发出事件，并把每个事件作为 `a2ui/update` postMessage 转发。事件带 `ignorable: true`，因为早于它的构建仍必须能重放周围日志（[版本机制](../../implemented/architecture/2026-08-10-session-log-version-mechanism.zh.md)）。
+**2. 实时结果通道。** 已实现——见 [A2UI 实时结果流](../../implemented/feature/2026-09-09-a2ui-live-result-stream.zh.md)。已随附实现的 `a2ui/update` 事件携带 `{ surfaceId, phase, seq, delta?, totalBytes? }`；`command` action 从 `ctx.a2uiRun` 发出它，`model` action 的后台 job 经显式 `a2ui_attach_output` 绑定加独立 jobs reader 发出它——而非本提案所述由工具执行器复用单一 `readOutput` 游标，因为该游标属于 `job_output`。事件仅记录，因此本提案设想的 `ignorable: true` 标记不再需要（仅记录事件不带 surface 元数据，也无需版本提升）。
 
 **3. 脚本化 local actions。** 超出单个表达式的自定义逻辑，变成 `local` action 上的声明式**步骤列表**：`set`（给某字段赋值）、`append`（拼接到目标）、`refresh`（重新发起某数据源）、`stop`（终止关联的 job）。每个步骤是一条受限表达式或一个数据源名——与浏览器已经信任的求值器同一语法，由现有表单/画布宿主按序执行。任意 JavaScript 明确排除在范围外：页面绝不能运行模型生成的代码，只能执行渲染器能记录、能推理的声明操作。
 

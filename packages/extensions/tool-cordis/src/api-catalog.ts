@@ -115,14 +115,27 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'a2uiLive',
+    summary: 'Host capability backing A2UI live-result streaming over `ctx.jobs`.',
+    description: 'Host capability backing A2UI live-result streaming over `ctx.jobs`.',
+    methods: [
+      {
+        signature: 'attach(surfaceId: string, jobId: JobId, agent: Agent): void',
+        description: 'Attach one background job\'s output to a surface: emits a `started` event now, then one `delta` per polled output chunk, then `finished`/`aborted` when the job settles. Re-attaching a surface replaces its prior stream.',
+        parameters: [{ name: 'surfaceId', description: 'the stable surface identity the events correlate with.' }, { name: 'jobId', description: 'the background job the model just started.' }, { name: 'agent', description: 'the owning agent (supplies session and job authorization).' }],
+        throws: ['when no jobs service is mounted or the job is unknown/foreign.'],
+      },
+    ],
+  },
+  {
     key: 'a2uiRun',
     summary: 'Host capability backing `ctx.a2uiRun`.',
     description: 'Host capability backing `ctx.a2uiRun`.',
     methods: [
       {
-        signature: 'start(command: string, fields: A2uiRunFieldValues, timeoutMs?: number): A2uiRunHandle',
-        description: 'Fill a `{field}`-template command with single-quoted field values and start it in the background through the composed shell service.',
-        parameters: [{ name: 'command', description: 'the model-authored command template.' }, { name: 'fields', description: 'collected field values the template references.' }, { name: 'timeoutMs', description: 'run bound; absent uses the shell default and cap.' }],
+        signature: 'start(request: A2uiRunStart): A2uiRunHandle',
+        description: 'Fill a `{field}`-template command with single-quoted field values, start it in the composed shell service with the session\'s workspace as workdir, and append the run\'s `a2ui/update` `started` event to the session.',
+        parameters: [{ name: 'request', description: 'the command, its correlation and session, and optional bound.' }],
         returns: 'the live run handle.',
         throws: ['when the shell service is absent or the template is invalid.'],
       },
@@ -135,13 +148,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'read(runId: string): { seq: number; output: string; running: boolean; exitCode: number | null; lossy: boolean }',
-        description: 'Read the output produced since the previous read, consuming it.',
+        description: 'Read the output produced since the previous read, consuming it. Each read appends the matching `a2ui/update` event (a `delta` when output arrived, a `finished`/`aborted` settle when the process left `running`).',
         parameters: [{ name: 'runId', description: 'the opaque run identity minted by the capability.' }],
         returns: 'the monotonic chunk sequence, the new output, and live state.',
       },
       {
         signature: 'stop(runId: string): boolean',
-        description: 'Kill the run\'s process group.',
+        description: 'Kill the run\'s process group and append the `a2ui/update` `aborted` event.',
         parameters: [{ name: 'runId', description: 'the opaque run identity minted by the capability.' }],
         returns: 'false when the run had already finished, true otherwise.',
       },
@@ -154,8 +167,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: '@Remote(\'start\') async start(request: A2uiRunStartRequest): Promise<A2uiRunStartValue>',
-        description: 'Start one command run over the composed shell service.',
-        parameters: [{ name: 'request', description: 'the command template, collected values, and optional run bound.' }],
+        description: 'Start one command run over the composed shell service, correlated to the addressed session\'s workspace and the opening surface.',
+        parameters: [{ name: 'request', description: 'the command template, collected values, optional run bound, and correlation.' }],
         returns: 'the run identity for later reads and stops.',
       },
       {
@@ -1325,6 +1338,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read the next stream delta, or the idempotent final output after settlement. A terminal read marks the job reported. Throws for an unknown or foreign job.',
         parameters: [{ name: 'id', description: 'job to read.' }, { name: 'caller', description: 'reading agent checked against the owner.' }],
         returns: 'output text and the post-read snapshot.',
+      },
+      {
+        signature: 'abstract openOutputReader(id: JobId, caller?: Agent): JobOutputReader',
+        description: 'Open an independent output reader for one job, so a second consumer can follow the stream without consuming read\'s cursor. Throws for an unknown or foreign job, or when the producer offers no reader.',
+        parameters: [{ name: 'id', description: 'job to read.' }, { name: 'caller', description: 'reading agent checked against the owner.' }],
+        returns: 'an independent reader with its own cursor.',
       },
       {
         signature: 'abstract kill(id: JobId, caller?: Agent, reason?: string): \'requested\' | \'already-finished\'',
@@ -3752,7 +3771,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'A2uiRunHandle',
-    declaration: 'export interface A2uiRunHandle {\n    readonly runId: string;\n    readonly proc: ShellProcess;\n    readonly command: string;\n    seq: number;\n}',
+    declaration: 'export interface A2uiRunHandle {\n    readonly runId: string;\n    readonly proc: ShellProcess;\n    readonly command: string;\n    seq: number;\n    totalBytes: number;\n    readonly session: A2uiRunSession;\n    readonly surfaceId: string;\n    settled: boolean;\n}',
   },
   {
     name: 'A2uiRunReadRequest',
@@ -3771,8 +3790,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface A2uiRunScriptValue {\n    readonly value?: A2uiScriptJson;\n    readonly logs: readonly string[];\n    readonly error?: {\n        readonly kind: string;\n        readonly message: string;\n    };\n}',
   },
   {
+    name: 'A2uiRunSession',
+    declaration: 'export interface A2uiRunSession {\n    readonly cwd?: string;\n    append(type: \'a2ui/update\', data: A2uiUpdateData): unknown;\n}',
+  },
+  {
+    name: 'A2uiRunStart',
+    declaration: 'export interface A2uiRunStart {\n    readonly command: string;\n    readonly fields: A2uiRunFieldValues;\n    readonly timeoutMs?: number;\n    readonly session: A2uiRunSession;\n    readonly surfaceId: string;\n}',
+  },
+  {
     name: 'A2uiRunStartRequest',
-    declaration: 'export interface A2uiRunStartRequest {\n    readonly command: string;\n    readonly fields: A2uiRunFieldValues;\n    readonly timeoutMs?: number;\n}',
+    declaration: 'export interface A2uiRunStartRequest {\n    readonly command: string;\n    readonly fields: A2uiRunFieldValues;\n    readonly timeoutMs?: number;\n    readonly sessionId: SessionId;\n    readonly surfaceId: string;\n}',
   },
   {
     name: 'A2uiRunStartValue',
@@ -3817,6 +3844,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'A2uiToolWire',
     declaration: 'export type A2uiToolWire = A2uiToolRecord;',
+  },
+  {
+    name: 'A2uiUpdateData',
+    declaration: 'export interface A2uiUpdateData {\n    readonly surfaceId: string;\n    readonly phase: A2uiUpdatePhase;\n    readonly seq: number;\n    readonly delta?: string;\n    readonly totalBytes?: number;\n}',
+  },
+  {
+    name: 'A2uiUpdatePhase',
+    declaration: 'export type A2uiUpdatePhase = \'started\' | \'delta\' | \'finished\' | \'aborted\';',
   },
   {
     name: 'AdapterRegistrationHandle',
@@ -4664,7 +4699,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'JobHooks',
-    declaration: 'export interface JobHooks {\n    cancel(reason?: string): void;\n    done: Promise<JobOutcome>;\n    readOutput?(): string;\n}',
+    declaration: 'export interface JobHooks {\n    cancel(reason?: string): void;\n    done: Promise<JobOutcome>;\n    readOutput?(): string;\n    createOutputReader?(): JobOutputReader;\n}',
   },
   {
     name: 'JobId',
@@ -4681,6 +4716,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'JobOutcome',
     declaration: 'export interface JobOutcome {\n    status: \'completed\' | \'killed\' | \'failed\';\n    detail?: string;\n    output?: string;\n}',
+  },
+  {
+    name: 'JobOutputReader',
+    declaration: 'export interface JobOutputReader {\n    read(): string;\n}',
   },
   {
     name: 'JobRead',
@@ -5824,11 +5863,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ShellProcess',
-    declaration: 'export interface ShellProcess {\n    status: ShellProcessStatus;\n    exitCode: number | null;\n    signal: NodeJS.Signals | null;\n    readonly done: Promise<void>;\n    sandbox?: ShellSandboxInfo;\n    readOutput(): ShellProcessRead;\n    kill(): boolean;\n}',
+    declaration: 'export interface ShellProcess {\n    status: ShellProcessStatus;\n    exitCode: number | null;\n    signal: NodeJS.Signals | null;\n    readonly done: Promise<void>;\n    sandbox?: ShellSandboxInfo;\n    readOutput(): ShellProcessRead;\n    createOutputReader(): ShellProcessReader;\n    kill(): boolean;\n}',
   },
   {
     name: 'ShellProcessRead',
     declaration: 'export interface ShellProcessRead {\n    delta: string;\n    lossy: boolean;\n    stdoutSpillPath?: string;\n    stderrSpillPath?: string;\n}',
+  },
+  {
+    name: 'ShellProcessReader',
+    declaration: 'export interface ShellProcessReader {\n    read(): ShellProcessRead;\n}',
   },
   {
     name: 'ShellProcessStatus',

@@ -10529,6 +10529,9 @@ importers:
       '@deepseek-ai/dsh-code-runtime':
         specifier: workspace:^
         version: link:../../code-runtime/code-runtime
+      '@deepseek-ai/dsh-jobs':
+        specifier: workspace:^
+        version: link:../../jobs/jobs
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session

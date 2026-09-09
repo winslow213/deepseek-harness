@@ -636,6 +636,15 @@ interface CatalogPackage {
 export type ToolCatalog = CatalogPackage[]
 
 /**
+ * `tool-*`-named capability seams that register no model-facing tool: the
+ * dynamic data-source provider and its bash implementation. They share the
+ * A2UI `tool-` naming with the surface/store tools but contribute only
+ * `ctx.a2uiData`/`ctx.a2uiLive` capabilities, so the completeness guard skips
+ * them (they have no schema to catalogue).
+ */
+const NON_TOOL_CAPABILITY_DIRS = new Set(['tool-a2ui-data', 'tool-a2ui-data-bash'])
+
+/**
  * Assert the boot manifest covers every shipped tool package on disk (a
  * `tool-*` leaf under `packages/`).
  * Booting has no source declaration to enumerate, so this glob restores the
@@ -646,7 +655,10 @@ export type ToolCatalog = CatalogPackage[]
  * `scanRoot` defaults to the repo root; a test may point it at a fixture tree.
  */
 export function assertManifestComplete(packages: ToolPackage[] = TOOL_PACKAGES, scanRoot: string = root): void {
-  const onDisk = globSync('packages/*/tool-*', { cwd: scanRoot }).map(p => basename(p)).sort()
+  const onDisk = globSync('packages/*/tool-*', { cwd: scanRoot })
+    .map(p => basename(p))
+    .filter(dir => !NON_TOOL_CAPABILITY_DIRS.has(dir))
+    .sort()
   const listed = new Set(packages.map(p => p.dir))
   const missing = onDisk.filter(dir => !listed.has(dir))
   if (missing.length > 0) {

@@ -16,7 +16,7 @@ This table connects model-visible tool names to the plugin package and service s
 | Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-tool-a2ui-surface` | `a2ui_surface` | `ctx.tools`, `a calling Agent (exec.agent writes the a2ui/surface record to its session)` | `tool/call`, `a2ui/surface (durable session record)`, `tool/result` | - | a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`. |
-| `@deepseek-ai/dsh-tool-a2ui-store` | `a2ui_export` | `ctx.tools`, `ctx.a2uiStore (self-provided)` | `tool/call`, `tool/result`, `a JSON tool file under the harness home` | - | a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts. |
+| `@deepseek-ai/dsh-tool-a2ui-store` | `a2ui_attach_output`, `a2ui_export` | `ctx.tools`, `ctx.a2uiStore (self-provided)` | `tool/call`, `tool/result`, `a JSON tool file under the harness home` | - | a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: ptc` / `mode: both` (see the PTC mode Agent Note). Under `ptc` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
@@ -49,7 +49,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `a2ui_surface`
 
-Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values. Fields may carry restricted, side-effect-free expressions for live logic: `visibleWhen` hides the field while a sibling-field expression is falsy, `validateWhen` (with `validateMessage`) refuses submit while its expression is falsy, and `compute` makes the field read-only and displays a derived value. Expressions reference sibling fields by bare `name` and support string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - * / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/`.startsWith(x)`/`.endsWith(x)`. To expose operations, add `actions`: each is an `id`, a `label`, and an `execution` mode. `execution: "model"` (the default) names a `tool` and an `instruction`, and when the user clicks it you receive an action trigger with the collected values and should invoke that tool with them. `execution: "local"` runs in the browser with no model round-trip: give it a `result` expression (over the collected values, same grammar as field logic) shown to the user after the click. Use `local` for deterministic, side-effect-free transformations and `model` only when the action needs reasoning or a real tool call.
+Render an interactive page in the web UI. The page JSON you provide is drawn natively by the browser, the user interacts with it and submits, and you then receive a message carrying the same `surfaceId` plus the collected payload. Choose the page `kind` that fits the task: `"form"` renders a fillable form that collects structured input — keep fields to the ones you genuinely need, give every field a short unique `name` and a human `label`, set `required: true` only for mandatory input; for `select` fields provide `options` (label/value pairs), an `optionsFrom` script action, or a `source` (a stable source name resolved by the deployment's data provider — use it when options must come from a live source you cannot author, such as a device list); prefer `text` for free text, `textarea` for longer input, `number` for numeric values, `checkbox` for booleans. `"canvas"` renders a draggable node graph the user arranges and connects — seed it with `nodes` (stable `id`, `label`, optional `detail`, and an initial `position`) and `edges` (each a stable `id`, a `source` node id, and a `target` node id); the user may move nodes and add or remove connections before submitting. The optional `instruction` tells the user what will happen with the submitted values. Fields may carry restricted, side-effect-free expressions for live logic: `visibleWhen` hides the field while a sibling-field expression is falsy, `validateWhen` (with `validateMessage`) refuses submit while its expression is falsy, and `compute` makes the field read-only and displays a derived value. Expressions reference sibling fields by bare `name` and support string/number/boolean/null literals, `=== !== == != < <= > >= && || ! + - * / %`, parentheses, and `.length`/`.trim()`/`.includes(x)`/`.startsWith(x)`/`.endsWith(x)`. To expose operations, add `actions`: each is an `id`, a `label`, and an `execution` mode. `execution: "model"` (the default) names a `tool` and an `instruction`, and when the user clicks it you receive an action trigger with the collected values and should invoke that tool with them. `execution: "local"` runs in the browser with no model round-trip: give it a `result` expression (over the collected values, same grammar as field logic) shown to the user after the click. Use `local` for deterministic, side-effect-free transformations and `model` only when the action needs reasoning or a real tool call.
 
 ```json
 {
@@ -141,6 +141,10 @@ Render an interactive page in the web UI. The page JSON you provide is drawn nat
               "optionsFrom": {
                 "type": "string",
                 "description": "Id of a `script` action whose completion populates this `select` field with options (array of `{label,value}` or `{items:[...]}`); mutually exclusive with static `options`."
+              },
+              "source": {
+                "type": "string",
+                "description": "Host-backed option source: a stable source name resolved by the composed A2UI data provider when the page opens; mutually exclusive with static `options` and `optionsFrom`."
               },
               "options": {
                 "type": "array",
@@ -363,6 +367,32 @@ a2ui_surface renders a model-authored page JSON natively in the web UI and recor
 <a id="deepseek-aidsh-tool-a2ui-store"></a>
 
 ## `@deepseek-ai/dsh-tool-a2ui-store`
+
+### `a2ui_attach_output`
+
+Stream a background job's output into the A2UI page it belongs to. After starting a background job (run_in_background: true) as part of an A2UI action, call this with the page's `surfaceId` and the returned `job_id` so the page's live-result pane follows the job's output until it finishes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "surfaceId": {
+      "type": "string",
+      "description": "The `surfaceId` of the A2UI page whose action started the job (the id the page's `a2ui_surface` call returned)."
+    },
+    "jobId": {
+      "type": "string",
+      "description": "The `job_id` returned by the background tool call whose output should stream into the page."
+    }
+  },
+  "required": [
+    "surfaceId",
+    "jobId"
+  ]
+}
+```
+
+Source: [`packages/web/tool-a2ui-store/src/index.ts`](../packages/web/tool-a2ui-store/src/index.ts)
 
 ### `a2ui_export`
 

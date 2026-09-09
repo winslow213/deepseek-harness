@@ -11,6 +11,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type { A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import { canonicalizeA2uiPage, type A2uiPageInput } from '@deepseek-ai/dsh-tool-a2ui-surface'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -19,11 +20,13 @@ import type { A2uiToolRecord } from './store.ts'
 import { A2uiStoreController, A2uiRunController } from './remote.ts'
 import { ShellA2uiRun, type A2uiRun } from './run.ts'
 import { CodeA2uiRunScript, type A2uiRunScript } from './script.ts'
+import { ShellA2uiLive, type A2uiLive } from './live.ts'
 
 export type { A2uiToolRecord } from './store.ts'
 export { A2UI_TOOLS_DIR, isSafeA2uiToolName, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
 export type { A2uiRun, A2uiRunHandle, A2uiRunSession, A2uiRunStart } from './run.ts'
 export { fillA2uiCommand } from './run.ts'
+export type { A2uiLive } from './live.ts'
 export { A2uiStoreController, A2uiRunController } from './remote.ts'
 export type {
   A2uiRunReadRequest, A2uiRunReadValue,
@@ -48,6 +51,8 @@ declare module '@deepseek-ai/cordis' {
     a2uiRun: A2uiRun
     /** The A2UI script-run capability: run `script` actions on the controlled code runtime. */
     a2uiRunScript: A2uiRunScript
+    /** The A2UI live-result capability: stream a background job into a surface's `a2ui/update` events. */
+    a2uiLive: A2uiLive
   }
 }
 
@@ -122,6 +127,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.provide('a2uiStore', store)
   ctx.provide('a2uiRun', new ShellA2uiRun(ctx))
   ctx.provide('a2uiRunScript', new CodeA2uiRunScript(ctx))
+  ctx.provide('a2uiLive', new ShellA2uiLive(ctx))
   void ensureA2uiToolsDir(dir).catch(() => {
     // The first save also creates the directory; a boot-time mkdir failure
     // here must not crash the harness for a directory the next write creates.
@@ -171,5 +177,53 @@ export function apply(ctx: Context, config: Config): void {
       return { name: record.name, saved: true }
     },
     presentCall: args => ({ card: 'generic', title: 'Export A2UI tool', kind: 'other', rawInput: { name: args.name } }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'a2ui_attach_output',
+    description: 'Stream a background job\'s output into the A2UI page it belongs to. '
+      + 'After starting a background job (run_in_background: true) as part of an A2UI '
+      + 'action, call this with the page\'s `surfaceId` and the returned `job_id` so the '
+      + 'page\'s live-result pane follows the job\'s output until it finishes.',
+    parameters: {
+      surfaceId: {
+        type: 'string',
+        required: true,
+        description: 'The `surfaceId` of the A2UI page whose action started the job (the id the page\'s `a2ui_surface` call returned).',
+      },
+      jobId: {
+        type: 'string',
+        required: true,
+        description: 'The `job_id` returned by the background tool call whose output should stream into the page.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          surfaceId: { type: 'string', required: true },
+          jobId: { type: 'string', required: true },
+          attached: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Streaming background job ${value.jobId} output into A2UI page ${value.surfaceId}.`,
+      }],
+    },
+    execute(args, exec) {
+      if (!exec.agent) {
+        throw new Error('a2ui_attach_output requires an owning agent session')
+      }
+      ctx.a2uiLive.attach(args.surfaceId, args.jobId as JobId, exec.agent)
+      return Promise.resolve({ surfaceId: args.surfaceId, jobId: args.jobId, attached: true })
+    },
+    presentCall: args => ({
+      card: 'generic',
+      title: `Stream job output into ${args.surfaceId}`,
+      kind: 'other',
+      rawInput: { surfaceId: args.surfaceId, jobId: args.jobId },
+    }),
   }))
 }
