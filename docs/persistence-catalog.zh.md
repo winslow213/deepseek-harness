@@ -113,7 +113,18 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'a2ui/surface': A2uiSurfaceData
 ```
 
-来源：[`packages/web/tool-a2ui-surface/src/types.ts:240`](../packages/web/tool-a2ui-surface/src/types.ts)
+来源：[`packages/web/tool-a2ui-surface/src/types.ts:249`](../packages/web/tool-a2ui-surface/src/types.ts)
+
+<a id="a2uiupdate--log-only"></a>
+
+#### `a2ui/update` — log-only
+
+```ts persistence-catalog
+/** Bounded, replayable live-result stream of one A2UI surface's correlated run. */
+'a2ui/update': A2uiUpdateData
+```
+
+来源：[`packages/web/tool-a2ui-store/src/types.ts:38`](../packages/web/tool-a2ui-store/src/types.ts)
 
 ### `agent/*`
 

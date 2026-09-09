@@ -26,8 +26,14 @@ import css from './A2uiPanel.module.css'
 
 /** The command-run bridge the launcher renders against (registered by the plugin from `ctx.remote.a2uiRun`). */
 export interface A2uiRunBridge {
-  /** Start one `command`-action run on the harness host. */
-  start(request: { command: string; fields: A2uiRunFieldValues; timeoutMs?: number }): Promise<A2uiRunStartValue>
+  /** Start one `command`-action run on the harness host, correlated to the session and surface. */
+  start(request: {
+    command: string
+    fields: A2uiRunFieldValues
+    timeoutMs?: number
+    sessionId: SessionId
+    surfaceId: string
+  }): Promise<A2uiRunStartValue>
   /** Consume one output chunk of a run. */
   read(runId: string): Promise<A2uiRunReadValue>
   /** Stop one run's process group. */
@@ -156,9 +162,13 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
     /** Start a command run and poll its output into the popup until it settles. */
     const startRun = async (popup: Window, runBridge: A2uiRunBridge, action: A2uiAction, values: A2uiRunFieldValues): Promise<void> => {
       const send = (message: A2uiOpenerMessage): void => { popup.postMessage(message, location.origin) }
-      const request = action.timeoutMs === undefined
-        ? { command: action.command ?? '', fields: values }
-        : { command: action.command ?? '', fields: values, timeoutMs: action.timeoutMs }
+      const request = {
+        command: action.command ?? '',
+        fields: values,
+        sessionId,
+        surfaceId,
+        ...(action.timeoutMs === undefined ? {} : { timeoutMs: action.timeoutMs }),
+      }
       try {
         const started = await runBridge.start(request)
         send({ type: 'a2ui/runStarted', runId: started.runId, ok: true })

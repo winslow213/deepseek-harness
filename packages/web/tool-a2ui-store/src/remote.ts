@@ -19,6 +19,7 @@ import type {
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue,
 } from './types.ts'
+import type { A2uiRunSession } from './run.ts'
 
 export type {
   A2uiRunReadRequest, A2uiRunReadValue,
@@ -50,6 +51,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'a2ui-run/invalid-command': Record<string, never>
     /** No run exists under that identity. */
     'a2ui-run/not-found': { readonly runId: string }
+    /** The addressed session has no live agent, so a `command` action cannot correlate. */
+    'a2ui-run/agent-offline': { readonly sessionId: string }
     /** No code runtime is mounted, so a `script` action cannot run. */
     'a2ui-run-script/runtime-unavailable': Record<string, never>
   }
@@ -121,22 +124,37 @@ export class A2uiStoreController extends TypertRemoteService {
  * the composed shell service, consume its output in chunks, and stop it.
  */
 export class A2uiRunController extends TypertRemoteService {
-  static inject = ['a2uiRun', 'typert']
+  static inject = ['a2uiRun', 'agents', 'typert']
 
-  /** @param ctx - Host context carrying the run capability. */
+  /** @param ctx - Host context carrying the run capability and the agent registry. */
   constructor(ctx: Context) {
     super(ctx, 'a2uiRunController', { namespace: 'a2uiRun' })
   }
 
   /**
-   * Start one command run over the composed shell service.
-   * @param request - the command template, collected values, and optional run bound.
+   * Start one command run over the composed shell service, correlated to the
+   * addressed session's workspace and the opening surface.
+   * @param request - the command template, collected values, optional run bound, and correlation.
    * @returns the run identity for later reads and stops.
    */
   @Remote('start')
   async start(request: A2uiRunStartRequest): Promise<A2uiRunStartValue> {
+    const agent = this.ctx.agents.get(request.sessionId)
+    if (agent === undefined) {
+      throw new RemoteError('a2ui-run/agent-offline', `no agent for session "${request.sessionId}"`, { sessionId: request.sessionId })
+    }
+    const session: A2uiRunSession = {
+      ...agent.session.header.cwd === undefined ? {} : { cwd: agent.session.header.cwd },
+      append: (type, data) => { agent.session.append(type, data) },
+    }
     try {
-      const handle = this.ctx.a2uiRun.start(request.command, request.fields, request.timeoutMs)
+      const handle = this.ctx.a2uiRun.start({
+        command: request.command,
+        fields: request.fields,
+        ...request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs },
+        session,
+        surfaceId: request.surfaceId,
+      })
       return { runId: handle.runId }
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('a2uiRun: no shell')) {

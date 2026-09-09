@@ -22,7 +22,7 @@ import { CodeA2uiRunScript, type A2uiRunScript } from './script.ts'
 
 export type { A2uiToolRecord } from './store.ts'
 export { A2UI_TOOLS_DIR, isSafeA2uiToolName, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
-export type { A2uiRun, A2uiRunHandle } from './run.ts'
+export type { A2uiRun, A2uiRunHandle, A2uiRunSession, A2uiRunStart } from './run.ts'
 export { fillA2uiCommand } from './run.ts'
 export { A2uiStoreController, A2uiRunController } from './remote.ts'
 export type {
@@ -32,6 +32,7 @@ export type {
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
   A2uiRunFieldValues,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
+  A2uiUpdateData, A2uiUpdatePhase,
 } from './types.ts'
 
 /** Cordis plugin name. */

@@ -1045,7 +1045,7 @@ describe('A2uiLauncher', () => {
       }))
     })
     await vi.waitFor(() => { expect(start).toHaveBeenCalled() })
-    expect(start).toHaveBeenCalledWith({ command: 'echo {name}', fields: { name: 'X' } })
+    expect(start).toHaveBeenCalledWith({ command: 'echo {name}', fields: { name: 'X' }, sessionId: 'session-a2ui', surfaceId: 'a2ui-run' })
     await vi.waitFor(() => {
       expect(sent.some(m => m.type === 'a2ui/runDone')).toBe(true)
     })

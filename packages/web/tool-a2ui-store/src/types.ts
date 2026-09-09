@@ -9,6 +9,36 @@
 import type { A2uiPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+/** Progress phase of one A2UI live-result stream. */
+export type A2uiUpdatePhase = 'started' | 'delta' | 'finished' | 'aborted'
+
+/**
+ * Durable payload of one `a2ui/update` event: the bounded, replayable live
+ * stream of a page-correlated run (a `command` action's output, or the
+ * background jobs a `model` action spawns). Each `delta` carries only the text
+ * produced since the previous event; `totalBytes` is the cumulative byte count
+ * so the client can derive a throughput label. The stream is log-only UI
+ * projection — the model never reads it, so the event stays off the surface.
+ */
+export interface A2uiUpdateData {
+  /** Stable surface identity the live-result stream correlates with. */
+  readonly surfaceId: string
+  readonly phase: A2uiUpdatePhase
+  /** Monotonic sequence within the surface's stream. */
+  readonly seq: number
+  /** Incremental text since the previous event (absent on `started`/settle). */
+  readonly delta?: string
+  /** Cumulative byte count of the stream so far. */
+  readonly totalBytes?: number
+}
+
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Bounded, replayable live-result stream of one A2UI surface's correlated run. */
+    'a2ui/update': A2uiUpdateData
+  }
+}
+
 /** One saved A2UI tool: a page definition persisted under a stable name. */
 export interface A2uiToolRecord {
   /** Stable tool name; also the file stem under the store directory. */
@@ -63,6 +93,10 @@ export interface A2uiRunStartRequest {
   readonly fields: A2uiRunFieldValues
   /** Run bound in milliseconds; absent uses the host shell default and cap. */
   readonly timeoutMs?: number
+  /** Owning session: supplies the workspace workdir and receives `a2ui/update` events. */
+  readonly sessionId: SessionId
+  /** Stable surface identity the live-result events correlate with. */
+  readonly surfaceId: string
 }
 
 /** Response after a run starts. */
