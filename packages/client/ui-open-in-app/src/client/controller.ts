@@ -8,6 +8,23 @@ import {
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 
+/** Hand a URL to the browser; assigning an external scheme triggers its OS protocol handler. */
+type Navigate = (url: string) => void
+
+/**
+ * Editor catalog ids and their URL schemes. When the host reports a remote
+ * (SSH) launch, these applications open on the operator's machine through
+ * their scheme instead of the host spawning them; applications absent here
+ * keep the host launch.
+ */
+const DEEP_LINK_URI: Readonly<Record<string, string>> = {
+  vscode: 'vscode://',
+  vscodeinsiders: 'vscode-insiders://',
+  cursor: 'cursor://',
+  windsurf: 'windsurf://',
+  zed: 'zed://',
+}
+
 /** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
 function hostBase(): string {
   const origin = (globalThis as { location?: { origin?: string } }).location?.origin
@@ -28,11 +45,20 @@ export class OpenInAppController {
   })
 
   private loading: Promise<void> | undefined
+  /** Host-reported remote launch: editors open client-side through their URL scheme. */
+  private clientLaunch = false
 
   /**
    * @param fetcher - HTTP carrier for the apps read and the launch POST.
+   * @param navigate - deep-link carrier for client-side editor launches.
    */
-  constructor(private readonly fetcher: Fetch = (input, init) => fetch(input, init)) {}
+  constructor(
+    private readonly fetcher: Fetch = (input, init) => fetch(input, init),
+    private readonly navigate: Navigate = (url) => {
+      const location = (globalThis as { location?: { href?: string } }).location
+      if (location !== undefined) location.href = url
+    },
+  ) {}
 
   /**
    * Read availability once per controller life; concurrent calls share the read.
@@ -59,6 +85,13 @@ export class OpenInAppController {
    * @returns after the host acknowledged the launch; rejects on any failure.
    */
   async launch(appId: string, path: string): Promise<void> {
+    if (this.clientLaunch) {
+      const uri = DEEP_LINK_URI[appId]
+      if (uri !== undefined) {
+        this.navigate(uri)
+        return
+      }
+    }
     const body: OpenInAppOpenPayload = { app: appId, path }
     const response = await this.fetcher(new URL(OPEN_IN_APP_OPEN_ROUTE, hostBase()), {
       method: 'POST',
@@ -77,6 +110,7 @@ export class OpenInAppController {
       if (response.ok) {
         const payload = await response.json() as OpenInAppAppsPayload
         if (Array.isArray(payload.apps)) apps = payload.apps.filter(id => typeof id === 'string')
+        this.clientLaunch = payload.clientLaunch
       }
     } catch {
       // Swallows network failures: an unreachable host reads as no apps, and

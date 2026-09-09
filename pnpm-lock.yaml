@@ -6736,6 +6736,9 @@ importers:
 
   packages/host/open-in-app:
     dependencies:
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:^
+        version: link:../../util/launch-environment
       '@deepseek-ai/dsh-native-command':
         specifier: workspace:^
         version: link:../../util/native-command

@@ -31,6 +31,8 @@ kind: "package-reference"
 
 主按钮显示记住的应用图标——凡主机能提取的都是应用真实图标（macOS bundle 图标、Windows 可执行文件图标、Linux 主题图标），提取不到时是通用占位图形——并带设计系统 tooltip（「在本地打开」）；点击立即启动。下拉箭头打开已安装应用的紧凑菜单，记住的条目以整行填充标记。可用性每页读取一次；上次选择的应用持久化在浏览器中（`dsh.open-in-app.choice`），不再安装的选择回退到第一个可用条目。快速完成的启动不改变按钮外观——变暗的等待态只在飞行超过 250 毫秒后出现——失败的启动显示错误 tooltip 与红色描边两秒。所有文案在双语 `open-in-app` locale 命名空间中；词典无法命名的应用 id 不会被提供。
 
+当主机上报远程启动（`clientLaunch`）时，编辑器应用（VS Code 与 Insiders、Cursor、Windsurf、Zed）改为在操作者自己机器上通过 URL scheme 打开，而不是主机去启动它们；没有 URL scheme 的应用仍走主机启动。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -69,6 +71,7 @@ kind: "package-reference"
 
 - **词典把守菜单。** 主机目录的新条目若在两份词典中没有对应的 `app.<id>` 条目，将保持不可见而不是显示裸 id；扩展目录意味着同时扩展 [`dsh-host-open-in-app`](../../host/open-in-app/README.zh.md) 与本包的 locale。
 - **可用性每页只读一次。** 页面打开期间安装的应用要重新加载页面后才出现（主机侧还需主机重启）。
+- **客户端启动只打开编辑器本身、不带 workspace 目录。** 操作者的机器与主机文件系统不同，URL scheme 只打开应用本身，而不是只存在于主机上的那个目录。
 
 <a id="dev-note"></a>
 ### 开发备注

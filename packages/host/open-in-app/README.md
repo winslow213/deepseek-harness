@@ -61,6 +61,8 @@ The catalog is a fixed whitelist covering editors and IDEs (Cursor, VS Code and 
 
 Resolution runs lazily, once per host process, on the first request that needs it; installing an application takes effect on the next restart, while an uninstalled one heals immediately — a launch that finds its executable gone re-resolves that one entry and drops it from the list when nothing proves it anymore. The icon route serves the real application icon on every platform where one is extractable: the bundle's `.icns` as a 128px PNG on macOS, the executable's associated icon as a 32px PNG on Windows, and the desktop entry's hicolor-theme icon (PNG or SVG) on Linux; a missing icon answers 404 and the browser surface renders a generic glyph.
 
+Under an SSH launch the apps route also reports `clientLaunch: true`: the operator's browser then lives on another machine, so GUI applications the host spawns could never reach its screen. The browser half reads that flag and opens editor applications (VS Code and Insiders, Cursor, Windsurf, Zed) through their URL scheme on the operator's own machine instead of the host launching them.
+
 ### The `./shared` subpath
 
 The route paths and wire payload types are published as the browser-safe `./shared` subpath (constants and types only, no runtime identity); the browser package inlines it into its client bundle. A route or payload change lands in `src/shared.ts` and both packages pick it up from there.

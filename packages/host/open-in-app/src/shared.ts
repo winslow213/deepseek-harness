@@ -16,6 +16,13 @@ export const OPEN_IN_APP_OPEN_ROUTE = '/open-in-app/open'
 /** Apps-route response: catalog ids probed as installed, in menu order. */
 export interface OpenInAppAppsPayload {
   readonly apps: readonly string[]
+  /**
+   * true when the operator's browser is not on this host's desktop (an SSH
+   * launch): GUI applications the host spawns cannot reach the operator's
+   * screen, so the browser opens editor applications on the operator's own
+   * machine through their URL scheme instead of the host launching them.
+   */
+  readonly clientLaunch: boolean
 }
 
 /** Open-route request body. */

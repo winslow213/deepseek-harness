@@ -31,6 +31,8 @@ Mount this plugin in the Web composition beside [`dsh-host-open-in-app`](../../h
 
 The main button shows the remembered application's icon — the real application icon wherever the host extracts one (macOS bundle icons, Windows executable icons, Linux theme icons), a generic glyph where it serves none — and a design-system tooltip ("Open locally"); clicking launches immediately. The chevron opens a dense menu of the installed applications with the remembered one marked by a filled row. Availability is read once per page from the host; the last chosen application persists in the browser (`dsh.open-in-app.choice`), and a choice that is no longer installed falls back to the first available entry. A launch that finishes quickly leaves the button untouched — the dimmed busy treatment appears only after 250 ms in flight — and a failed launch shows the error tooltip and a red outline for two seconds. All copy lives in the bilingual `open-in-app` locale namespace; an application id the dictionaries cannot name is not offered.
 
+When the host reports a remote launch (`clientLaunch`), editor applications (VS Code and Insiders, Cursor, Windsurf, Zed) open through their URL scheme on the operator's own machine instead of the host spawning them; applications without a URL scheme keep the host launch.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -69,6 +71,7 @@ None; this package neither assembles nor sends a provider request.
 
 - **The dictionaries gate the menu.** A host catalog extension without a matching `app.<id>` entry in both dictionaries stays invisible instead of showing a raw id; extending the catalog means extending [`dsh-host-open-in-app`](../../host/open-in-app/README.md) and this package's locales together.
 - **Availability is read once per page.** An application installed while the page is open appears after a reload (and, host-side, after a host restart).
+- **Client-side launches open the editor without the workspace folder.** The operator's machine and the host have different filesystems, so the URL scheme opens the application alone rather than a directory that only exists on the host.
 
 <a id="dev-note"></a>
 ### Dev Note

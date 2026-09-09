@@ -1,6 +1,6 @@
 /** Controller wire behavior: host-base resolution, availability filtering, and launch errors. */
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { OpenInAppController } from '../src/client/controller.ts'
 
 afterEach(() => {
@@ -80,5 +80,52 @@ describe('OpenInAppController launching', () => {
 
     const failing = new OpenInAppController(async () => jsonResponse({}, 404))
     await expect(failing.launch('cursor', '/w/dir')).rejects.toThrow('open failed: HTTP 404')
+  })
+})
+
+describe('OpenInAppController client-side launching', () => {
+  let navigate: Mock<(url: string) => void>
+
+  beforeEach(() => {
+    navigate = vi.fn<(url: string) => void>()
+  })
+
+  it('opens editor apps through their URL scheme when the host reports a remote launch', async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      void input
+      if (String(input).includes('/open-in-app/apps')) return jsonResponse({ apps: ['vscode'], clientLaunch: true })
+      return jsonResponse({ ok: true })
+    })
+    const controller = new OpenInAppController(fetcher, navigate)
+    await controller.load()
+    await controller.launch('vscode', '/w/dir')
+    expect(navigate).toHaveBeenCalledWith('vscode://')
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes('/open-in-app/open'))).toBe(false)
+  })
+
+  it('keeps the host launch for apps without a URL scheme under a remote launch', async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      void input
+      if (String(input).includes('/open-in-app/apps')) return jsonResponse({ apps: ['finder'], clientLaunch: true })
+      return jsonResponse({ ok: true })
+    })
+    const controller = new OpenInAppController(fetcher, navigate)
+    await controller.load()
+    await controller.launch('finder', '/w/dir')
+    expect(navigate).not.toHaveBeenCalled()
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes('/open-in-app/open'))).toBe(true)
+  })
+
+  it('keeps the host launch for editors when the host did not report a remote launch', async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      void input
+      if (String(input).includes('/open-in-app/apps')) return jsonResponse({ apps: ['vscode'] })
+      return jsonResponse({ ok: true })
+    })
+    const controller = new OpenInAppController(fetcher, navigate)
+    await controller.load()
+    await controller.launch('vscode', '/w/dir')
+    expect(navigate).not.toHaveBeenCalled()
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes('/open-in-app/open'))).toBe(true)
   })
 })

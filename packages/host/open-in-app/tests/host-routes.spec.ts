@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
+import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import type { NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
 import * as OpenInApp from '../src/index.ts'
@@ -44,7 +45,7 @@ function pathTable(entries: Record<string, string> = {}): (name: string) => Prom
 }
 
 /** Boot webserver + open-in-app rows through the real Loader. */
-async function boot(): Promise<string> {
+async function boot(env: Record<string, string> = {}): Promise<string> {
   root = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-loader-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -62,6 +63,9 @@ async function boot(): Promise<string> {
 
   context = new Context()
   context.baseUrl = pathToFileURL(root).href + '/'
+  context.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([
+    { source: 'process', values: env },
+  ]))
   context.provide('connection', { requestRejection: () => trust.rejection } as never)
   // The plugin resolves PATH names through the composition's subprocess
   // capability; the not-found rejection is the provider's real signal.
@@ -145,6 +149,20 @@ describe('open-in-app host routes (real Loader composition)', () => {
     expect((await fetch(`${base}/open-in-app/apps`)).status).toBe(200)
   })
 
+  it('reports clientLaunch under an SSH launch so editors open on the operator machine', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
+    await cursorBundle(home)
+    darwinFixture(home, [])
+    const base = await boot({ SSH_CONNECTION: '10.0.0.1 43210 10.0.0.2 22' })
+    try {
+      const apps = await fetch(`${base}/open-in-app/apps`)
+      expect(apps.status).toBe(200)
+      expect(await apps.json()).toEqual({ apps: ['finder', 'cursor', 'terminal'], clientLaunch: true })
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('serves the resolved catalog, one cached icon, and launches from the same resolution', async () => {
     const launches: string[][] = []
     const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
@@ -157,7 +175,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
       const apps = await fetch(`${base}/open-in-app/apps`)
       expect(apps.status).toBe(200)
       expect(apps.headers.get('cache-control')).toBe('no-store')
-      expect(await apps.json()).toEqual({ apps: ['finder', 'cursor', 'terminal'] })
+      expect(await apps.json()).toEqual({ apps: ['finder', 'cursor', 'terminal'], clientLaunch: false })
 
       const icon = await fetch(`${base}/open-in-app/icon/cursor`)
       expect(icon.status).toBe(200)
@@ -252,7 +270,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
       launchOutcomes = [enoent]
       expect((await openCursor()).status).toBe(502)
       expect(await (await fetch(`${base}/open-in-app/apps`)).json())
-        .toEqual({ apps: ['finder', 'terminal'] })
+        .toEqual({ apps: ['finder', 'terminal'], clientLaunch: false })
       // The unresolved entry also stops serving an icon.
       expect((await fetch(`${base}/open-in-app/icon/cursor`)).status).toBe(404)
       expect((await openCursor()).status).toBe(400)
@@ -344,7 +362,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     context = undefined
     internals.catalog = { platform: 'aix', resolveExecutable: pathTable() }
     const emptyBase = await boot()
-    expect(await (await fetch(`${emptyBase}/open-in-app/apps`)).json()).toEqual({ apps: [] })
+    expect(await (await fetch(`${emptyBase}/open-in-app/apps`)).json()).toEqual({ apps: [], clientLaunch: false })
   })
 
   it('serves a Linux catalog resolved in-process and its desktop-entry SVG icon', async () => {
@@ -372,7 +390,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     const base = await boot()
     try {
       expect(await (await fetch(`${base}/open-in-app/apps`)).json())
-        .toEqual({ apps: ['filemanager', 'vscode'] })
+        .toEqual({ apps: ['filemanager', 'vscode'], clientLaunch: false })
       // The icon follows the desktop entry; xdg-open declares none.
       const icon = await fetch(`${base}/open-in-app/icon/vscode`)
       expect(icon.status).toBe(200)
@@ -431,7 +449,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     const base = await boot()
     // The spec host's subprocess stub rejects every lookup, which the plugin
     // reads as not-on-PATH: the catalog resolves empty instead of failing.
-    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: [] })
+    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: [], clientLaunch: false })
   })
 
   it('removes all three routes when the plugin row is disposed (HMR safety)', async () => {

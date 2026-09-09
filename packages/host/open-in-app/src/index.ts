@@ -25,6 +25,7 @@ import { isAbsolute } from 'node:path'
 import { stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import z from '@deepseek-ai/schemastery'
 import { OPEN_IN_APP_CATALOG, type OpenInAppApp } from './catalog.ts'
@@ -84,6 +85,22 @@ function connectionOf(ctx: Context): OpenInAppConnection {
   return Reflect.get(ctx, 'connection') as OpenInAppConnection
 }
 
+/**
+ * Whether this host launched through SSH, including a forwarded-port session:
+ * the operator's browser then lives on another machine, so host-spawned GUI
+ * applications cannot present to it. Editors must open on the operator's own
+ * machine through their URL scheme instead.
+ * @param ctx - the plugin context.
+ * @returns true when the operator's desktop is not this host.
+ */
+function launchedThroughSsh(ctx: Context): boolean {
+  const environment = launchEnvironmentOf(ctx)
+  return ['SSH_CONNECTION', 'SSH_TTY'].some((name) => {
+    const value = environment.getFrom(name, ['process'])?.value
+    return value !== undefined && value !== ''
+  })
+}
+
 /** Open-route request bodies are tiny JSON objects; anything larger is hostile. */
 const MAX_BODY_BYTES = 64 * 1024
 
@@ -135,6 +152,8 @@ function parseOpenBody(text: string): { app: string; path: string } | null {
 
 /** Register the apps, icon, and open routes behind the connection trust fence. */
 export function apply(ctx: Context, config: Config): void {
+  /** Stable per-process fact: an SSH launch means editors open client-side. */
+  const clientLaunch = launchedThroughSsh(ctx)
   /** Test-seam facts completed with the composition's PATH resolver. */
   const catalogInternals = (): OpenInAppInternals => ({
     resolveExecutable: async (name) => {
@@ -196,7 +215,7 @@ export function apply(ctx: Context, config: Config): void {
         sendMethodNotAllowed(res, 'GET')
         return
       }
-      sendJson(res, 200, { apps: [...(await availability()).keys()] })
+      sendJson(res, 200, { apps: [...(await availability()).keys()], clientLaunch })
     },
   }), `open-in-app: GET ${OPEN_IN_APP_APPS_ROUTE}`)
 
