@@ -22,6 +22,7 @@ import type {
   ShellExecSpec,
   ShellProcess,
   ShellProcessRead,
+  ShellProcessReader,
   ShellProcessStatus,
   ShellRunResult,
 } from '@deepseek-ai/dsh-shell'
@@ -356,29 +357,46 @@ export class RemoteShellCore {
     let requestId: string | undefined
     const stdout = new CappedOutput(this.config.maxOutputBytes)
     const stderr = new CappedOutput(this.config.maxOutputBytes)
-    let outRead = 0
-    let errRead = 0
     let settle!: () => void
     const done = new Promise<void>((resolve) => { settle = resolve })
+
+    // A provider failure is delivered once through whichever read path polls
+    // it first; it is not duplicated across independent readers.
+    const consumeSpawnError = (): string => {
+      const note = spawnError
+      spawnError = ''
+      return note
+    }
+
+    // Each reader owns its own cursor over the two capped streams, so a
+    // live-result consumer never consumes the primary readOutput delta.
+    const makeReader = (): ShellProcessReader => {
+      let ownOutOffset = 0
+      let ownErrOffset = 0
+      return {
+        read: (): ShellProcessRead => {
+          const outText = stdout.collect().text
+          const errText = stderr.collect().text
+          const out = outText.slice(ownOutOffset)
+          const err = errText.slice(ownErrOffset)
+          ownOutOffset += out.length
+          ownErrOffset += err.length
+          const sep = out.length > 0 && !out.endsWith('\n') ? '\n' : ''
+          const mergedErr = err.length > 0 ? `${sep}[stderr]\n${err}` : ''
+          const note = out.length === 0 && err.length === 0 ? consumeSpawnError() : ''
+          return { delta: `${out}${mergedErr}${note}`, lossy: false }
+        },
+      }
+    }
+    const primary = makeReader()
 
     const proc: ShellProcess = {
       get status() { return status },
       get exitCode() { return exitCode },
       get signal() { return signal },
       done,
-      readOutput: (): ShellProcessRead => {
-        const outText = stdout.collect().text
-        const errText = stderr.collect().text
-        const out = outText.slice(outRead)
-        const err = errText.slice(errRead)
-        outRead += out.length
-        errRead += err.length
-        const sep = out.length > 0 && !out.endsWith('\n') ? '\n' : ''
-        const mergedErr = err.length > 0 ? `${sep}[stderr]\n${err}` : ''
-        const note = out.length === 0 && err.length === 0 ? spawnError : ''
-        spawnError = ''
-        return { delta: `${out}${mergedErr}${note}`, lossy: false }
-      },
+      readOutput: (): ShellProcessRead => primary.read(),
+      createOutputReader: (): ShellProcessReader => makeReader(),
       kill: (): boolean => {
         if (status !== 'running') return false
         status = 'killed'
