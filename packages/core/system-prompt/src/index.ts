@@ -150,6 +150,7 @@ const SECTION_ORDERS = {
   // Local paths and endpoints follow reusable instructions.
   HARNESS_SOURCE: 10000,
   WEB_SURFACE: 10100,
+  MOUNTED_WORKSPACE: 10150,
   DEPLOYMENT_PERSONA_SUFFIX: 10200,
 } as const
 

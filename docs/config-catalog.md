@@ -2625,7 +2625,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:242`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:243`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 
@@ -2766,7 +2766,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/web/tool-a2ui-store/src/index.ts:95`](../packages/web/tool-a2ui-store/src/index.ts)
+Source: [`packages/web/tool-a2ui-store/src/index.ts:134`](../packages/web/tool-a2ui-store/src/index.ts)
 
 <a id="deepseek-aidsh-tool-a2ui-surface"></a>
 

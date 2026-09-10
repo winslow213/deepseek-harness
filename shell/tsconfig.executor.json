@@ -31,6 +31,8 @@
     "src/remote/region-router.ts",
     "src/remote/region-shell.ts",
     "src/remote/mount-sync.ts",
+    "src/remote/mount-declare.ts",
+    "src/remote/mount-declare-render.ts",
     "src/remote/client.ts"
   ]
 }

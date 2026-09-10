@@ -204,9 +204,11 @@ export function regionRouterPatchYaml(config: {
   routerFileUrl: string
   shellRouterFileUrl?: string
   syncMountFileUrl?: string
+  mountDeclareFileUrl?: string
   fsCwd?: string
   includeShell?: boolean
   syncMounts?: boolean
+  declareMounts?: boolean
 }): string {
   const lines = [
     '# Injected by the team shell (region routers): one ctx.fs and one ctx.shell',
@@ -256,6 +258,18 @@ export function regionRouterPatchYaml(config: {
       `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
     )
   }
+  if (config.declareMounts && config.mountDeclareFileUrl !== undefined) {
+    lines.push(
+      '',
+      '- insert:',
+      '    - id: region-mount-declare',
+      `      name: ${JSON.stringify(config.mountDeclareFileUrl)}`,
+      '      config:',
+      `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
+      `        user: ${JSON.stringify(config.user)}`,
+      `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+    )
+  }
   lines.push('')
   return lines.join('\n')
 }
@@ -277,6 +291,8 @@ export interface InjectRegionRouterOptions {
   includeShell?: boolean
   /** Also auto-register mounted roots as workspaces (default false). */
   syncMounts?: boolean
+  /** Also declare the mounted workspace in the system prompt (default false). */
+  declareMounts?: boolean
   /** Profile directory to patch (`<DSH_HOME>/profiles/web`). */
   profileDir: string
 }
@@ -289,12 +305,14 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
   const files = ['region-router.ts', 'shadow.ts', 'client.ts']
   if (options.includeShell ?? false) files.push('region-shell.ts', 'executor.ts')
   if (options.syncMounts ?? false) files.push('mount-sync.ts')
+  if (options.declareMounts ?? false) files.push('mount-declare.ts', 'mount-declare-render.ts')
   for (const file of files) {
     cpSync(join(options.runtimeSourceDir, file), join(pluginsDir, file), { force: true })
   }
   const routerFileUrl = pathToFileURL(join(pluginsDir, 'region-router.ts')).href
   const shellFileUrl = pathToFileURL(join(pluginsDir, 'region-shell.ts')).href
   const syncMountFileUrl = pathToFileURL(join(pluginsDir, 'mount-sync.ts')).href
+  const mountDeclareFileUrl = pathToFileURL(join(pluginsDir, 'mount-declare.ts')).href
   const patch = join(options.profileDir, PROFILE_PATCH_FILENAME)
   writeFileSync(patch, regionRouterPatchYaml({
     hubUrl: options.hubUrl,
@@ -304,9 +322,11 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
     routerFileUrl,
     shellRouterFileUrl: shellFileUrl,
     syncMountFileUrl: syncMountFileUrl,
+    mountDeclareFileUrl: mountDeclareFileUrl,
     fsCwd: options.fsCwd,
     includeShell: options.includeShell ?? false,
     syncMounts: options.syncMounts ?? false,
+    declareMounts: options.declareMounts ?? false,
   }))
   return patch
 }

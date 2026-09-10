@@ -137,6 +137,7 @@ export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = proces
     profileDir,
     includeShell: true,
     syncMounts: true,
+    declareMounts: true,
     fsCwd: workspace,
   })
 }
