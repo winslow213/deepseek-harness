@@ -144,6 +144,18 @@ describe('A2uiStorePanel import', () => {
     await waitFor(() => { expect(f.listTools).toHaveBeenCalledTimes(2) })
   })
 
+  it('imports on Enter from the token input', async () => {
+    const f = face()
+    await openPanel(f)
+
+    fireEvent.change(screen.getByPlaceholderText('粘贴分享令牌导入…'), { target: { value: 'a2ui-share:abc' } })
+    fireEvent.keyDown(screen.getByPlaceholderText('粘贴分享令牌导入…'), { key: 'Enter' })
+    await waitFor(() => { expect(f.importTool).toHaveBeenCalledWith('a2ui-share:abc') })
+    // A non-Enter key is ignored.
+    fireEvent.keyDown(screen.getByPlaceholderText('粘贴分享令牌导入…'), { key: 'a' })
+    expect(f.importTool).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the import error when the token is rejected', async () => {
     const f = face({ importTool: vi.fn(async () => { throw new Error('invalid') }) })
     await openPanel(f)

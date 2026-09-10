@@ -155,15 +155,23 @@
   display: flex;
   flex: none;
   align-items: center;
-  justify-content: center;
-  padding: 6px 8px;
-  border: 0;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
-  background: transparent;
+  background: var(--dsw-specific-input-minor);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
 }
-
 .importAction:hover {
-  background: var(--dsw-specific-input-minor);
+  background: var(--dsw-specific-input-major);
+}
+.importAction:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.importLabel {
+  font-size: 12px;
+  line-height: 20px;
 }

@@ -147,10 +147,12 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
               placeholder={t('panel.importPlaceholder')}
               value={importValue}
               onChange={(event) => { setImportValue(event.target.value) }}
+              onKeyDown={(event) => { if (event.key === 'Enter') void importShared() }}
               disabled={importing}
             />
-            <button type="button" className={css.importAction} aria-label={t('panel.import')} disabled={importing} onClick={() => { void importShared() }}>
+            <button type="button" className={css.importAction} disabled={importing} onClick={() => { void importShared() }}>
               <IconDownloadOutline16 />
+              <span className={css.importLabel}>{t('panel.import')}</span>
             </button>
           </div>
 
