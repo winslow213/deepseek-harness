@@ -32,8 +32,8 @@
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  width: 280px;
-  max-height: 320px;
+  width: 320px;
+  max-height: 360px;
   display: flex;
   flex-direction: column;
   padding: 8px;
@@ -156,7 +156,7 @@
   flex: none;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
   background: var(--dsw-specific-input-minor);
@@ -174,4 +174,5 @@
 .importLabel {
   font-size: 12px;
   line-height: 20px;
+  white-space: nowrap;
 }
