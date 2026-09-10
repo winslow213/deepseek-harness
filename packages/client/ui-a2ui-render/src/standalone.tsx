@@ -57,6 +57,39 @@ const evaluateExpression: A2uiExpressionEvaluator = (expression, values) => {
   }
 }
 
+/**
+ * Console body that follows the newest output: a streaming run stays pinned to
+ * the tail, scrolling up detaches the follower, and returning to the bottom
+ * (or starting a new run, keyed by `runKey`) re-attaches it.
+ */
+function ConsoleBody({ text, waiting, runKey }: {
+  readonly text: string
+  readonly waiting: string
+  readonly runKey: string | null
+}) {
+  const ref = useRef<HTMLPreElement | null>(null)
+  const followRef = useRef(true)
+  useEffect(() => { followRef.current = true }, [runKey])
+  useEffect(() => {
+    const node = ref.current
+    if (node === null || !followRef.current) return
+    node.scrollTop = node.scrollHeight
+  }, [text])
+  return (
+    <pre
+      ref={ref}
+      className={css.consoleBody}
+      onScroll={(): void => {
+        const node = ref.current
+        if (node === null) return
+        followRef.current = node.scrollHeight - node.scrollTop - node.clientHeight <= 24
+      }}
+    >
+      {text || waiting}
+    </pre>
+  )
+}
+
 /** The popup host: one reducer-owned runtime, posting resolved intents to the opener. */
 function A2uiPopupHost({ surfaceId, page, t, opener }: {
   surfaceId: string
@@ -283,7 +316,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
             )}
           </div>
           {run.error !== null && <p className={css.consoleError}>{run.error}</p>}
-          <pre className={css.consoleBody}>{run.output || t('run.waiting')}</pre>
+          <ConsoleBody text={run.output} waiting={t('run.waiting')} runKey={run.runId} />
         </div>
       )}
       {live.active && (
@@ -291,7 +324,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
           <div className={css.consoleHeader}>
             <span className={css.consoleStatus}>{live.running ? '…' : '✓'}</span>
           </div>
-          <pre className={css.consoleBody}>{live.output || t('run.waiting')}</pre>
+          <ConsoleBody text={live.output} waiting={t('run.waiting')} runKey="live" />
         </div>
       )}
     </>
