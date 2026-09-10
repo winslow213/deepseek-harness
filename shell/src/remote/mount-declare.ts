@@ -31,6 +31,8 @@ export interface MountDeclareConfig {
   user: string
   /** Root holding every mount's shadow directory (matches hub shadowRoot). */
   shadowRoot: string
+  /** This instance's DSH_HOME (server-side local user space). */
+  home: string
   /** Mount-table refresh interval in milliseconds (default 30_000). */
   intervalMs?: number
 }
@@ -50,6 +52,8 @@ export function apply(ctx: Context, config: MountDeclareConfig): () => void {
   if (config.user === '') throw new Error('mount-declare: user is required')
   const shadowRoot = config.shadowRoot.replace(/\/+$/, '')
   if (shadowRoot === '') throw new Error('mount-declare: shadowRoot is required')
+  const home = config.home.replace(/\/+$/, '')
+  if (home === '') throw new Error('mount-declare: home is required')
   const intervalMs = config.intervalMs ?? DEFAULT_INTERVAL_MS
 
   let mounts: readonly MountRecord[] = []
@@ -69,7 +73,7 @@ export function apply(ctx: Context, config: MountDeclareConfig): () => void {
   const dispose = ctx.systemPrompt.section({
     name: SECTION_NAME,
     order: ctx.systemPrompt.getSectionOrder('MOUNTED_WORKSPACE'),
-    text: (context: AssembleContext) => renderMountedWorkspace(context.agent?.session.header.cwd, mounts, config.user, shadowRoot),
+    text: (context: AssembleContext) => renderMountedWorkspace(context.agent?.session.header.cwd, mounts, config.user, shadowRoot, home),
   })
 
   return () => {

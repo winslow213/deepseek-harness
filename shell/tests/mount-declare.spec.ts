@@ -39,6 +39,20 @@ describe('renderMountedWorkspace', () => {
     assert.ok(!text.includes('agent linux1'))
   })
 
+  it('names the local user space and its A2UI tools dir when home is given', () => {
+    const home = '/home/winslow/.dsh-users/alice'
+    const text = renderMountedWorkspace(aliceWh1.shadowPath, [aliceWh1], 'alice', SHADOW_ROOT, home)
+    assert.ok(text.includes(home))
+    assert.ok(text.includes(`${home}/a2ui-tools`))
+    assert.ok(text.includes('A2UI tools'))
+  })
+
+  it('omits the local user space line when home is empty', () => {
+    const text = renderMountedWorkspace(aliceWh1.shadowPath, [aliceWh1], 'alice', SHADOW_ROOT)
+    assert.ok(!text.includes('a2ui-tools'))
+    assert.ok(!text.includes('local user space'))
+  })
+
   it('returns empty when the matching mount belongs to another user', () => {
     assert.equal(renderMountedWorkspace(bobMount.shadowPath, [bobMount], 'alice', SHADOW_ROOT), '')
   })

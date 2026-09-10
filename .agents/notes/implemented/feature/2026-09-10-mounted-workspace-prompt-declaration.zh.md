@@ -16,9 +16,10 @@ Status: implemented
 
 - 当 cwd 缺失、位于影子树之外、或命中的挂载不属于本实例的用户时为空——因此本地会话不会得到多余的文字；
 - 指出 cwd 命中的那一个挂载（影子路径 → 远程根目录 → agent id）；
-- 列出该用户拥有的每一个挂载，因此无论挂载数量多少，声明都保持正确，且不硬编码任何路径、agent 或数量。
+- 列出该用户拥有的每一个挂载，因此无论挂载数量多少，声明都保持正确，且不硬编码任何路径、agent 或数量；
+- 指出实例的 DSH_HOME 作为服务器侧本地用户空间，使模型能定位本地数据——已保存的 A2UI 工具位于 `<home>/a2ui-tools`，而非挂载主机上。
 
-纯渲染逻辑放在 `shell/src/remote/mount-declare-render.ts`，以便独立的 `node:test` 运行器（无法解析 `@deepseek-ai/*`）可以测试它；插件文件只负责缓存、轮询和 `ctx.systemPrompt.section` 注册。该段落位于新增的中央顺序槽 `MOUNTED_WORKSPACE: 10150`（位于 `WEB_SURFACE` 与 `DEPLOYMENT_PERSONA_SUFFIX` 之间）。`injectRegionRouter` 生成的 profile patch 在 `declareMounts` 为真时插入一行 `region-mount-declare`，而 `spawn-user` 在已有的 `syncMounts`/`includeShell` 旁设置 `declareMounts: true`。
+纯渲染逻辑放在 `shell/src/remote/mount-declare-render.ts`，以便独立的 `node:test` 运行器（无法解析 `@deepseek-ai/*`）可以测试它；插件文件只负责缓存、轮询和 `ctx.systemPrompt.section` 注册。该段落位于新增的中央顺序槽 `MOUNTED_WORKSPACE: 10150`（位于 `WEB_SURFACE` 与 `DEPLOYMENT_PERSONA_SUFFIX` 之间）。`injectRegionRouter` 生成的 profile patch 在 `declareMounts` 为真时插入一行 `region-mount-declare`，而 `spawn-user` 在已有的 `syncMounts`/`includeShell` 旁设置 `declareMounts: true`；该行还携带 `home`（`userHome(user)`），声明将其作为本地用户空间命名。
 
 ## 备选方案
 

@@ -18,6 +18,9 @@ import { isShadowPath, translateShadowPath } from './shadow.ts'
  * @param mounts - current mount records (from hub /api/mounts).
  * @param user - hub user id of this instance; only their mounts are declared.
  * @param shadowRoot - root holding every mount's shadow directory.
+ * @param home - this instance's DSH_HOME (the server-side local user space);
+ *   when non-empty, the declaration also names it so the model can locate
+ *   local data (A2UI tools) that live there rather than on the mounted host.
  * @returns the declaration paragraph, or '' when there is nothing to declare.
  */
 export function renderMountedWorkspace(
@@ -25,6 +28,7 @@ export function renderMountedWorkspace(
   mounts: readonly MountRecord[],
   user: string,
   shadowRoot: string,
+  home = '',
 ): string {
   if (cwd === undefined || cwd === '') return ''
   if (!isShadowPath(cwd, shadowRoot)) return ''
@@ -39,5 +43,8 @@ export function renderMountedWorkspace(
     lines.push(`- ${mount.shadowPath} → ${mount.root} (agent ${mount.agentId})`)
   }
   lines.push(`Your current working directory ${cwd} maps to ${hit.mount.root} on agent ${hit.mount.agentId}.`)
+  if (home !== '') {
+    lines.push(`Your local user space on this server is ${home}; saved A2UI tools and other local data live there (A2UI tools under ${home}/a2ui-tools), not under your mounted working directory.`)
+  }
   return lines.join('\n')
 }

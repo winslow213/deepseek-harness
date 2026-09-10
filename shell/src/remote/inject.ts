@@ -205,6 +205,7 @@ export function regionRouterPatchYaml(config: {
   shellRouterFileUrl?: string
   syncMountFileUrl?: string
   mountDeclareFileUrl?: string
+  home?: string
   fsCwd?: string
   includeShell?: boolean
   syncMounts?: boolean
@@ -268,6 +269,7 @@ export function regionRouterPatchYaml(config: {
       `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
       `        user: ${JSON.stringify(config.user)}`,
       `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+      ...config.home === undefined ? [] : [`        home: ${JSON.stringify(config.home)}`],
     )
   }
   lines.push('')
@@ -293,6 +295,8 @@ export interface InjectRegionRouterOptions {
   syncMounts?: boolean
   /** Also declare the mounted workspace in the system prompt (default false). */
   declareMounts?: boolean
+  /** This instance's DSH_HOME, named in the mounted-workspace declaration. */
+  home?: string
   /** Profile directory to patch (`<DSH_HOME>/profiles/web`). */
   profileDir: string
 }
@@ -323,6 +327,7 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
     shellRouterFileUrl: shellFileUrl,
     syncMountFileUrl: syncMountFileUrl,
     mountDeclareFileUrl: mountDeclareFileUrl,
+    home: options.home,
     fsCwd: options.fsCwd,
     includeShell: options.includeShell ?? false,
     syncMounts: options.syncMounts ?? false,

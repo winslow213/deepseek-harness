@@ -134,6 +134,7 @@ export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = proces
     user,
     shadowRoot: env[DSH_SHADOW_ROOT_ENV] ?? DEFAULT_SHADOW_ROOT,
     workspaceRoot: workspace,
+    home: userHome(user, env),
     profileDir,
     includeShell: true,
     syncMounts: true,

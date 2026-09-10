@@ -16,9 +16,10 @@ A new injected plugin, `shell/src/remote/mount-declare.ts`, registers a system-p
 
 - is empty when the cwd is absent, outside the shadow tree, or under a mount this instance's user does not own — so local sessions get no added prose;
 - names the single mount the cwd maps to (shadow path → remote root → agent id);
-- enumerates every mount this user owns, so the declaration stays correct for any mount count without hardcoding a path, agent, or number.
+- enumerates every mount this user owns, so the declaration stays correct for any mount count without hardcoding a path, agent, or number;
+- names the instance's DSH_HOME as the server-side local user space, so the model can locate local data — saved A2UI tools live under `<home>/a2ui-tools`, not on the mounted host.
 
-The pure rendering lives in `shell/src/remote/mount-declare-render.ts` so the standalone `node:test` runner (which cannot resolve `@deepseek-ai/*`) can exercise it; the plugin file only wires the cache, the poll, and the `ctx.systemPrompt.section` registration. The section sits at a new central order slot `MOUNTED_WORKSPACE: 10150` in `SECTION_ORDERS` (between `WEB_SURFACE` and `DEPLOYMENT_PERSONA_SUFFIX`). The profile patch emitted by `injectRegionRouter` inserts a `region-mount-declare` row when `declareMounts` is set, and `spawn-user` sets `declareMounts: true` alongside the existing `syncMounts`/`includeShell`.
+The pure rendering lives in `shell/src/remote/mount-declare-render.ts` so the standalone `node:test` runner (which cannot resolve `@deepseek-ai/*`) can exercise it; the plugin file only wires the cache, the poll, and the `ctx.systemPrompt.section` registration. The section sits at a new central order slot `MOUNTED_WORKSPACE: 10150` in `SECTION_ORDERS` (between `WEB_SURFACE` and `DEPLOYMENT_PERSONA_SUFFIX`). The profile patch emitted by `injectRegionRouter` inserts a `region-mount-declare` row when `declareMounts` is set, and `spawn-user` sets `declareMounts: true` alongside the existing `syncMounts`/`includeShell`; the row also carries `home` (`userHome(user)`), which the declaration names as the local user space.
 
 ## Alternatives considered
 
