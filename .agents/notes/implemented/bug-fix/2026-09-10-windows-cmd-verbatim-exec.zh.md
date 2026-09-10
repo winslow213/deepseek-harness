@@ -38,4 +38,5 @@ Node 默认的 argv→命令行引号处理（在缺少 `windowsVerbatimArgument
 
 - 含管道和嵌套引号的 Windows 命令现在按 cmd 的解析方式执行，因此 `dir ... | findstr ...` 不再挂起。
 - 该保护只作用于 `cmd`/`cmd.exe`；非 cmd 的二进制保持 Node 默认引号，POSIX 不受影响。
+- 引号修复必要但不充分：同一类故障中「脱离控制台」的那一半在 [detached console 笔记](2026-09-10-windows-detached-console-exec.zh.md) 中修复。
 - agent 是唯一执行转发命令的位置，因此一处修改覆盖了所有 shell 与 fs 驱动的 exec 路径。

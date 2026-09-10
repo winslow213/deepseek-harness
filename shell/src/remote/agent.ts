@@ -19,7 +19,7 @@
  */
 
 import { connect, type Socket } from 'node:net'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path'
 import { hostname } from 'node:os'
@@ -149,9 +149,16 @@ interface Session {
   authed: boolean
 }
 
-/** SIGKILL a detached process group, ignoring an already-gone process. */
+/** Terminate a launched command tree with platform-correct semantics. */
 function killProcessGroup(child: ChildProcess): void {
   if (child.pid === undefined) return
+  if (process.platform === 'win32') {
+    // Windows has no POSIX process groups: terminate the whole tree (cmd and
+    // any piped children) via taskkill. Outcome unchecked — an already-gone
+    // tree or a missing taskkill binary is as tolerable as ESRCH on POSIX.
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+    return
+  }
   try {
     process.kill(-child.pid, 'SIGKILL')
   } catch {
@@ -264,7 +271,13 @@ async function runExec(session: Session, req: ExecRequest): Promise<void> {
 
   const child = spawn(req.argv[0]!, req.argv.slice(1), {
     cwd,
-    detached: true,
+    // Detach only on POSIX (so `process.kill(-pid)` signals the whole group).
+    // On Windows, `detached: true` gives cmd.exe a detached console, which
+    // breaks the console apps it spawns (findstr hangs, other external
+    // programs write `?`/empty instead of stdout). Hide the console window
+    // instead, matching the local subprocess provider.
+    detached: process.platform !== 'win32',
+    windowsHide: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
     // cmd /c parses everything after /c as one command line, so pipes and
     // nested quotes must reach cmd verbatim. Node's default argv quoting

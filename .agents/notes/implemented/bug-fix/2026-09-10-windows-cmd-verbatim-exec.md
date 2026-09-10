@@ -38,4 +38,5 @@ Writing the command to a temp script and executing it sidesteps `/c` quoting but
 
 - Windows commands with pipes and nested quotes now execute as cmd parses them, so `dir ... | findstr ...` no longer hangs.
 - The guard is scoped to `cmd`/`cmd.exe`; non-cmd binaries keep Node's default quoting, and POSIX is untouched.
+- The quoting was necessary but not sufficient: the detached-console half of the same class is fixed in the [detached console note](2026-09-10-windows-detached-console-exec.md).
 - The agent is the only place that spawns forwarded commands, so a single change covers every shell and fs-driven exec path.
