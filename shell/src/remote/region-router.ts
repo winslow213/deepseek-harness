@@ -261,6 +261,19 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
     return super.readBytes(target, signal, maxBytes)
   }
 
+  override async readByteRange(target: FsTarget, range: { offset: number; length: number }, signal?: AbortSignal): Promise<Uint8Array> {
+    const t = this.shadowTarget(target)
+    if (t !== undefined) {
+      const value = await this.fsRemote(t, { op: 'readByteRange', path: t.remotePath, offset: range.offset, length: range.length })
+      if (typeof value !== 'object' || value === null || typeof (value as { base64?: unknown }).base64 !== 'string') {
+        throw new Error('remote readByteRange returned no bytes')
+      }
+      return Buffer.from((value as { base64: string }).base64, 'base64')
+    }
+    await this.assertLocalReadable(target)
+    return super.readByteRange(target, range, signal)
+  }
+
   override async listDir(target: FsTarget, signal?: AbortSignal): Promise<FsDirEntry[]> {
     const t = this.shadowTarget(target)
     if (t !== undefined) {
@@ -338,9 +351,11 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
 
   /** Issue one fs primitive to the translation's owning agent. */
   private async fsRemote(t: ShadowTranslation, spec: {
-    op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit'
+    op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'readByteRange' | 'write' | 'edit'
     path?: string
     maxBytes?: number
+    offset?: number
+    length?: number
     content?: string
     expected?: { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string }
     oldString?: string

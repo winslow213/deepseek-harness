@@ -79,10 +79,13 @@ export interface FsReadRequest {
 export interface FsOpRequest {
   type: 'fs:op'
   id: string
-  op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit'
+  op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'readByteRange' | 'write' | 'edit'
   /** Absolute path; must resolve under an agent `--root`. */
   path?: string
   maxBytes?: number
+  /** Byte-window parameters (op = `readByteRange`). */
+  offset?: number
+  length?: number
   content?: string
   /** Write intent: `createIfAbsent` or `replaceIfVersion`. */
   expected?: { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string }

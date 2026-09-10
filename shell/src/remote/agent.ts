@@ -31,6 +31,7 @@ import {
   listRemote,
   probe,
   probeNoFollow,
+  readByteRange,
   readBytes,
   readText,
   writeRemote,
@@ -394,6 +395,17 @@ async function runFsOp(session: Session, req: FsOpRequest): Promise<void> {
         const key = await resolveUnderRoot(req.path, session.realRoots)
         const maxBytes = req.maxBytes ?? 4 * 1024 * 1024
         const { bytes } = await readBytes(key, maxBytes)
+        succeed({ base64: Buffer.from(bytes).toString('base64') })
+        return
+      }
+      case 'readByteRange': {
+        if (req.path === undefined) { fail('readByteRange: path is required'); return }
+        if (typeof req.offset !== 'number' || typeof req.length !== 'number') {
+          fail('readByteRange: offset and length are required')
+          return
+        }
+        const key = await resolveUnderRoot(req.path, session.realRoots)
+        const { bytes } = await readByteRange(key, req.offset, req.length)
         succeed({ base64: Buffer.from(bytes).toString('base64') })
         return
       }

@@ -538,8 +538,9 @@ export function createHub(options: HubOptions): TeamHub {
       const s = body as {
         op?: unknown; path?: unknown; maxBytes?: unknown; content?: unknown
         expected?: unknown; oldString?: unknown; newString?: unknown; replaceAll?: unknown
+        offset?: unknown; length?: unknown
       }
-      const fsOps = ['resolve', 'stat', 'lstat', 'list', 'readText', 'readBytes', 'write', 'edit']
+      const fsOps = ['resolve', 'stat', 'lstat', 'list', 'readText', 'readBytes', 'readByteRange', 'write', 'edit']
       if (typeof s.op !== 'string' || !fsOps.includes(s.op)) {
         res.writeHead(400, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: `expected op in ${fsOps.join('|')}` }))
@@ -548,9 +549,11 @@ export function createHub(options: HubOptions): TeamHub {
       frame = {
         type: 'fs:op',
         id,
-        op: s.op as 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit' | 'resolve',
+        op: s.op as 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'readByteRange' | 'write' | 'edit' | 'resolve',
         ...(typeof s.path === 'string' ? { path: s.path } : {}),
         ...(typeof s.maxBytes === 'number' ? { maxBytes: s.maxBytes } : {}),
+        ...(typeof s.offset === 'number' ? { offset: s.offset } : {}),
+        ...(typeof s.length === 'number' ? { length: s.length } : {}),
         ...(typeof s.content === 'string' ? { content: s.content } : {}),
         ...(typeof s.expected === 'object' && s.expected !== null ? { expected: s.expected as { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string } } : {}),
         ...(typeof s.oldString === 'string' ? { oldString: s.oldString } : {}),

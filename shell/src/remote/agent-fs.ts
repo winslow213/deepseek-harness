@@ -470,3 +470,23 @@ export async function readBytes(absolutePath: string, maxBytes: number): Promise
   }
   return { bytes: Buffer.concat(chunks, total) }
 }
+
+/**
+ * Read the bytes at `[offset, offset + length)` of a regular file with no
+ * decoding or binary rejection. The window is the bound: the stream opens at
+ * `offset` and closes after `length` bytes, so no more than the window is ever
+ * buffered whatever the file's size; a window at or past the end is empty.
+ */
+export async function readByteRange(absolutePath: string, offset: number, length: number): Promise<{ bytes: Uint8Array }> {
+  const info = await stat(absolutePath)
+  if (!info.isFile()) fsError('FS_NOT_REGULAR_FILE', `cannot read "${absolutePath}": not a regular file`)
+  if (length === 0) return { bytes: new Uint8Array(0) }
+  const chunks: Buffer[] = []
+  let total = 0
+  const stream = createReadStream(absolutePath, { start: offset, end: offset + length - 1 })
+  for await (const chunk of stream) {
+    total += chunk.length
+    chunks.push(chunk)
+  }
+  return { bytes: Buffer.concat(chunks, total) }
+}

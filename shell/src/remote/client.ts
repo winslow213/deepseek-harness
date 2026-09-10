@@ -137,9 +137,11 @@ export async function createPairing(hubBase: string, user: string, secret: strin
 
 /** A single-value request to the hub fs-primitive API (`/api/fs`). */
 export interface FsOpSpec {
-  op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'write' | 'edit'
+  op: 'resolve' | 'stat' | 'lstat' | 'list' | 'readText' | 'readBytes' | 'readByteRange' | 'write' | 'edit'
   path?: string
   maxBytes?: number
+  offset?: number
+  length?: number
   content?: string
   expected?: { kind: 'createIfAbsent' } | { kind: 'replaceIfVersion'; version: string }
   oldString?: string
