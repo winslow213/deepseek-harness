@@ -43,7 +43,9 @@ export type {} from '@deepseek-ai/dsh-tool-a2ui-store/remote'
 export type {
   A2uiLiveReadRequest, A2uiLiveReadValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
+  A2uiStoreImportRequest, A2uiStoreImportValue,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
+  A2uiStoreShareRequest, A2uiStoreShareValue,
 } from '@deepseek-ai/dsh-tool-a2ui-store/types'
 export type {} from '@deepseek-ai/dsh-tool-a2ui-data/remote'
 export type {

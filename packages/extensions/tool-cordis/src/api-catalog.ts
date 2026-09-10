@@ -238,6 +238,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'name', description: 'the stable tool name of the saved file.' }],
         returns: 'false when the named tool is absent, true when removed.',
       },
+      {
+        signature: 'share(name: string): Promise<string>',
+        description: 'Encode one saved tool into a shareable token.',
+        parameters: [{ name: 'name', description: 'the stable tool name to share.' }],
+        returns: 'the self-contained share token.',
+        throws: ['when no saved tool exists under that name.'],
+      },
+      {
+        signature: 'import(token: string): Promise<A2uiToolRecord>',
+        description: 'Import a shared tool from its token, re-canonicalizing and persisting it.',
+        parameters: [{ name: 'token', description: 'the share token another user produced.' }],
+        returns: 'the imported record.',
+        throws: ['when the token is malformed or carries an invalid page.'],
+      },
     ],
   },
   {
@@ -262,6 +276,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Delete one saved tool.',
         parameters: [{ name: 'request', description: 'the tool name.' }],
         returns: 'whether a tool was deleted.',
+      },
+      {
+        signature: '@Remote(\'share\') async share(request: A2uiStoreShareRequest): Promise<A2uiStoreShareValue>',
+        description: 'Encode one saved tool into a shareable token.',
+        parameters: [{ name: 'request', description: 'the tool name.' }],
+        returns: 'the self-contained share token.',
+      },
+      {
+        signature: '@Remote(\'import\') async import(request: A2uiStoreImportRequest): Promise<A2uiStoreImportValue>',
+        description: 'Import a shared tool from its token, re-canonicalizing and persisting it.',
+        parameters: [{ name: 'request', description: 'the share token.' }],
+        returns: 'the imported tool name.',
       },
     ],
   },
@@ -3861,6 +3887,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface A2uiStoreDeleteValue {\n    readonly removed: boolean;\n}',
   },
   {
+    name: 'A2uiStoreImportRequest',
+    declaration: 'export interface A2uiStoreImportRequest {\n    readonly token: string;\n}',
+  },
+  {
+    name: 'A2uiStoreImportValue',
+    declaration: 'export interface A2uiStoreImportValue {\n    readonly name: string;\n    readonly imported: boolean;\n}',
+  },
+  {
     name: 'A2uiStoreListValue',
     declaration: 'export interface A2uiStoreListValue {\n    readonly tools: readonly A2uiToolWire[];\n}',
   },
@@ -3871,6 +3905,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'A2uiStoreOpenValue',
     declaration: 'export interface A2uiStoreOpenValue {\n    readonly surfaceId: string;\n    readonly name: string;\n}',
+  },
+  {
+    name: 'A2uiStoreShareRequest',
+    declaration: 'export interface A2uiStoreShareRequest {\n    readonly name: string;\n}',
+  },
+  {
+    name: 'A2uiStoreShareValue',
+    declaration: 'export interface A2uiStoreShareValue {\n    readonly name: string;\n    readonly token: string;\n}',
   },
   {
     name: 'A2uiToolRecord',

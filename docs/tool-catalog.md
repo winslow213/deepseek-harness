@@ -16,7 +16,7 @@ This table connects model-visible tool names to the plugin package and service s
 | Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-tool-a2ui-surface` | `a2ui_surface` | `ctx.tools`, `a calling Agent (exec.agent writes the a2ui/surface record to its session)` | `tool/call`, `a2ui/surface (durable session record)`, `tool/result` | - | a2ui_surface renders a model-authored page JSON natively in the web UI and records it in the durable log; the user submission arrives back as an ordinary user/message carrying the surfaceId. `allowUpdate` is required with no default — the catalog states the shipped choice (`false`, open-only); a deployment that lets the model replace a surface sets `true`. |
-| `@deepseek-ai/dsh-tool-a2ui-store` | `a2ui_attach_output`, `a2ui_export` | `ctx.tools`, `ctx.a2uiStore (self-provided)` | `tool/call`, `tool/result`, `a JSON tool file under the harness home` | - | a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts. |
+| `@deepseek-ai/dsh-tool-a2ui-store` | `a2ui_attach_output`, `a2ui_export`, `a2ui_import`, `a2ui_share` | `ctx.tools`, `ctx.a2uiStore (self-provided)` | `tool/call`, `tool/result`, `a JSON tool file under the harness home` | - | a2ui_export saves a model-authored A2UI page (the same shape a2ui_surface renders, including field logic and actions) as one JSON file per tool under <harness home>/a2ui-tools/, canonicalizing it with the shared A2UI vocabulary so the saved file equals what the renderer trusts. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: ptc` / `mode: both` (see the PTC mode Agent Note). Under `ptc` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
@@ -448,6 +448,48 @@ Save an A2UI page you authored as a reusable tool file under the local tool stor
   "required": [
     "name",
     "page"
+  ]
+}
+```
+
+Source: [`packages/web/tool-a2ui-store/src/index.ts`](../packages/web/tool-a2ui-store/src/index.ts)
+
+### `a2ui_import`
+
+Import an A2UI tool someone shared with you from its share token. The token is self-contained and re-validated before saving; a same-named tool is replaced. Returns the imported tool name.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "The share token produced by `a2ui_share` (the full `a2ui-share:` string)."
+    }
+  },
+  "required": [
+    "token"
+  ]
+}
+```
+
+Source: [`packages/web/tool-a2ui-store/src/index.ts`](../packages/web/tool-a2ui-store/src/index.ts)
+
+### `a2ui_share`
+
+Produce a shareable token for a saved A2UI tool so another user can import the same page into their own tool store. The token is self-contained (it carries the whole page), so it can be pasted into any chat or message; the recipient imports it with `a2ui_import` or the sidebar import control.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The saved tool name to share (as it appears in the sidebar list)."
+    }
+  },
+  "required": [
+    "name"
   ]
 }
 ```

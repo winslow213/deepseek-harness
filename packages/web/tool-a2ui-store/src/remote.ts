@@ -18,7 +18,9 @@ import type {
   A2uiRunStartRequest, A2uiRunStartValue,
   A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
+  A2uiStoreImportRequest, A2uiStoreImportValue,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue,
+  A2uiStoreShareRequest, A2uiStoreShareValue,
 } from './types.ts'
 import type { A2uiRunSession } from './run.ts'
 
@@ -29,7 +31,9 @@ export type {
   A2uiRunStartRequest, A2uiRunStartValue,
   A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
+  A2uiStoreImportRequest, A2uiStoreImportValue,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue,
+  A2uiStoreShareRequest, A2uiStoreShareValue,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -49,6 +53,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'a2ui-store/agent-offline': { readonly sessionId: string }
     /** No saved tool exists under that name. */
     'a2ui-store/not-found': { readonly name: string }
+    /** A share token was malformed or carried an invalid page. */
+    'a2ui-store/invalid-token': { readonly message: string }
     /** No shell executor is mounted, so a `command` action cannot run. */
     'a2ui-run/shell-unavailable': Record<string, never>
     /** The command template or its run bound is invalid. */
@@ -120,6 +126,42 @@ export class A2uiStoreController extends TypertRemoteService {
   async delete(request: A2uiStoreDeleteRequest): Promise<A2uiStoreDeleteValue> {
     const removed = await this.ctx.a2uiStore.remove(request.name)
     return { removed }
+  }
+
+  /**
+   * Encode one saved tool into a shareable token.
+   * @param request - the tool name.
+   * @returns the self-contained share token.
+   */
+  @Remote('share')
+  async share(request: A2uiStoreShareRequest): Promise<A2uiStoreShareValue> {
+    try {
+      const token = await this.ctx.a2uiStore.share(request.name)
+      return { name: request.name, token }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('a2ui share: no saved tool')) {
+        throw new RemoteError('a2ui-store/not-found', error.message, { name: request.name })
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Import a shared tool from its token, re-canonicalizing and persisting it.
+   * @param request - the share token.
+   * @returns the imported tool name.
+   */
+  @Remote('import')
+  async import(request: A2uiStoreImportRequest): Promise<A2uiStoreImportValue> {
+    try {
+      const record = await this.ctx.a2uiStore.import(request.token)
+      return { name: record.name, imported: true }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('invalid a2ui share token')) {
+        throw new RemoteError('a2ui-store/invalid-token', error.message, { message: error.message })
+      }
+      throw error
+    }
   }
 }
 

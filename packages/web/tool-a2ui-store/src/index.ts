@@ -17,6 +17,7 @@ import { canonicalizeA2uiPage, type A2uiPageInput } from '@deepseek-ai/dsh-tool-
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ensureA2uiToolsDir, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
 import type { A2uiToolRecord } from './store.ts'
+import { decodeA2uiShareToken, encodeA2uiShareToken } from './share.ts'
 import { A2uiStoreController, A2uiRunController, A2uiLiveController } from './remote.ts'
 import { ShellA2uiRun, type A2uiRun } from './run.ts'
 import { CodeA2uiRunScript, type A2uiRunScript } from './script.ts'
@@ -24,6 +25,7 @@ import { ShellA2uiLive, type A2uiLive } from './live.ts'
 
 export type { A2uiToolRecord } from './store.ts'
 export { A2UI_TOOLS_DIR, isSafeA2uiToolName, listA2uiTools, removeA2uiTool, resolveA2uiToolsDir, saveA2uiTool } from './store.ts'
+export { encodeA2uiShareToken, decodeA2uiShareToken, A2UI_SHARE_PREFIX, type A2uiShareEnvelope } from './share.ts'
 export type { A2uiRun, A2uiRunHandle, A2uiRunSession, A2uiRunStart } from './run.ts'
 export { fillA2uiCommand } from './run.ts'
 export type { A2uiLive } from './live.ts'
@@ -34,6 +36,8 @@ export type {
   A2uiRunStartRequest, A2uiRunStartValue,
   A2uiRunStopRequest, A2uiRunStopValue,
   A2uiStoreDeleteRequest, A2uiStoreDeleteValue,
+  A2uiStoreImportRequest, A2uiStoreImportValue,
+  A2uiStoreShareRequest, A2uiStoreShareValue,
   A2uiLiveReadRequest, A2uiLiveReadValue,
   A2uiRunFieldValues,
   A2uiStoreListValue, A2uiStoreOpenRequest, A2uiStoreOpenValue, A2uiToolWire,
@@ -80,6 +84,20 @@ export interface A2uiStore {
    * @returns false when the named tool is absent, true when removed.
    */
   remove(name: string): Promise<boolean>
+  /**
+   * Encode one saved tool into a shareable token.
+   * @param name - the stable tool name to share.
+   * @returns the self-contained share token.
+   * @throws when no saved tool exists under that name.
+   */
+  share(name: string): Promise<string>
+  /**
+   * Import a shared tool from its token, re-canonicalizing and persisting it.
+   * @param token - the share token another user produced.
+   * @returns the imported record.
+   * @throws when the token is malformed or carries an invalid page.
+   */
+  import(token: string): Promise<A2uiToolRecord>
 }
 
 /** A filesystem-backed {@link A2uiStore} over a resolved directory. */
@@ -96,6 +114,19 @@ class FileA2uiStore implements A2uiStore {
 
   remove(name: string): Promise<boolean> {
     return removeA2uiTool(this.dir, name)
+  }
+
+  async share(name: string): Promise<string> {
+    const tool = (await listA2uiTools(this.dir)).find(record => record.name === name)
+    if (tool === undefined) {
+      throw new Error(`a2ui share: no saved tool named ${JSON.stringify(name)}`)
+    }
+    return encodeA2uiShareToken(tool.name, tool.page)
+  }
+
+  import(token: string): Promise<A2uiToolRecord> {
+    const { name, page } = decodeA2uiShareToken(token)
+    return saveA2uiTool(this.dir, name, page)
   }
 }
 
@@ -181,6 +212,73 @@ export function apply(ctx: Context, config: Config): void {
       return { name: record.name, saved: true }
     },
     presentCall: args => ({ card: 'generic', title: 'Export A2UI tool', kind: 'other', rawInput: { name: args.name } }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'a2ui_share',
+    description: 'Produce a shareable token for a saved A2UI tool so another user can '
+      + 'import the same page into their own tool store. The token is self-contained '
+      + '(it carries the whole page), so it can be pasted into any chat or message; the '
+      + 'recipient imports it with `a2ui_import` or the sidebar import control.',
+    parameters: {
+      name: {
+        type: 'string',
+        required: true,
+        description: 'The saved tool name to share (as it appears in the sidebar list).',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true },
+          token: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Share token for A2UI tool "${value.name}": ${value.token}`,
+      }],
+    },
+    async execute(args) {
+      const token = await ctx.a2uiStore.share(args.name)
+      return { name: args.name, token }
+    },
+    presentCall: args => ({ card: 'generic', title: `Share A2UI tool ${args.name}`, kind: 'other', rawInput: { name: args.name } }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'a2ui_import',
+    description: 'Import an A2UI tool someone shared with you from its share token. '
+      + 'The token is self-contained and re-validated before saving; a same-named tool '
+      + 'is replaced. Returns the imported tool name.',
+    parameters: {
+      token: {
+        type: 'string',
+        required: true,
+        description: 'The share token produced by `a2ui_share` (the full `a2ui-share:` string).',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true },
+          imported: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Imported A2UI tool "${value.name}" from a share token.`,
+      }],
+    },
+    async execute(args) {
+      const record = await ctx.a2uiStore.import(args.token)
+      return { name: record.name, imported: true }
+    },
+    presentCall: () => ({ card: 'generic', title: 'Import A2UI tool', kind: 'other', rawInput: { token: '<share token>' } }),
   }))
 
   ctx.tools.register(defineTool({

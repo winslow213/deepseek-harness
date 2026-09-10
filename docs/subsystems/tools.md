@@ -680,6 +680,22 @@ save(name: string, page: A2uiPage): Promise<A2uiToolRecord>
  * @returns false when the named tool is absent, true when removed.
  */
 remove(name: string): Promise<boolean>
+
+/**
+ * Encode one saved tool into a shareable token.
+ * @param name - the stable tool name to share.
+ * @returns the self-contained share token.
+ * @throws when no saved tool exists under that name.
+ */
+share(name: string): Promise<string>
+
+/**
+ * Import a shared tool from its token, re-canonicalizing and persisting it.
+ * @param token - the share token another user produced.
+ * @returns the imported record.
+ * @throws when the token is malformed or carries an invalid page.
+ */
+import(token: string): Promise<A2uiToolRecord>
 ```
 
 Source: [`packages/web/tool-a2ui-store/src/index.ts`](../../packages/web/tool-a2ui-store/src/index.ts)
@@ -712,6 +728,20 @@ Host service backing `ctx.remote.a2uiStore`: list saved tools, re-render one int
  * @returns whether a tool was deleted.
  */
 @Remote('delete') async delete(request: A2uiStoreDeleteRequest): Promise<A2uiStoreDeleteValue>
+
+/**
+ * Encode one saved tool into a shareable token.
+ * @param request - the tool name.
+ * @returns the self-contained share token.
+ */
+@Remote('share') async share(request: A2uiStoreShareRequest): Promise<A2uiStoreShareValue>
+
+/**
+ * Import a shared tool from its token, re-canonicalizing and persisting it.
+ * @param request - the share token.
+ * @returns the imported tool name.
+ */
+@Remote('import') async import(request: A2uiStoreImportRequest): Promise<A2uiStoreImportValue>
 ```
 
 Source: [`packages/web/tool-a2ui-store/src/remote.ts`](../../packages/web/tool-a2ui-store/src/remote.ts)

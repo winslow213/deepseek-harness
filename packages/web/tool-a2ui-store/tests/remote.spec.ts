@@ -83,6 +83,54 @@ describe('A2uiStoreController', () => {
     remove.mockResolvedValueOnce(false)
     await expect(controller.delete({ name: 'a' })).resolves.toEqual({ removed: false })
   })
+
+  it('shares a saved tool as a token', async () => {
+    const ctx = freshContext(undefined)
+    const share = vi.fn(async () => 'a2ui-share:abc')
+    ctx.provide('a2uiStore', { dir: '/tmp', share } as unknown as A2uiStore)
+    const controller = new A2uiStoreController(ctx)
+    await expect(controller.share({ name: 'a' })).resolves.toEqual({ name: 'a', token: 'a2ui-share:abc' })
+    expect(share).toHaveBeenCalledWith('a')
+  })
+
+  it('refuses to share a tool that is not saved', async () => {
+    const ctx = freshContext(undefined)
+    ctx.provide('a2uiStore', {
+      dir: '/tmp',
+      share: vi.fn(async () => { throw new Error('a2ui share: no saved tool named "missing"') }),
+    } as unknown as A2uiStore)
+    const controller = new A2uiStoreController(ctx)
+    await expect(controller.share({ name: 'missing' })).rejects.toMatchObject({ code: 'a2ui-store/not-found' })
+  })
+
+  it('imports a shared tool from its token', async () => {
+    const ctx = freshContext(undefined)
+    const import_ = vi.fn(async () => ({ name: 'b', page: PAGE, savedAt: '' }))
+    ctx.provide('a2uiStore', { dir: '/tmp', import: import_ } as unknown as A2uiStore)
+    const controller = new A2uiStoreController(ctx)
+    await expect(controller.import({ token: 'a2ui-share:abc' })).resolves.toEqual({ name: 'b', imported: true })
+    expect(import_).toHaveBeenCalledWith('a2ui-share:abc')
+  })
+
+  it('refuses to import an invalid token', async () => {
+    const ctx = freshContext(undefined)
+    ctx.provide('a2uiStore', {
+      dir: '/tmp',
+      import: vi.fn(async () => { throw new Error('invalid a2ui share token: missing prefix') }),
+    } as unknown as A2uiStore)
+    const controller = new A2uiStoreController(ctx)
+    await expect(controller.import({ token: 'garbage' })).rejects.toMatchObject({ code: 'a2ui-store/invalid-token' })
+  })
+
+  it('re-throws a non-store error from share and import', async () => {
+    const shareCtx = freshContext(undefined)
+    shareCtx.provide('a2uiStore', { dir: '/tmp', share: vi.fn(async () => { throw new Error('boom') }) } as unknown as A2uiStore)
+    await expect(new A2uiStoreController(shareCtx).share({ name: 'a' })).rejects.toThrow('boom')
+
+    const importCtx = freshContext(undefined)
+    importCtx.provide('a2uiStore', { dir: '/tmp', import: vi.fn(async () => { throw new Error('boom') }) } as unknown as A2uiStore)
+    await expect(new A2uiStoreController(importCtx).import({ token: 'a2ui-share:abc' })).rejects.toThrow('boom')
+  })
 })
 
 describe('A2uiRunController', () => {

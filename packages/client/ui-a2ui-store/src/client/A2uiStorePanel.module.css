@@ -119,3 +119,51 @@
 .remove:hover {
   color: var(--dsw-alias-state-error-primary);
 }
+
+.share {
+  display: flex;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.share:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.importRow {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.importInput {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.importAction {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.importAction:hover {
+  background: var(--dsw-specific-input-minor);
+}

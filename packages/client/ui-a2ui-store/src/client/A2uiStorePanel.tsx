@@ -1,9 +1,9 @@
-/** The saved-A2UI-tools sidebar panel: list, open, and remove saved tool pages. */
+/** The saved-A2UI-tools sidebar panel: list, open, remove, share, and import saved tool pages. */
 
 import { useRef, useState } from 'react'
 import {
-  IconChevronRightOutline14, IconTrashOutline16, IconCloseOutline16, Tooltip,
-  useDismissOnOutsidePointer,
+  IconChevronRightOutline14, IconTrashOutline16, IconCloseOutline16, IconDownloadOutline16, IconShareOutline16,
+  Tooltip, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { A2uiToolWire, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,6 +17,8 @@ export interface A2uiStorePanelFace {
   listTools: () => Promise<{ tools: readonly A2uiToolWire[] }>
   openTool: (sessionId: SessionId, name: string) => Promise<{ surfaceId: string }>
   removeTool: (name: string) => Promise<{ removed: boolean }>
+  shareTool: (name: string) => Promise<{ token: string }>
+  importTool: (token: string) => Promise<{ name: string }>
 }
 
 /** Full panel props composed by the sidebar footer-action slot. */
@@ -26,10 +28,15 @@ export type A2uiStorePanelProps =
 type PanelPhase = 'closed' | 'loading' | 'ready' | 'error'
 
 /** Render the saved-tools panel entry and its popover list. */
-export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, removeTool }: A2uiStorePanelProps) {
+export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, removeTool, shareTool, importTool }: A2uiStorePanelProps) {
   const [phase, setPhase] = useState<PanelPhase>('closed')
   const [tools, setTools] = useState<readonly A2uiToolWire[]>([])
   const [openError, setOpenError] = useState(false)
+  const [shareError, setShareError] = useState(false)
+  const [sharedName, setSharedName] = useState<string | null>(null)
+  const [importValue, setImportValue] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState(false)
   const current = useSessions(state => state.current)
   const rootRef = useRef<HTMLDivElement | null>(null)
   useDismissOnOutsidePointer(rootRef, phase !== 'closed', () => { setPhase('closed') })
@@ -71,6 +78,38 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
     }
   }
 
+  const share = async (name: string): Promise<void> => {
+    setShareError(false)
+    setSharedName(null)
+    try {
+      const { token } = await shareTool(name)
+      if (typeof navigator !== 'undefined' && navigator.clipboard !== undefined) {
+        await navigator.clipboard.writeText(token)
+      }
+      setSharedName(name)
+    } catch {
+      setShareError(true)
+    }
+  }
+
+  const importShared = async (): Promise<void> => {
+    const token = importValue.trim()
+    if (token.length === 0 || importing) return
+    setImporting(true)
+    setImportError(false)
+    try {
+      await importTool(token)
+      setImportValue('')
+      setImporting(false)
+      const result = await listTools()
+      setTools(result.tools)
+      setPhase('ready')
+    } catch {
+      setImporting(false)
+      setImportError(true)
+    }
+  }
+
   return (
     <div className={css.root} ref={rootRef}>
       <Tooltip label={t('entry.hint')} delayMs={500} disabled={wide}>
@@ -80,6 +119,8 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
           aria-label={t('entry.title')}
           onClick={() => {
             setOpenError(false)
+            setImportError(false)
+            setShareError(false)
             if (phase === 'closed') void load()
             else setPhase('closed')
           }}
@@ -98,9 +139,25 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
             </button>
           </div>
 
-          {phase === 'loading' && <p className={css.hint}>{t('panel.loadError')}</p>}
+          <div className={css.importRow}>
+            <input
+              className={css.importInput}
+              placeholder={t('panel.importPlaceholder')}
+              value={importValue}
+              onChange={(event) => { setImportValue(event.target.value) }}
+              disabled={importing}
+            />
+            <button type="button" className={css.importAction} aria-label={t('panel.import')} disabled={importing} onClick={() => { void importShared() }}>
+              <IconDownloadOutline16 />
+            </button>
+          </div>
+
+          {phase === 'loading' && <p className={css.hint}>{t('panel.loading')}</p>}
           {phase === 'error' && <p className={css.hint}>{t('panel.loadError')}</p>}
           {openError && <p className={css.hint}>{current === undefined ? t('panel.needSession') : t('panel.openError')}</p>}
+          {importError && <p className={css.hint}>{t('panel.importError')}</p>}
+          {shareError && <p className={css.hint}>{t('panel.shareError')}</p>}
+          {sharedName !== null && <p className={css.hint}>{t('panel.shared', { name: sharedName })}</p>}
           {phase === 'ready' && tools.length === 0 && <p className={css.hint}>{t('panel.empty')}</p>}
 
           <ul className={css.list}>
@@ -108,6 +165,9 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
               <li className={css.row} key={tool.name}>
                 <button type="button" className={css.open} onClick={() => { void open(tool.name) }}>
                   {tool.page.title}
+                </button>
+                <button type="button" className={css.share} aria-label={t('row.share')} onClick={() => { void share(tool.name) }}>
+                  <IconShareOutline16 />
                 </button>
                 <button type="button" className={css.remove} aria-label={t('row.remove')} onClick={() => { void remove(tool.name) }}>
                   <IconTrashOutline16 />

@@ -49,6 +49,16 @@ export function apply(ctx: ClientContext): void {
         if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
         return { removed: answered.value.removed }
       },
+      shareTool: async (name: string) => {
+        const answered = await ctx.remote.a2uiStore.share({ name })
+        if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+        return { token: answered.value.token }
+      },
+      importTool: async (token: string) => {
+        const answered = await ctx.remote.a2uiStore.import({ token })
+        if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+        return { name: answered.value.name }
+      },
     }),
   }, A2uiStorePanel))
 }

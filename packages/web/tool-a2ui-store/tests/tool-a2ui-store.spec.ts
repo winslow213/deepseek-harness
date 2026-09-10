@@ -157,3 +157,63 @@ describe('a2ui_attach_output tool', () => {
     expect(attach).not.toHaveBeenCalled()
   })
 })
+
+describe('a2ui_share / a2ui_import tools', () => {
+  it('shares a saved tool as a token and imports it back under the same name', async () => {
+    const ctx = await setup()
+    await ctx.a2uiStore.save('share-me', page)
+
+    const share = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('call-1'),
+      name: 'a2ui_share',
+      arguments: { name: 'share-me' },
+    })
+    expect(share.isError).toBe(false)
+    if (share.isError) throw new Error('expected a2ui_share success')
+    expect(share.value).toMatchObject({ name: 'share-me' })
+    const token = (share.value as { token: string }).token
+    expect(token.startsWith('a2ui-share:')).toBe(true)
+
+    await removeA2uiTool(dir, 'share-me')
+    const imp = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('call-2'),
+      name: 'a2ui_import',
+      arguments: { token },
+    })
+    expect(imp.isError).toBe(false)
+    if (imp.isError) throw new Error('expected a2ui_import success')
+    expect(imp.value).toEqual({ name: 'share-me', imported: true })
+    expect((await listA2uiTools(dir)).map(r => r.name)).toContain('share-me')
+    await removeA2uiTool(dir, 'share-me')
+  })
+
+  it('rejects sharing an unknown tool and importing an invalid token', async () => {
+    const ctx = await setup()
+
+    const share = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('call-1'),
+      name: 'a2ui_share',
+      arguments: { name: 'missing' },
+    })
+    expect(share.isError).toBe(true)
+
+    const imp = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('call-2'),
+      name: 'a2ui_import',
+      arguments: { token: 'a2ui-share:garbage' },
+    })
+    expect(imp.isError).toBe(true)
+  })
+
+  it('presents the share and import calls', async () => {
+    const ctx = await setup()
+    expect(ctx.tools.get('a2ui_share')?.presentCall?.({ name: 'x' }))
+      .toEqual({ card: 'generic', title: 'Share A2UI tool x', kind: 'other', rawInput: { name: 'x' } })
+    expect(ctx.tools.get('a2ui_import')?.presentCall?.({ token: 't' }))
+      .toEqual({ card: 'generic', title: 'Import A2UI tool', kind: 'other', rawInput: { token: '<share token>' } })
+  })
+})

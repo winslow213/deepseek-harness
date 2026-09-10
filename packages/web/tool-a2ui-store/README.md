@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-With `dsh-tool-a2ui-store`, a page the model authored with `a2ui_surface` can be saved as a standalone file and shared: the `a2ui_export` tool and the `ctx.a2uiStore` capability persist the canonical page definition — its declarative DSL, field logic (`visibleWhen`/`validateWhen`/`compute`), and `actions` — as one JSON document per tool under `<harness home>/a2ui-tools/`. Each write is an atomic replace, and a malformed document is skipped on read rather than hiding the rest. The store is the distribution boundary: a saved file can be copied between deployments and re-imported without re-authoring the page.
+With `dsh-tool-a2ui-store`, a page the model authored with `a2ui_surface` can be saved as a standalone file and shared: the `a2ui_export` tool and the `ctx.a2uiStore` capability persist the canonical page definition — its declarative DSL, field logic (`visibleWhen`/`validateWhen`/`compute`), and `actions` — as one JSON document per tool under `<harness home>/a2ui-tools/`. Each write is an atomic replace, and a malformed document is skipped on read rather than hiding the rest. The store is the distribution boundary: a saved file can be copied between deployments and re-imported without re-authoring the page, and a saved tool can be shared across users as a self-contained bearer token (`a2ui_share`/`a2ui_import`, or `share`/`import` on the capability).
 
 The package also owns the two page-correlated execution channels: `ctx.a2uiRun` starts `command` actions on the composed shell service in the session's workspace and records their output as a durable `a2ui/update` stream, and `ctx.a2uiLive` streams a `model`-action background job into the same durable stream (via the `a2ui_attach_output` tool, which the model calls with the job id it just started).
 
@@ -25,7 +25,7 @@ The package also owns the two page-correlated execution channels: `ctx.a2uiRun` 
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this package wherever an agent should persist the pages it authors. It registers the `a2ui_export` tool on the tools registry and provides `ctx.a2uiStore`.
+Mount this package wherever an agent should persist the pages it authors. It registers the `a2ui_export`, `a2ui_share`, and `a2ui_import` tools on the tools registry and provides `ctx.a2uiStore`.
 
 ### Minimal configuration
 
@@ -42,7 +42,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 ### The save loop
 
-The model calls `a2ui_export` with a `name` and the same `page` shape `a2ui_surface` renders. The page is canonicalized (unknown field types and node roles are rejected) and written to `<dir>/<name>.json`; a same-named save replaces the file. `ctx.a2uiStore` exposes the same `list`/`save`/`remove` operations to host consumers, and the saved record carries the page plus an ISO `savedAt` timestamp.
+The model calls `a2ui_export` with a `name` and the same `page` shape `a2ui_surface` renders. The page is canonicalized (unknown field types and node roles are rejected) and written to `<dir>/<name>.json`; a same-named save replaces the file. `ctx.a2uiStore` exposes `list`/`save`/`remove` plus `share`/`import` to host consumers, and the saved record carries the page plus an ISO `savedAt` timestamp. `share(name)` encodes a saved tool as an `a2ui-share:` token; `import(token)` re-canonicalizes the token's page and persists it, replacing any same-named tool.
 
 -----
 
@@ -52,14 +52,15 @@ The model calls `a2ui_export` with a `name` and the same `page` shape `a2ui_surf
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The store is a thin, dependency-light filesystem layer. `store.ts` resolves the directory (explicit override wins, else `$DSH_HOME/a2ui-tools`), writes each tool with `writeFileAtomic` (temp sibling + rename, `0o600` file / `0o700` directory) so a concurrent reader always sees a complete document, and lists by name-sorted `.json` stems. A tool name must be a single safe file stem (no separators, not `.`/`..`, at most 64 chars). `index.ts` provides the capabilities on `ctx` and registers the tools. `run.ts` starts `command` actions over the shell service in the session workspace and appends their output as `a2ui/update` events; `live.ts` streams a `model`-action background job's output into the same event stream through an independent jobs reader. Both reuse `canonicalizeA2uiPage` from `dsh-tool-a2ui-surface` so saved and rendered pages are byte-identical.
+The store is a thin, dependency-light filesystem layer. `store.ts` resolves the directory (explicit override wins, else `$DSH_HOME/a2ui-tools`), writes each tool with `writeFileAtomic` (temp sibling + rename, `0o600` file / `0o700` directory) so a concurrent reader always sees a complete document, and lists by name-sorted `.json` stems. A tool name must be a single safe file stem (no separators, not `.`/`..`, at most 64 chars). `share.ts` encodes a tool as an `a2ui-share:<base64url>` token and decodes one with full re-validation. `index.ts` provides the capabilities on `ctx` and registers the tools. `run.ts` starts `command` actions over the shell service in the session workspace and appends their output as `a2ui/update` events; `live.ts` streams a `model`-action background job's output into the same event stream through an independent jobs reader. Both reuse `canonicalizeA2uiPage` from `dsh-tool-a2ui-surface` so saved and rendered pages are byte-identical.
 
 ### Source map
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: `ctx.a2uiStore`/`ctx.a2uiRun`/`ctx.a2uiLive` capabilities, `a2ui_export` + `a2ui_attach_output` tool registration |
+| [`src/index.ts`](src/index.ts) | Plugin entry: `ctx.a2uiStore`/`ctx.a2uiRun`/`ctx.a2uiLive` capabilities, `a2ui_export`/`a2ui_share`/`a2ui_import` + `a2ui_attach_output` tool registration |
 | [`src/store.ts`](src/store.ts) | Filesystem persistence: resolve/save/list/remove with atomic writes |
+| [`src/share.ts`](src/share.ts) | Self-contained share tokens: encode/decode with canonicalization on import |
 | [`src/run.ts`](src/run.ts) | `command`-action runner: shell quoting, workspace workdir, `a2ui/update` emission |
 | [`src/live.ts`](src/live.ts) | `model`-action live-result streaming over `ctx.jobs` |
 | [`src/types.ts`](src/types.ts) | Client-safe `A2uiToolRecord`, `A2uiUpdateData`, and the name-safety rule |
@@ -75,11 +76,11 @@ The store is a thin, dependency-light filesystem layer. `store.ts` resolves the 
 
 #### What the model sees
 
-The model sees two tools. `a2ui_export` carries its static description and the exact JSON schema recorded in the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-a2ui-store); the description tells it to save the page it authored as a reusable tool file under the local tool store, with a short stable `name` for the saved file and a `page` in the same shape as `a2ui_surface`'s page argument. `a2ui_attach_output` takes a `surfaceId` and a `jobId` and tells it to call it after starting a background job as part of an A2UI action, so the page's live-result pane follows the job's output.
+The model sees four tools. `a2ui_export` carries its static description and the exact JSON schema recorded in the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-a2ui-store); the description tells it to save the page it authored as a reusable tool file under the local tool store, with a short stable `name` for the saved file and a `page` in the same shape as `a2ui_surface`'s page argument. `a2ui_share` takes a saved tool `name` and returns its `a2ui-share:` token; `a2ui_import` takes a `token` and saves the decoded page. `a2ui_attach_output` takes a `surfaceId` and a `jobId` and tells it to call it after starting a background job as part of an A2UI action, so the page's live-result pane follows the job's output.
 
 #### Token effect
 
-Fixed description-and-schema cost on every request where the tool is visible to the agent. The `name` string and the `page` object are lightweight compared with a field-rich page tool, so this definition is cheaper than `a2ui_surface`'s schema; `a2ui_attach_output` adds only two short strings.
+Fixed description-and-schema cost on every request where the tool is visible to the agent. The `name` string and the `page` object are lightweight compared with a field-rich page tool, so this definition is cheaper than `a2ui_surface`'s schema; `a2ui_share`/`a2ui_import`/`a2ui_attach_output` each add only one or two short strings.
 
 #### KV Cache effect
 
@@ -89,7 +90,7 @@ Prefix-stable while the registered definition and its visibility are unchanged; 
 
 #### What the model sees
 
-The tool call keeps the authored page JSON in history. Success renders exactly `Saved A2UI tool "<name>" to the local tool store.`; a call without an owning agent session fails with `a2ui_export requires an owning agent session`; an invalid page fails with the canonicalization error naming the violation.
+The tool call keeps the authored page JSON in history. Success renders exactly `Saved A2UI tool "<name>" to the local tool store.`; a call without an owning agent session fails with `a2ui_export requires an owning agent session`; an invalid page fails with the canonicalization error naming the violation. `a2ui_share` renders the token text, and `a2ui_import` renders `Imported A2UI tool "<name>" from a share token.` or fails with the token validation error.
 
 #### Token effect
 
@@ -104,6 +105,7 @@ Append-only; the call and result follow the reusable request prefix and do not i
 <a id="known-limitations-and-deferred-work"></a>
 
 - **The store is host-side only** — it persists files under the harness home; exposing the list to the browser sidebar and re-rendering a saved tool client-side requires a Remote namespace and a client panel, which are not part of this package.
+- **Share tokens are bearer values** — a token carries the whole page with no revocation or expiry; anyone who holds it can import it, and importing replaces a same-named tool.
 - **No live watch** — the list is read on demand; a file added by another process appears on the next `list()`, not by push.
 - **One document per tool** — a tool is a single JSON file; the store does not version or diff documents.
 

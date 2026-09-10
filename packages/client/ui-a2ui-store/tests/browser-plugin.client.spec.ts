@@ -19,13 +19,15 @@ async function bench() {
   const list = vi.fn(async () => ({ ok: true as const, value: { tools: [] } }))
   const open = vi.fn(async () => ({ ok: true as const, value: { surfaceId: 's', name: 'n' } }))
   const remove = vi.fn(async () => ({ ok: true as const, value: { removed: true } }))
-  new TestRemote(ctx, { a2uiStore: { list, open, delete: remove } })
+  const share = vi.fn(async () => ({ ok: true as const, value: { name: 'n', token: 'a2ui-share:abc' } }))
+  const import_ = vi.fn(async () => ({ ok: true as const, value: { name: 'n', imported: true } }))
+  new TestRemote(ctx, { a2uiStore: { list, open, delete: remove, share, import: import_ } })
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('en')
   ctx.provide('locale', locale)
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
-  return { ctx, fiber, locale, slots: ctx.get('slots') as SlotRegistry, list, open, remove }
+  return { ctx, fiber, locale, slots: ctx.get('slots') as SlotRegistry, list, open, remove, share, import: import_ }
 }
 
 /** The sidebar shell's slot declaration, staged by hand. */
@@ -59,7 +61,7 @@ describe('ui-a2ui-store apply', () => {
   })
 
   it('forwards the inject face to the a2uiStore Remote', async () => {
-    const { slots, list, open, remove } = await bench()
+    const { slots, list, open, remove, share, import: import_ } = await bench()
     declareFooterAction(slots)
     await vi.waitFor(() => { expect(slots.entries('sidebar.footer.action')).toHaveLength(1) })
 
@@ -67,6 +69,8 @@ describe('ui-a2ui-store apply', () => {
       listTools: () => Promise<unknown>
       openTool: (sessionId: string, name: string) => Promise<unknown>
       removeTool: (name: string) => Promise<unknown>
+      shareTool: (name: string) => Promise<unknown>
+      importTool: (token: string) => Promise<unknown>
     }
     await face.listTools()
     expect(list).toHaveBeenCalledOnce()
@@ -76,6 +80,12 @@ describe('ui-a2ui-store apply', () => {
 
     await face.removeTool('hilog-capture')
     expect(remove).toHaveBeenCalledWith({ name: 'hilog-capture' })
+
+    await face.shareTool('hilog-capture')
+    expect(share).toHaveBeenCalledWith({ name: 'hilog-capture' })
+
+    await face.importTool('a2ui-share:abc')
+    expect(import_).toHaveBeenCalledWith({ token: 'a2ui-share:abc' })
   })
 
   it('registers its dictionary namespace in both locales', async () => {
@@ -85,6 +95,8 @@ describe('ui-a2ui-store apply', () => {
     locale.setLocale('zh')
     expect(t('panel.title')).toBe('A2UI 工具')
     expect(t('row.remove')).toBe('删除')
+    expect(t('row.share')).toBe('分享')
+    expect(t('panel.import')).toBe('导入')
   })
 
   it('disposal removes the panel (HMR safety)', async () => {

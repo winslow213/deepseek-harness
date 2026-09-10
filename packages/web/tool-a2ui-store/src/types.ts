@@ -79,6 +79,29 @@ export interface A2uiStoreDeleteValue {
   readonly removed: boolean
 }
 
+/** Request to encode one saved tool into a shareable token. */
+export interface A2uiStoreShareRequest {
+  readonly name: string
+}
+
+/** Response carrying the shareable token for one saved tool. */
+export interface A2uiStoreShareValue {
+  readonly name: string
+  /** The self-contained share token another user imports. */
+  readonly token: string
+}
+
+/** Request to import a shared tool from its token. */
+export interface A2uiStoreImportRequest {
+  readonly token: string
+}
+
+/** Response after importing a shared tool. */
+export interface A2uiStoreImportValue {
+  readonly name: string
+  readonly imported: boolean
+}
+
 /** The store directory's default location under the harness home. */
 export const A2UI_TOOLS_DIR = 'a2ui-tools'
 
