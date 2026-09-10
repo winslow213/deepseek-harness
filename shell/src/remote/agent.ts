@@ -266,6 +266,13 @@ async function runExec(session: Session, req: ExecRequest): Promise<void> {
     cwd,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // cmd /c parses everything after /c as one command line, so pipes and
+    // nested quotes must reach cmd verbatim. Node's default argv quoting
+    // escapes inner quotes with backslashes, which cmd does not treat as
+    // escapes; a command like `dir ... | findstr /i "x"` then reaches cmd
+    // with its quotes mangled and findstr falls back to reading stdin until
+    // it hangs. The flag only affects win32, so POSIX bash -c is unchanged.
+    windowsVerbatimArguments: bin === 'cmd' || bin === 'cmd.exe',
   })
   session.active.set(req.id, child)
   const timer = req.timeoutMs === undefined
