@@ -107,4 +107,33 @@ describe('ui-a2ui-store apply', () => {
     await b.fiber.dispose()
     expect(b.slots.entries('sidebar.footer.action')).toHaveLength(0)
   })
+
+  it('maps a Remote failure onto a rejecting face with the code attached', async () => {
+    const { ctx, slots } = await bench()
+    declareFooterAction(slots)
+    await vi.waitFor(() => { expect(slots.entries('sidebar.footer.action')).toHaveLength(1) })
+
+    const refusing = (code: string) => (): Promise<{ ok: false; error: { code: string; message: string } }> =>
+      Promise.resolve({ ok: false, error: { code, message: 'remote refused' } })
+    Object.assign(ctx.remote.a2uiStore, {
+      list: refusing('a2ui-store/boom'),
+      open: refusing('a2ui-store/boom'),
+      delete: refusing('a2ui-store/boom'),
+      share: refusing('a2ui-store/boom'),
+      import: refusing('a2ui-store/boom'),
+    })
+
+    const face = entryById(slots, 'a2ui-store')!.inject!() as {
+      listTools: () => Promise<unknown>
+      openTool: (sessionId: string, name: string) => Promise<unknown>
+      removeTool: (name: string) => Promise<unknown>
+      shareTool: (name: string) => Promise<unknown>
+      importTool: (token: string) => Promise<unknown>
+    }
+    await expect(face.listTools()).rejects.toThrow('a2ui-store/boom: remote refused')
+    await expect(face.openTool('session', 'x')).rejects.toThrow('a2ui-store/boom: remote refused')
+    await expect(face.removeTool('x')).rejects.toThrow('a2ui-store/boom: remote refused')
+    await expect(face.shareTool('x')).rejects.toThrow('a2ui-store/boom: remote refused')
+    await expect(face.importTool('a2ui-share:abc')).rejects.toThrow('a2ui-store/boom: remote refused')
+  })
 })

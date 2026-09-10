@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import {
   IconChevronRightOutline14, IconTrashOutline16, IconCloseOutline16, IconDownloadOutline16, IconShareOutline16,
-  Tooltip, useDismissOnOutsidePointer,
+  Tooltip, useDismissOnOutsidePointer, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { A2uiToolWire, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -83,10 +83,12 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
     setSharedName(null)
     try {
       const { token } = await shareTool(name)
-      if (typeof navigator !== 'undefined' && navigator.clipboard !== undefined) {
-        await navigator.clipboard.writeText(token)
-      }
-      setSharedName(name)
+      // writeClipboard falls back to execCommand('copy') on insecure contexts
+      // (http hosts) where the async Clipboard API is absent, so the token
+      // copies even outside a secure context.
+      const copied = await writeClipboard(token)
+      if (copied) setSharedName(name)
+      else setShareError(true)
     } catch {
       setShareError(true)
     }
