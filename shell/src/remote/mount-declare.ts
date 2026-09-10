@@ -19,6 +19,7 @@ import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 // Type-only: merges `agent` onto AssembleContext so the cwd is reachable.
 import type {} from '@deepseek-ai/dsh-agent'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { listMounts } from './client.ts'
 import type { MountRecord } from './hub.ts'
 import { renderMountedWorkspace } from './mount-declare-render.ts'
@@ -31,8 +32,6 @@ export interface MountDeclareConfig {
   user: string
   /** Root holding every mount's shadow directory (matches hub shadowRoot). */
   shadowRoot: string
-  /** This instance's DSH_HOME (server-side local user space). */
-  home: string
   /** Mount-table refresh interval in milliseconds (default 30_000). */
   intervalMs?: number
 }
@@ -52,8 +51,11 @@ export function apply(ctx: Context, config: MountDeclareConfig): () => void {
   if (config.user === '') throw new Error('mount-declare: user is required')
   const shadowRoot = config.shadowRoot.replace(/\/+$/, '')
   if (shadowRoot === '') throw new Error('mount-declare: shadowRoot is required')
-  const home = config.home.replace(/\/+$/, '')
-  if (home === '') throw new Error('mount-declare: home is required')
+  // The local user space is this instance's DSH_HOME, resolved at runtime from
+  // the environment the account supervisor set — never baked into the patch as
+  // a literal, since `.dsh-users` is a shared root and the user subdirectory
+  // follows the logged-in account.
+  const home = resolveDshHome()
   const intervalMs = config.intervalMs ?? DEFAULT_INTERVAL_MS
 
   let mounts: readonly MountRecord[] = []
