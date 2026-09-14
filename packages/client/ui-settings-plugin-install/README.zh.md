@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端设置中的操作员门控插件安装标签页：把本地插件目录复制进当前配置目录、安装 npm 包、上传目录或为已安装插件注册启动行，带进度、结果事实与重启指引。"
+description: "dsh Web 客户端设置中的操作员门控插件安装/卸载标签页：把本地插件目录复制进当前配置目录、安装 npm 包、上传目录或为已安装插件注册启动行，也可按 id 卸载已安装的插件，带进度、结果事实与重启指引。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-settings-plugin-install` 向 Web 设置的「插件」分区贡献**安装插件**标签页。标签页提供四种安装方式——把本地插件目录复制进 profile、对 npm 包执行 `pnpm add`、上传所选目录、或为已安装的 npm 插件注册启动行——并把所选方式提交给 `ctx.remote.pluginInstall.installPlugin()`。安装运行期间表单被锁定、提交按钮显示进度；成功后标签页报告写入的配置目录以及安装的插件 id 或被提升的 bundle，失败时显示 Remote 错误消息与错误码。改动只在 Web 实例重启后生效，两种状态下标签页都会说明这一点。只有设置操作员开关 `DSH_PLUGIN_INSTALL=true` 时标签页才注册，与宿主侧安装 Remote 一致。
+`dsh-client-ui-settings-plugin-install` 向 Web 设置的「插件」分区贡献**安装插件**标签页。标签页提供四种安装方式——把本地插件目录复制进 profile、对 npm 包执行 `pnpm add`、上传所选目录、或为已安装的 npm 插件注册启动行——并把所选方式提交给 `ctx.remote.pluginInstall.installPlugin()`。安装运行期间表单被锁定、提交按钮显示进度；成功后标签页报告写入的配置目录以及安装的插件 id 或被提升的 bundle，失败时显示 Remote 错误消息与错误码。同一标签页的第二个区域按安装时使用的 id 卸载插件，提交给 `ctx.remote.pluginInstall.uninstallPlugin()` 并报告被移除的配置目录与 id，或 Remote 错误消息与错误码；它只覆盖 `file-dir`、`upload-directory` 与 `npm-register` 三种方式，因为 `npm-bundle` 安装没有逐插件 id。两种改动都只在 Web 实例重启后生效，两种状态下标签页都会说明这一点。只有设置操作员开关 `DSH_PLUGIN_INSTALL=true` 时标签页才注册，与宿主侧安装 Remote 一致。
 
 ## 目录
 
@@ -34,6 +34,10 @@ kind: "package-reference"
 ### 阅读结果
 
 安装成功后报告插件写入的配置目录、目录复制对应的插件 id 或 npm 安装对应的被提升 bundles，随后是重启提示。被拒绝的安装报告 Remote 错误消息及其错误码。
+
+### 卸载插件
+
+**卸载插件**区域只需要安装时使用的插件 id，并将其提交给 `ctx.remote.pluginInstall.uninstallPlugin()`。卸载成功后报告配置目录与被移除的插件 id，随后是重启提示；被拒绝的卸载（例如某 id 没有对应的已安装插件）报告 Remote 错误消息及其错误码。该区域只移除通过 `file-dir`、`upload-directory` 或 `npm-register` 方式安装的插件；`npm-bundle` 包依赖没有逐插件 id，本区域不覆盖它。
 
 -----
 
@@ -86,9 +90,9 @@ kind: "package-reference"
 
 这些限制界定了安装流程的新鲜度与重启耦合；它们是当前包约束。
 
-- **只在重启后生效** — 安装成功报告的是写入已落盘，而不是插件已生效；运行中的 Web 实例只在重启后激活新 bundle。
+- **只在重启后生效** — 安装成功报告的是写入已落盘，而不是插件已生效；运行中的 Web 实例只在重启后激活新 bundle。卸载有同样的重启耦合。
 - **重启后不自动刷新** — 标签页不监视进程也不轮询清单；操作员重启实例后需要手动刷新页面。
-- **仅限自身目标** — 标签页只安装进运行中实例自己的配置目录；选择其他已注册用户的实例是刻意的后续工作。
+- **仅限自身目标** — 标签页只安装进（也只从中卸载）运行中实例自己的配置目录；选择其他已注册用户的实例是刻意的后续工作。
 
 <a id="dev-note"></a>
 ### 开发备注

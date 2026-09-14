@@ -1,5 +1,5 @@
 ---
-description: "面向 Web UI 的运算符门控插件安装 Remote：把外部插件安装到运行中 dsh profile 的 pluginInstall 服务及其 install Remote，含 file-dir 拷贝、npm-bundle 与 npm-register 三种形式。"
+description: "面向 Web UI 的运算符门控插件安装/卸载 Remote：把外部插件安装/卸载进运行中 dsh profile 的 pluginInstall 服务，含 install Remote（file-dir 拷贝、npm-bundle 与 npm-register 三种形式）与针对可 patch 行寻址形式的 uninstallPlugin Remote。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 profile 目录：以 `file-dir` 形式调用 `pluginInstall/installPlugin` 会把源目录拷贝到 profile 的 `plugins/<id>` 下，并在用户 patch 层登记其 patch 行；`npm-bundle` 形式则在 profile 目录运行 `pnpm add`，并把 bundle 提升进 profile 的 `dsh.profile.bundles` 层列表；`npm-register` 形式则为已安装的 Cordis npm 插件补写启动行。该服务受运算符门控：`PluginInstallGateway` 类在 `enabled: true` 之外拒绝挂载，且 web-app 组合在运算符设置 `DSH_PLUGIN_INSTALL=true` 之前禁用整行，因此默认部署从不加载该包。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
+Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 profile 目录：以 `file-dir` 形式调用 `pluginInstall/installPlugin` 会把源目录拷贝到 profile 的 `plugins/<id>` 下，并在用户 patch 层登记其 patch 行；`npm-bundle` 形式则在 profile 目录运行 `pnpm add`，并把 bundle 提升进 profile 的 `dsh.profile.bundles` 层列表；`npm-register` 形式则为已安装的 Cordis npm 插件补写启动行。以三种可 patch 行寻址形式（`file-dir`、`upload-directory` 或 `npm-register`）之一的 id 调用 `pluginInstall/uninstallPlugin`，会移除该插件的 patch 行；对拷贝类安装还会一并删除其 `plugins/<id>` 目录。`npm-bundle` 形式没有逐插件 id，本卸载不覆盖它——运算符需在 profile 目录手动执行 `pnpm remove`。该服务受运算符门控：`PluginInstallGateway` 类在 `enabled: true` 之外拒绝挂载，且 web-app 组合在运算符设置 `DSH_PLUGIN_INSTALL=true` 之前禁用整行，因此默认部署从不加载该包。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
 
 ## 目录
 
@@ -39,9 +39,13 @@ Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 prof
 
 部署提供了显式 `profileDir` 配置覆盖时，它就是目标 profile；否则服务从引导 `include` 条目的 `config.path`——profile 的 `cordis.yml` 文件 URL——自行定位运行实例的 profile，并取其目录。两者都不存在时调用以 `plugin-install/unknown-profile` 失败。
 
+### 卸载插件
+
+以安装时使用的 id 调用 `pluginInstall/uninstallPlugin`。它会移除 `cordis.patch.yml` 中该 id 分隔的 patch 行，若该 id 还带有 `plugins/<id>` 目录（`file-dir` 或 `upload-directory` 安装），也一并删除该目录；`npm-register` 的 id 没有这样的目录需要删除。当没有 patch 行与该 id 匹配时调用以 `plugin-install/not-installed` 失败——无需再检查别的东西，因为对这三种形式而言 patch 行就是唯一的安装记录。`npm-bundle` 安装没有逐插件 id，无法以此方式定位；请改为在 profile 目录运行 `pnpm remove <package>` 来移除它。
+
 ### 失败词汇表
 
-安装失败抛出带稳定码的 `RemoteError`：`plugin-install/unknown-profile`（无法定位 profile）、`plugin-install/invalid-spec`（id 不安全、源路径不可用或 JSON 配置畸形/非对象）、`plugin-install/unresolved-package`（登记的解析符不是已安装依赖）、`plugin-install/pnpm-missing`（PATH 上没有 pnpm）、`plugin-install/pnpm-failed`（`pnpm add` 非零退出）、`plugin-install/write-failed`（拷贝、清单、patch 或调和写入失败）。
+安装失败抛出带稳定码的 `RemoteError`：`plugin-install/unknown-profile`（无法定位 profile）、`plugin-install/invalid-spec`（id 不安全、源路径不可用或 JSON 配置畸形/非对象）、`plugin-install/unresolved-package`（登记的解析符不是已安装依赖）、`plugin-install/pnpm-missing`（PATH 上没有 pnpm）、`plugin-install/pnpm-failed`（`pnpm add` 非零退出）、`plugin-install/write-failed`（拷贝、清单、patch 或调和写入失败）。卸载还会在给定 id 没有 patch 行时另外抛出 `plugin-install/not-installed`。
 
 -----
 
@@ -67,7 +71,7 @@ Patch 行由 `# >>> dsh-plugin-install <id>` 与 `# <<< dsh-plugin-install <id>`
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `PluginInstallGateway`：`pluginInstall` Remote 服务、profile 自行定位、各安装形式与 patch 行写入器 |
+| [`src/index.ts`](src/index.ts) | `PluginInstallGateway`：`pluginInstall` Remote 服务、profile 自行定位、各安装形式、卸载路径与 patch 行读写器 |
 | [`src/types.ts`](src/types.ts) | 公共 payload 类型：`Config`、`PluginInstallSpec`、`PluginInstallResult` 与 `RemoteErrorDetailsMap` 扩展 |
 | — | 不发布运行时不变式伴生入口；安装在 `tests/install.spec.ts` 中针对真实临时 profile 演练。 |
 
@@ -107,6 +111,7 @@ Typert 生成由 `./typert` 与 `./remote` 导出的 Host 和 Client Remote 产�
 - **宿主必须装有 pnpm**——`npm-bundle` 形式调用外部 `pnpm`；未装 pnpm 的宿主以 `plugin-install/pnpm-missing` 失败，安装永不自带包管理器。
 - **file-dir 不远程抓取**——`file-dir` 形式只拷贝本地目录；从 registry 或 URL 抓取插件是 `npm-bundle` 的职责。
 - **不热重载**——安装只改动磁盘上的 profile 与 patch 层；运行中的 Loader 不会重新读取，效果在下一次 profile 加载时生效。
+- **`npm-bundle` 卸载不在范围内**——该形式没有逐插件 id 可供移除定位；`pluginInstall/uninstallPlugin` 只覆盖 `file-dir`、`upload-directory` 与 `npm-register`。
 - **默认部署永不挂载**——除非运算符显式启用该行并设置 `DSH_PLUGIN_INSTALL=true`，命名空间保持关闭；忘记环境开关的部署得到的是没有安装界面，而不是一个静默半开的命名空间。
 
 <a id="dev-note"></a>

@@ -44,6 +44,15 @@ export const zh = {
   errorTitle: '安装失败',
   errorCodeLabel: '错误码',
   required: '必填',
+  uninstallSectionTitle: '卸载插件',
+  uninstallIntro: '按安装时填写的插件 id 移除其启动行；file-dir / upload-directory 安装的 plugins/ 目录副本会一并删除。npm 包依赖（安装 npm 包表单）没有独立 id，不在此支持范围内，需要在配置目录手动执行 pnpm remove。',
+  uninstallIdLabel: '插件 id',
+  uninstallIdPlaceholder: '例如已安装的 my-plugin',
+  uninstallButton: '卸载',
+  uninstalling: '正在卸载…',
+  uninstallSuccessTitle: '卸载完成',
+  uninstallRestartingTitle: '卸载完成，正在重启实例',
+  uninstallErrorTitle: '卸载失败',
 } satisfies Record<string, string>
 
 /** Plugin install locale key union. */
@@ -93,4 +102,13 @@ export const en = {
   errorTitle: 'Install failed',
   errorCodeLabel: 'Code',
   required: 'Required',
+  uninstallSectionTitle: 'Uninstall a plugin',
+  uninstallIntro: 'Removes the startup row for the id given at install time; a file-dir or upload-directory install\'s plugins/ copy is deleted alongside it. An npm-bundle package dependency has no per-plugin id and is not covered here — run pnpm remove in the profile directory instead.',
+  uninstallIdLabel: 'Plugin id',
+  uninstallIdPlaceholder: 'e.g. an already-installed my-plugin',
+  uninstallButton: 'Uninstall',
+  uninstalling: 'Uninstalling…',
+  uninstallSuccessTitle: 'Uninstall complete',
+  uninstallRestartingTitle: 'Uninstall complete — restarting the instance',
+  uninstallErrorTitle: 'Uninstall failed',
 } satisfies Record<PluginInstallLocaleKey, string>

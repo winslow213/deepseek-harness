@@ -38,7 +38,16 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
-  const injected = (): PluginInstallSettingsTabInjected => ({ installPlugin })
+  const uninstallPlugin: PluginInstallSettingsTabInjected['uninstallPlugin'] = async (id) => {
+    const result = await ctx.remote.pluginInstall.uninstallPlugin(id)
+    if (!result.ok) {
+      const error = new Error(result.error.message)
+      ;(error as { code?: string }).code = result.error.code
+      throw error
+    }
+    return result.value
+  }
+  const injected = (): PluginInstallSettingsTabInjected => ({ installPlugin, uninstallPlugin })
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',

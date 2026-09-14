@@ -1,5 +1,5 @@
 ---
-description: "Operator-gated plugin install tab in Web Settings for the dsh web client: copy a local plugin directory or install an npm package into the running profile directory, with progress, outcome facts, and restart guidance."
+description: "Operator-gated plugin install/uninstall tab in Web Settings for the dsh web client: copy a local plugin directory or install an npm package into the running profile directory, uninstall a previously installed one by id, with progress, outcome facts, and restart guidance."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-settings-plugin-install` contributes the **Install plugin** tab to the Web Settings Plugins section. The tab offers four install forms — copying a local plugin directory into the profile, running `pnpm add` on an npm package, uploading a picked directory, or registering an installed npm plugin's startup row — and submits the chosen one to `ctx.remote.pluginInstall.installPlugin()`. While an install runs the form is locked and the submit button shows progress; on success the tab reports the written profile directory plus the installed plugin id or the promoted bundles, and on failure it shows the Remote error message and code. The change takes effect only after the Web instance restarts, which the tab states in both states. The tab registers only when the operator gate `DSH_PLUGIN_INSTALL=true` is set, matching the Host-side install Remote.
+`dsh-client-ui-settings-plugin-install` contributes the **Install plugin** tab to the Web Settings Plugins section. The tab offers four install forms — copying a local plugin directory into the profile, running `pnpm add` on an npm package, uploading a picked directory, or registering an installed npm plugin's startup row — and submits the chosen one to `ctx.remote.pluginInstall.installPlugin()`. While an install runs the form is locked and the submit button shows progress; on success the tab reports the written profile directory plus the installed plugin id or the promoted bundles, and on failure it shows the Remote error message and code. A second section on the same tab uninstalls a plugin by the id used at install time, submitting to `ctx.remote.pluginInstall.uninstallPlugin()` and reporting the removed profile directory and id, or the Remote error message and code; it covers the `file-dir`, `upload-directory`, and `npm-register` forms only, since an `npm-bundle` install has no per-plugin id. Both changes take effect only after the Web instance restarts, which the tab states in both states. The tab registers only when the operator gate `DSH_PLUGIN_INSTALL=true` is set, matching the Host-side install Remote.
 
 ## Table of Contents
 
@@ -34,6 +34,10 @@ The **Copy a local directory** form takes a plugin id and the absolute path of a
 ### Reading the outcome
 
 A successful install reports the profile directory the plugin was written into, the installed plugin id for a directory copy, or the promoted bundles for an npm install, followed by the restart note. A refused install reports the Remote error message and its error code.
+
+### Uninstalling a plugin
+
+The **Uninstall a plugin** section takes only the plugin id used at install time and submits it to `ctx.remote.pluginInstall.uninstallPlugin()`. A successful uninstall reports the profile directory and the removed plugin id, followed by the restart note; a refused uninstall (for example, an id with no installed plugin) reports the Remote error message and its error code. This section only removes plugins installed through the `file-dir`, `upload-directory`, or `npm-register` forms; an `npm-bundle` package dependency has no per-plugin id and is not covered here.
 
 -----
 
@@ -86,9 +90,9 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define the freshness and restart coupling of the install flow; they are current package constraints.
 
-- **Effect after restart only** — a successful install reports that the writes landed, not that the plugin is live; the running Web instance activates new bundles only on restart.
+- **Effect after restart only** — a successful install reports that the writes landed, not that the plugin is live; the running Web instance activates new bundles only on restart. An uninstall carries the same restart coupling.
 - **No auto-refresh after restart** — the tab does not watch the process or poll the inventory; the operator reloads the page after restarting the instance.
-- **Self-first target only** — the tab installs into the running instance's own profile directory; picking another registered user's instance is deliberate follow-up work.
+- **Self-first target only** — the tab installs into (and uninstalls from) the running instance's own profile directory; picking another registered user's instance is deliberate follow-up work.
 
 <a id="dev-note"></a>
 ### Dev Note

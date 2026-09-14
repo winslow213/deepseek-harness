@@ -25,6 +25,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'plugin-install/upload-too-many-files': { readonly maxFiles: number; readonly fileCount: number }
     /** A copy, manifest, patch, or reconcile write failed. */
     'plugin-install/write-failed': { readonly reason: string }
+    /** The named id has no patch row in the profile — nothing to uninstall. */
+    'plugin-install/not-installed': { readonly pluginId: string }
   }
 }
 
@@ -119,6 +121,23 @@ export interface PluginInstallResult {
    * Whether the install requested a supervised process restart (the instance
    * runs under a supervisor and self-exited so it relaunches with the new
    * plugin active). Present only when the request actually triggered one.
+   */
+  readonly restartRequested?: boolean
+}
+
+/**
+ * Outcome of removing one patch-row-registered plugin (the file-dir,
+ * upload-directory, and npm-register forms; npm-bundle dependencies have no
+ * per-plugin id and are not covered by this method).
+ */
+export interface PluginUninstallResult {
+  /** Absolute profile directory the removal ran against. */
+  readonly profileDir: string
+  /** The plugin id whose patch row (and `plugins/<id>` copy, if any) was removed. */
+  readonly pluginId: string
+  /**
+   * Whether the removal requested a supervised process restart, mirroring
+   * {@link PluginInstallResult.restartRequested}.
    */
   readonly restartRequested?: boolean
 }

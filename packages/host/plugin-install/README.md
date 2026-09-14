@@ -1,5 +1,5 @@
 ---
-description: "Operator-gated Remote for installing external plugins into the running dsh profile from the Web UI: the pluginInstall service and its install Remote, with file-dir copy, npm-bundle, and npm-register forms."
+description: "Operator-gated Remote for installing and uninstalling external plugins in the running dsh profile from the Web UI: the pluginInstall service with its install Remote (file-dir copy, npm-bundle, and npm-register forms) and its uninstallPlugin Remote for the patch-row-based forms."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The web instance can install external plugins into its own profile directory over the Remote namespace: calling `pluginInstall/installPlugin` with the `file-dir` form copies a source directory under the profile's `plugins/<id>` and registers its patch row in the user patch layer, the `npm-bundle` form runs `pnpm add` in the profile directory and promotes bundles into the profile's `dsh.profile.bundles` layer list, and the `npm-register` form writes a startup row for an already-installed Cordis npm plugin. The service is operator-gated: the `PluginInstallGateway` class refuses to mount unless `enabled: true`, and the web-app composition disables the whole row unless the operator sets `DSH_PLUGIN_INSTALL=true`, so a default deployment never loads the package. Client packages consume the Remote through the explicit [`api-remotes`](../../api/remotes/README.md) assembly rather than importing the Host implementation.
+The web instance can install external plugins into its own profile directory over the Remote namespace: calling `pluginInstall/installPlugin` with the `file-dir` form copies a source directory under the profile's `plugins/<id>` and registers its patch row in the user patch layer, the `npm-bundle` form runs `pnpm add` in the profile directory and promotes bundles into the profile's `dsh.profile.bundles` layer list, and the `npm-register` form writes a startup row for an already-installed Cordis npm plugin. Calling `pluginInstall/uninstallPlugin` with the id from one of the two patch-row-based forms (`file-dir`, `upload-directory`, or `npm-register`) removes that plugin's patch row and, for a copy-based install, its `plugins/<id>` directory; the `npm-bundle` form has no per-plugin id and is not covered — an operator removes it with `pnpm remove` in the profile directory instead. The service is operator-gated: the `PluginInstallGateway` class refuses to mount unless `enabled: true`, and the web-app composition disables the whole row unless the operator sets `DSH_PLUGIN_INSTALL=true`, so a default deployment never loads the package. Client packages consume the Remote through the explicit [`api-remotes`](../../api/remotes/README.md) assembly rather than importing the Host implementation.
 
 ## Table of Contents
 
@@ -39,9 +39,13 @@ The request is discriminated by `form`:
 
 The target profile is the explicit `profileDir` config override when a deployment supplies one; otherwise the service self-locates the running instance's profile from the bootstrap `include` entry's `config.path` — the file URL of the profile's `cordis.yml` — and uses its directory. When neither exists, the call fails with `plugin-install/unknown-profile`.
 
+### Uninstalling a plugin
+
+Call `pluginInstall/uninstallPlugin` with the id used at install time. It removes the id-delimited patch row from `cordis.patch.yml` and, when the id also has a `plugins/<id>` directory (a `file-dir` or `upload-directory` install), deletes that directory too; an `npm-register` id has no such directory to remove. The call fails with `plugin-install/not-installed` when no patch row matches the id — there is nothing else to check, since the patch row is the sole install record for these three forms. A `npm-bundle` install has no per-plugin id and cannot be targeted this way; remove it by running `pnpm remove <package>` in the profile directory instead.
+
 ### Failure vocabulary
 
-Install failures raise `RemoteError` with a stable code: `plugin-install/unknown-profile` when no profile can be located, `plugin-install/invalid-spec` for an unsafe id, unusable source path, or malformed/non-object JSON config, `plugin-install/unresolved-package` when a registered specifier is not an installed dependency, `plugin-install/pnpm-missing` when `pnpm` is not on PATH, `plugin-install/pnpm-failed` when `pnpm add` exits non-zero, and `plugin-install/write-failed` when a copy, manifest, patch, or reconcile write fails.
+Install failures raise `RemoteError` with a stable code: `plugin-install/unknown-profile` when no profile can be located, `plugin-install/invalid-spec` for an unsafe id, unusable source path, or malformed/non-object JSON config, `plugin-install/unresolved-package` when a registered specifier is not an installed dependency, `plugin-install/pnpm-missing` when `pnpm` is not on PATH, `plugin-install/pnpm-failed` when `pnpm add` exits non-zero, and `plugin-install/write-failed` when a copy, manifest, patch, or reconcile write fails. Uninstall additionally raises `plugin-install/not-installed` when the given id has no patch row.
 
 -----
 
@@ -67,7 +71,7 @@ The gate is two-layered. The class constructor throws unless `enabled: true`, so
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `PluginInstallGateway`: the `pluginInstall` Remote service, profile self-location, the install forms, and the patch-row writer |
+| [`src/index.ts`](src/index.ts) | `PluginInstallGateway`: the `pluginInstall` Remote service, profile self-location, the install forms, the uninstall path, and the patch-row reader/writer |
 | [`src/types.ts`](src/types.ts) | Public payload types: `Config`, `PluginInstallSpec`, `PluginInstallResult`, and the `RemoteErrorDetailsMap` extension |
 | — | No runtime invariant companion is published; installs are exercised against a real temporary profile in `tests/install.spec.ts`. |
 
@@ -107,6 +111,7 @@ These limits define what an operator-gated install cannot do today. They are cur
 - **Requires pnpm on the host** — the `npm-bundle` form shells out to `pnpm`; a host without it fails with `plugin-install/pnpm-missing`, and installs never bundle their own package manager.
 - **No remote fetch for file-dir** — the `file-dir` form copies a local directory only; fetching a plugin from a registry or URL is `npm-bundle`'s job.
 - **No hot reload** — installs mutate the profile on disk and the patch layer; the running Loader does not re-read them, so effects apply on the next profile load.
+- **`npm-bundle` uninstall is out of scope** — that form has no per-plugin id to key removal on; `pluginInstall/uninstallPlugin` only covers `file-dir`, `upload-directory`, and `npm-register`.
 - **Default deploy never mounts it** — the namespace is off unless the operator explicitly enables the row and sets `DSH_PLUGIN_INSTALL=true`; a deployment that forgets the env switch gets no install surface rather than a silently half-open one.
 
 <a id="dev-note"></a>

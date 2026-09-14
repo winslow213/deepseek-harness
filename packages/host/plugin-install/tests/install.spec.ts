@@ -84,6 +84,7 @@ describe('PluginInstallGateway', () => {
     expect(remoteMethods(gateway)).toEqual([
       { method: 'installPlugin', invocation: { kind: 'direct' } },
       { method: 'uploadDirectory', invocation: { kind: 'direct' } },
+      { method: 'uninstallPlugin', invocation: { kind: 'direct' } },
     ])
   })
 
@@ -731,6 +732,101 @@ describe('PluginInstallGateway', () => {
     const gateway = ctx.get('pluginInstall') as PluginInstallGateway
     expect(installError(gateway, { form: 'file-dir', id: 'ok', sourcePath: tmp() })).toMatchObject({
       code: 'plugin-install/unknown-profile',
+    })
+  })
+
+  describe('uninstallPlugin', () => {
+    it('removes a file-dir install: its patch row and its plugins/<id> copy', async () => {
+      const profileDir = tmp()
+      const sourceDir = tmp()
+      writeFileSync(join(sourceDir, 'index.ts'), 'export const plugin = true\n')
+      const { gateway } = await harness(profileDir)
+      gateway.installPlugin({ form: 'file-dir', id: 'region-router', sourcePath: sourceDir })
+
+      const result = gateway.uninstallPlugin('region-router')
+      expect(result).toEqual({ profileDir, pluginId: 'region-router' })
+      expect(existsSync(join(profileDir, 'plugins', 'region-router'))).toBe(false)
+      const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
+      expect(patch).not.toContain('region-router')
+    })
+
+    it('removes an upload-directory install: its patch row and its plugins/<id> copy', async () => {
+      const profileDir = tmp()
+      const { gateway } = await harness(profileDir)
+      gateway.uploadDirectory({
+        form: 'upload-directory',
+        id: 'region-router',
+        files: [{ path: 'index.ts', content: b64('export const plugin = true\n') }],
+      })
+
+      gateway.uninstallPlugin('region-router')
+      expect(existsSync(join(profileDir, 'plugins', 'region-router'))).toBe(false)
+      expect(readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')).not.toContain('region-router')
+    })
+
+    it('removes an npm-register row without touching the installed package', async () => {
+      const profileDir = tmp()
+      const { gateway } = await harness(profileDir)
+      writeProfileManifest(profileDir, { name: 'dsh-profile-register', dependencies: { 'dsh-demo-plugin': '1.0.0' } })
+      const pkgDir = join(profileDir, 'node_modules', 'dsh-demo-plugin')
+      mkdirSync(pkgDir, { recursive: true })
+      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-demo-plugin', version: '1.0.0', main: './index.js' }))
+      writeFileSync(join(pkgDir, 'index.js'), 'export const apply = () => {}\n')
+      gateway.installPlugin({ form: 'npm-register', id: 'demo', packageName: 'dsh-demo-plugin' })
+
+      gateway.uninstallPlugin('demo')
+      expect(readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')).not.toContain('demo')
+      // The npm package itself stays; only the startup row is removed.
+      expect(existsSync(pkgDir)).toBe(true)
+    })
+
+    it('preserves unrelated patch rows when removing one plugin', async () => {
+      const profileDir = tmp()
+      const sourceDir = tmp()
+      writeFileSync(join(sourceDir, 'index.ts'), 'export const plugin = true\n')
+      const userRow = '# user-owned row\n- id: my-row\n  config:\n    value: 1\n'
+      writeFileSync(join(profileDir, PROFILE_PATCH_FILENAME), userRow)
+      const { gateway } = await harness(profileDir)
+      gateway.installPlugin({ form: 'file-dir', id: 'region-router', sourcePath: sourceDir })
+
+      gateway.uninstallPlugin('region-router')
+      const patch = readFileSync(join(profileDir, PROFILE_PATCH_FILENAME), 'utf8')
+      expect(patch).toContain(userRow.trimEnd())
+      expect(patch).not.toContain('region-router')
+    })
+
+    it('rejects an id with no patch row', async () => {
+      const { gateway } = await harness(tmp())
+      expect(() => gateway.uninstallPlugin('never-installed')).toThrow(
+        expect.objectContaining({ code: 'plugin-install/not-installed', details: { pluginId: 'never-installed' } }),
+      )
+    })
+
+    it('rejects an id that could escape the plugins directory', async () => {
+      const { gateway } = await harness(tmp())
+      expect(() => gateway.uninstallPlugin('../escape')).toThrow(
+        expect.objectContaining({ code: 'plugin-install/invalid-spec' }),
+      )
+    })
+
+    it('requests a supervisor restart after a successful uninstall when supervised', async () => {
+      const profileDir = tmp()
+      const sourceDir = tmp()
+      writeFileSync(join(sourceDir, 'index.ts'), 'export const plugin = true\n')
+      const { gateway } = await harness(profileDir)
+      gateway.installPlugin({ form: 'file-dir', id: 'region-router', sourcePath: sourceDir })
+      const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+      const previous = process.env.DSH_SUPERVISED
+      process.env.DSH_SUPERVISED = '1'
+      try {
+        const result = gateway.uninstallPlugin('region-router')
+        expect(result.restartRequested).toBe(true)
+        expect(existsSync(join(profileDir, '.dsh-restart-requested'))).toBe(true)
+        expect(kill).not.toHaveBeenCalled()
+      } finally {
+        process.env.DSH_SUPERVISED = previous
+        kill.mockRestore()
+      }
     })
   })
 })

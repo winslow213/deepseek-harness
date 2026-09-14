@@ -4,6 +4,7 @@ import type {
   PluginInstallForm,
   PluginInstallResult,
   PluginInstallSpec,
+  PluginUninstallResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './PluginInstallSettingsTab.module.css'
@@ -12,6 +13,8 @@ import css from './PluginInstallSettingsTab.module.css'
 export interface PluginInstallSettingsTabInjected {
   /** Run one install request; resolves with the outcome or rejects with the Remote failure. */
   installPlugin: (spec: PluginInstallSpec) => Promise<PluginInstallResult>
+  /** Remove one patch-row-registered plugin by id; resolves with the outcome or rejects with the Remote failure. */
+  uninstallPlugin: (id: string) => Promise<PluginUninstallResult>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -25,6 +28,14 @@ type ViewState =
   | { readonly status: 'running' }
   | { readonly status: 'success'; readonly result: PluginInstallResult }
   | { readonly status: 'restarting'; readonly result: PluginInstallResult; readonly secondsLeft: number }
+  | { readonly status: 'error'; readonly message: string; readonly code: string | undefined }
+
+/** Uninstall section state, mirroring {@link ViewState} for the remove flow. */
+type UninstallState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'running' }
+  | { readonly status: 'success'; readonly result: PluginUninstallResult }
+  | { readonly status: 'restarting'; readonly result: PluginUninstallResult; readonly secondsLeft: number }
   | { readonly status: 'error'; readonly message: string; readonly code: string | undefined }
 
 /** Seconds to wait after a supervised install before reloading the page. The
@@ -67,6 +78,7 @@ function readAsBase64(file: File): Promise<string> {
 export function PluginInstallSettingsTab({
   t,
   installPlugin,
+  uninstallPlugin,
 }: PluginInstallSettingsTabProps): ReactNode {
   const [form, setForm] = useState<PluginInstallForm>('file-dir')
   const [id, setId] = useState('')
@@ -76,8 +88,11 @@ export function PluginInstallSettingsTab({
   const [configJson, setConfigJson] = useState('')
   const [files, setFiles] = useState<DirectoryUploadFile[]>([])
   const [state, setState] = useState<ViewState>({ status: 'idle' })
+  const [uninstallId, setUninstallId] = useState('')
+  const [uninstallState, setUninstallState] = useState<UninstallState>({ status: 'idle' })
 
   const running = state.status === 'running' || state.status === 'restarting'
+  const uninstallRunning = uninstallState.status === 'running' || uninstallState.status === 'restarting'
 
   // When the install triggered a supervised restart, count down then reload
   // the page: the running process self-exits, the supervisor relaunches a new
@@ -94,6 +109,19 @@ export function PluginInstallSettingsTab({
     }, 1000)
     return () => { clearTimeout(timer) }
   }, [state])
+
+  // Same reload-on-restart behavior for the uninstall section's own state.
+  useEffect(() => {
+    if (uninstallState.status !== 'restarting') return
+    if (uninstallState.secondsLeft <= 0) {
+      window.location.reload()
+      return
+    }
+    const timer = setTimeout(() => {
+      setUninstallState({ status: 'restarting', result: uninstallState.result, secondsLeft: uninstallState.secondsLeft - 1 })
+    }, 1000)
+    return () => { clearTimeout(timer) }
+  }, [uninstallState])
 
   const ready = form === 'file-dir'
     ? id.trim() !== '' && sourcePath.trim() !== ''
@@ -138,6 +166,32 @@ export function PluginInstallSettingsTab({
           ? (error as { code?: unknown }).code
           : undefined
         setState({
+          status: 'error',
+          message: error instanceof Error ? error.message : String(error),
+          code: typeof code === 'string' ? code : undefined,
+        })
+      },
+    )
+  }
+
+  const submitUninstall = (event: FormEvent): void => {
+    event.preventDefault()
+    const trimmed = uninstallId.trim()
+    if (trimmed === '' || uninstallRunning) return
+    setUninstallState({ status: 'running' })
+    void uninstallPlugin(trimmed).then(
+      (result) => {
+        if (result.restartRequested === true) {
+          setUninstallState({ status: 'restarting', result, secondsLeft: RELOAD_DELAY_SECONDS })
+          return
+        }
+        setUninstallState({ status: 'success', result })
+      },
+      (error: unknown) => {
+        const code = error instanceof Error
+          ? (error as { code?: unknown }).code
+          : undefined
+        setUninstallState({
           status: 'error',
           message: error instanceof Error ? error.message : String(error),
           code: typeof code === 'string' ? code : undefined,
@@ -393,6 +447,76 @@ export function PluginInstallSettingsTab({
           ) : null}
         </div>
       ) : null}
+      <div className={css.section}>
+        <h3 className={css.resultTitle}>{t('uninstallSectionTitle')}</h3>
+        <p className={css.intro}>{t('uninstallIntro')}</p>
+        <form className={css.form} aria-busy={uninstallRunning} onSubmit={submitUninstall}>
+          <div className={css.fields}>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>
+                {t('uninstallIdLabel')}
+                <em className={css.required}>{t('required')}</em>
+              </span>
+              <input
+                value={uninstallId}
+                onChange={(event) => { setUninstallId(event.target.value) }}
+                placeholder={t('uninstallIdPlaceholder')}
+                disabled={uninstallRunning}
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <button type="submit" className={css.submit} disabled={uninstallId.trim() === '' || uninstallRunning}>
+            {uninstallState.status === 'restarting' ? t('restarting') : uninstallRunning ? t('uninstalling') : t('uninstallButton')}
+          </button>
+        </form>
+        {uninstallState.status === 'restarting' ? (
+          <div className={css.result} aria-live="polite">
+            <h3 className={css.resultTitle}>{t('uninstallRestartingTitle')}</h3>
+            <dl className={css.facts}>
+              <div>
+                <dt>{t('profileDirLabel')}</dt>
+                <dd><code>{uninstallState.result.profileDir}</code></dd>
+              </div>
+              <div>
+                <dt>{t('pluginIdLabel')}</dt>
+                <dd><code>{uninstallState.result.pluginId}</code></dd>
+              </div>
+            </dl>
+            <p className={css.restartNote}>
+              {t('reloadInSeconds', { seconds: uninstallState.secondsLeft })}
+            </p>
+          </div>
+        ) : null}
+        {uninstallState.status === 'success' ? (
+          <div className={css.result} aria-live="polite">
+            <h3 className={css.resultTitle}>{t('uninstallSuccessTitle')}</h3>
+            <dl className={css.facts}>
+              <div>
+                <dt>{t('profileDirLabel')}</dt>
+                <dd><code>{uninstallState.result.profileDir}</code></dd>
+              </div>
+              <div>
+                <dt>{t('pluginIdLabel')}</dt>
+                <dd><code>{uninstallState.result.pluginId}</code></dd>
+              </div>
+            </dl>
+            <p className={css.restartNote}>{t('restartNote')}</p>
+          </div>
+        ) : null}
+        {uninstallState.status === 'error' ? (
+          <div className={css.failure} role="alert">
+            <h3 className={css.resultTitle}>{t('uninstallErrorTitle')}</h3>
+            <p className={css.errorMessage}>{uninstallState.message}</p>
+            {uninstallState.code !== undefined ? (
+              <p className={css.errorCode}>
+                {t('errorCodeLabel')}: <code>{uninstallState.code}</code>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }

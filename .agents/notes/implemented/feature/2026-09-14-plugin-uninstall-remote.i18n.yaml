@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-plugin-uninstall-remote.md
+2026-09-14-plugin-uninstall-remote.md: 01c74cab54936b5fc8626499216159b7ad2d3421
+2026-09-14-plugin-uninstall-remote.zh.md: f263f27f2bac34197397bac2ff43185041040e70

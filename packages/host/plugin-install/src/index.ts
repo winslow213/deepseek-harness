@@ -37,6 +37,7 @@ import type {
   NpmRegisterInstallSpec,
   PluginInstallResult,
   PluginInstallSpec,
+  PluginUninstallResult,
   UploadDirectorySpec,
 } from './types.ts'
 
@@ -143,6 +144,28 @@ function upsertMarkedBlock(patchPath: string, block: string, id: string): void {
   writeFileSync(patchPath, next)
 }
 
+/**
+ * Remove one id-delimited block from a patch-layer file, preserving every
+ * byte outside it.
+ * @param patchPath - the profile's cordis.patch.yml path.
+ * @param id - the plugin id whose markers delimit the block.
+ * @returns whether a block for `id` was found and removed.
+ */
+function removeMarkedBlock(patchPath: string, id: string): boolean {
+  let content: string
+  try {
+    content = readFileSync(patchPath, 'utf8')
+  } catch {
+    return false
+  }
+  const [start, end] = rowMarkers(id)
+  const open = content.indexOf(start)
+  const close = content.indexOf(end)
+  if (open < 0 || close < open) return false
+  writeFileSync(patchPath, content.slice(0, open) + content.slice(close + end.length))
+  return true
+}
+
 /** Reject an id that is not a single path-safe segment. */
 function assertPluginId(id: string): void {
   if (id === '' || id === '.' || id === '..' || !PLUGIN_ID_PATTERN.test(id)) {
@@ -166,6 +189,22 @@ function finalizeDirectoryInstall(profileDir: string, id: string, destDir: strin
     writeFileSync(join(destDir, 'package.json'), JSON.stringify(LOOSE_PLUGIN_MANIFEST, undefined, 2) + '\n')
   }
   upsertPluginPatchRow(profileDir, id, pathToFileURL(join(destDir, 'index.ts')).href)
+}
+
+/**
+ * Remove one patch-row-registered plugin: the file-dir, upload-directory, and
+ * npm-register forms all key their row on `id` via the same markers, so one
+ * removal path covers them. A `plugins/<id>` copy (file-dir, upload-directory)
+ * is deleted alongside the row; an npm-register row has no such directory, so
+ * the directory removal is a no-op there.
+ * @param profileDir - the profile whose patch layer and `plugins/` dir edit.
+ * @param id - the plugin id to remove, already validated path-safe.
+ * @returns whether a patch row for `id` was found and removed.
+ */
+function uninstallPluginById(profileDir: string, id: string): boolean {
+  const removed = removeMarkedBlock(join(profileDir, PROFILE_PATCH_FILENAME), id)
+  if (removed) rmSync(join(profileDir, PLUGINS_DIR, id), { recursive: true, force: true })
+  return removed
 }
 
 /** Install the file-dir form: copy the source directory and register its patch row. */
@@ -650,19 +689,20 @@ function installNpmRegister(profileDir: string, spec: NpmRegisterInstallSpec): P
 
 /**
  * When a supervisor runs this instance (env `DSH_SUPERVISED=1`), request a
- * process restart after a successful install so the new plugin activates. The
- * marker protocol matches the shell supervisor's `spawn-user` loop: write
- * `RESTART_MARKER` in the profile directory, then self-SIGTERM after a grace
- * period so the Remote response reaches the browser before the process exits.
- * Without the env var the process stays up — a bare `dsh` run has no
- * supervisor to relaunch it, and killing it would strand the terminal.
- * @param profileDir - the profile that received the install.
+ * process restart after a successful install or uninstall so the plugin
+ * change activates. The marker protocol matches the shell supervisor's
+ * `spawn-user` loop: write `RESTART_MARKER` in the profile directory, then
+ * self-SIGTERM after a grace period so the Remote response reaches the
+ * browser before the process exits. Without the env var the process stays
+ * up — a bare `dsh` run has no supervisor to relaunch it, and killing it
+ * would strand the terminal.
+ * @param profileDir - the profile whose plugin set changed.
  * @returns whether a supervised restart was requested.
  */
 function requestRestartIfSupervised(profileDir: string): boolean {
   if (process.env[DSH_SUPERVISED_ENV] !== '1') return false
   writeFileSync(join(profileDir, RESTART_MARKER), `${new Date().toISOString()}\n`)
-  console.warn(`[${NAME}] install complete; requesting supervisor restart in ${String(RESTART_GRACE_MS)}ms`)
+  console.warn(`[${NAME}] plugin change complete; requesting supervisor restart in ${String(RESTART_GRACE_MS)}ms`)
   setTimeout(() => {
     // SIGTERM is the supervisor's ordinary stop request and exits 0; the
     // marker left above is what tells spawn-user to relaunch rather than stop.
@@ -671,7 +711,7 @@ function requestRestartIfSupervised(profileDir: string): boolean {
   return true
 }
 
-/** Operator-gated Remote service installing external plugins into the profile. */
+/** Operator-gated Remote service installing and removing external plugins in the profile. */
 export class PluginInstallGateway extends TypertRemoteService {
   static inject = ['loader']
 
@@ -790,6 +830,30 @@ export class PluginInstallGateway extends TypertRemoteService {
       )
     }
     return { form: 'upload-directory', profileDir, pluginId: spec.id }
+  }
+
+  /**
+   * Remove one patch-row-registered plugin (file-dir, upload-directory, or
+   * npm-register): delete its patch row and, when present, its
+   * `plugins/<id>` copy. An npm-bundle dependency has no per-plugin id and is
+   * not covered here — `pnpm remove` it directly in the profile directory.
+   * @param id - the plugin id the install request named.
+   * @returns the profile directory and id removed, and whether a supervised
+   *   restart was requested.
+   */
+  @Remote('uninstallPlugin')
+  uninstallPlugin(id: string): PluginUninstallResult {
+    assertPluginId(id)
+    const profileDir = this.resolveProfileDir()
+    if (!uninstallPluginById(profileDir, id)) {
+      throw new RemoteError(
+        'plugin-install/not-installed',
+        `no installed plugin ${JSON.stringify(id)} was found in ${profileDir}`,
+        { pluginId: id },
+      )
+    }
+    const restartRequested = requestRestartIfSupervised(profileDir)
+    return restartRequested ? { profileDir, pluginId: id, restartRequested: true } : { profileDir, pluginId: id }
   }
 }
 

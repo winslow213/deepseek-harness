@@ -2,7 +2,7 @@
 /** Plugin-install tab behavior over a scripted install face. */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PluginInstallResult, PluginInstallSpec } from '@deepseek-ai/dsh-api-remotes/client'
+import type { PluginInstallResult, PluginInstallSpec, PluginUninstallResult } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   PluginInstallSettingsTab,
   type PluginInstallSettingsTabProps,
@@ -36,7 +36,15 @@ const REGISTER_RESULT: PluginInstallResult = {
   pluginId: 'demo',
 }
 
-function mount(installPlugin: (spec: PluginInstallSpec) => Promise<PluginInstallResult>) {
+const UNINSTALL_RESULT: PluginUninstallResult = {
+  profileDir: '/tmp/profile',
+  pluginId: 'my-plugin',
+}
+
+function mount(
+  installPlugin: (spec: PluginInstallSpec) => Promise<PluginInstallResult>,
+  uninstallPlugin: (id: string) => Promise<PluginUninstallResult> = () => Promise.resolve(UNINSTALL_RESULT),
+) {
   const t = (key: PluginInstallLocaleKey, params?: Record<string, string | number>): string => {
     const template = en[key]
     if (params === undefined) return template
@@ -45,6 +53,7 @@ function mount(installPlugin: (spec: PluginInstallSpec) => Promise<PluginInstall
   const props = {
     t,
     installPlugin,
+    uninstallPlugin,
   } as PluginInstallSettingsTabProps
   return render(<PluginInstallSettingsTab {...props} />)
 }
@@ -258,5 +267,71 @@ describe('PluginInstallSettingsTab', () => {
     expect(alert.textContent).toContain(en.errorTitle)
     expect(alert.textContent).toContain('source path is not absolute')
     expect(alert.textContent).toContain('plugin-install/invalid-spec')
+  })
+
+  describe('uninstall section', () => {
+    it('keeps the uninstall button disabled until an id is entered', () => {
+      mount(vi.fn())
+
+      expect(screen.getByText(en.uninstallSectionTitle)).toBeTruthy()
+      expect(screen.getByRole('button', { name: en.uninstallButton })).toHaveProperty('disabled', true)
+      fireEvent.change(screen.getByPlaceholderText(en.uninstallIdPlaceholder), { target: { value: 'my-plugin' } })
+      expect(screen.getByRole('button', { name: en.uninstallButton })).toHaveProperty('disabled', false)
+    })
+
+    it('submits a trimmed id and reports the removed plugin', async () => {
+      const uninstallPlugin = vi.fn(() => Promise.resolve(UNINSTALL_RESULT))
+      mount(vi.fn(), uninstallPlugin)
+
+      fireEvent.change(screen.getByPlaceholderText(en.uninstallIdPlaceholder), { target: { value: '  my-plugin  ' } })
+      fireEvent.click(screen.getByRole('button', { name: en.uninstallButton }))
+
+      await waitFor(() => {
+        expect(uninstallPlugin).toHaveBeenCalledWith('my-plugin')
+        expect(screen.getByText(en.uninstallSuccessTitle)).toBeTruthy()
+      })
+    })
+
+    it('shows the restarting state and reloads the page after the countdown when the uninstall requested a restart', async () => {
+      vi.useFakeTimers()
+      const reload = vi.fn()
+      Object.defineProperty(window, 'location', {
+        value: { reload },
+        configurable: true,
+        writable: true,
+      })
+      const uninstallPlugin = vi.fn(() => Promise.resolve({ ...UNINSTALL_RESULT, restartRequested: true }))
+      mount(vi.fn(), uninstallPlugin)
+
+      fireEvent.change(screen.getByPlaceholderText(en.uninstallIdPlaceholder), { target: { value: 'my-plugin' } })
+      fireEvent.click(screen.getByRole('button', { name: en.uninstallButton }))
+
+      await act(async () => { await Promise.resolve() })
+      expect(screen.getByText(en.uninstallRestartingTitle)).toBeTruthy()
+
+      for (let second = 0; second <= 10 && reload.mock.calls.length === 0; second += 1) {
+        await act(async () => { vi.advanceTimersByTime(1_000) })
+      }
+      expect(reload).toHaveBeenCalledTimes(1)
+
+      vi.useRealTimers()
+    })
+
+    it('surfaces the Remote failure message and code for an unknown plugin id', async () => {
+      const uninstallPlugin = (): Promise<PluginUninstallResult> => {
+        const error = new Error('no installed plugin "missing" was found') as Error & { code?: string }
+        error.code = 'plugin-install/not-installed'
+        return Promise.reject(error)
+      }
+      mount(vi.fn(), uninstallPlugin)
+
+      fireEvent.change(screen.getByPlaceholderText(en.uninstallIdPlaceholder), { target: { value: 'missing' } })
+      fireEvent.click(screen.getByRole('button', { name: en.uninstallButton }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain(en.uninstallErrorTitle)
+      expect(alert.textContent).toContain('no installed plugin "missing" was found')
+      expect(alert.textContent).toContain('plugin-install/not-installed')
+    })
   })
 })

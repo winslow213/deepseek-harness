@@ -22,7 +22,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 
 export type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
-export type { PluginInstallForm, PluginInstallSpec, PluginInstallResult, DirectoryUploadFile } from '@deepseek-ai/dsh-host-plugin-install/types'
+export type { PluginInstallForm, PluginInstallSpec, PluginInstallResult, PluginUninstallResult, DirectoryUploadFile } from '@deepseek-ai/dsh-host-plugin-install/types'
 export type {} from '@deepseek-ai/dsh-agent-presets/remote'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-api-settings-controller/remote'

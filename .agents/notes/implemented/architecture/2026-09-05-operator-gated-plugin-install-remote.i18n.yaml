@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-05-operator-gated-plugin-install-remote.md
-2026-09-05-operator-gated-plugin-install-remote.md: 8c1c5e208ca74587fdbe9d91a1300c586a82fa5d
-2026-09-05-operator-gated-plugin-install-remote.zh.md: a06173c527a3af500574d5f9b622dfd36415fdec
+2026-09-05-operator-gated-plugin-install-remote.md: 070ffe564b8c451b652736138a2e20ae196098d6
+2026-09-05-operator-gated-plugin-install-remote.zh.md: bb10a74eac77c527f82e984865ffe6fc2ca3b657

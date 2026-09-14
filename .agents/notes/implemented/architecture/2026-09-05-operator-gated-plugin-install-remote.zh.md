@@ -36,4 +36,4 @@
 
 ## 后果
 
-web-app 组合包获得操作者门控的安装行并新增对新包的依赖，api remotes 客户端 `$mount` 该命名空间，config 与 module-graph 目录列出新行。默认部署不会组合其中任何东西：`DSH_PLUGIN_INSTALL` 未设置时组合阶段就禁用该行，包从不加载。操作者启用后，GUI 可以用 CLI 产生的同一套持久化写入把源码目录和 npm bundle 都装进运行中的 profile，每次拒绝都点出问题所在（缺 `pnpm`、非路径安全 id、没有组合 include 条目）。服务没有任何模型侧表面，也不注册会话事件，所以没有快照拥有它的输出；15 个用例的 spec 用真实 Loader 组合驱动临时 profile 夹具，pnpm 路径用 `spawnSync` 模拟。调用这个命名空间的 GUI 设置标签页是设计文档的 Phase 4，刻意不在本次变更里。
+web-app 组合包获得操作者门控的安装行并新增对新包的依赖，api remotes 客户端 `$mount` 该命名空间，config 与 module-graph 目录列出新行。默认部署不会组合其中任何东西：`DSH_PLUGIN_INSTALL` 未设置时组合阶段就禁用该行，包从不加载。操作者启用后，GUI 可以用 CLI 产生的同一套持久化写入把源码目录和 npm bundle 都装进运行中的 profile，每次拒绝都点出问题所在（缺 `pnpm`、非路径安全 id、没有组合 include 条目）。服务没有任何模型侧表面，也不注册会话事件，所以没有快照拥有它的输出；15 个用例的 spec 用真实 Loader 组合驱动临时 profile 夹具，pnpm 路径用 `spawnSync` 模拟。调用这个命名空间的 GUI 设置标签页是设计文档的 Phase 4，刻意不在本次变更里。后续的 [卸载 Remote 方法](../feature/2026-09-14-plugin-uninstall-remote.zh.md) 按 id 撤销 `file-dir`、`upload-directory` 与 `npm-register` 安装。

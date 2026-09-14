@@ -24,4 +24,4 @@ Web GUI 能读插件清单却不能安装：Phase A 给运行实例加上了操�
 
 ## 后果
 
-web-app bundle 增加一条操作员门控的客户端行与一个依赖，`tsconfig.client.json` 引用新包。默认部署不受影响：没有 `DSH_PLUGIN_INSTALL=true` 时标签页与 Remote 都不注册。开关打开时，操作员可以从设置里把源码目录或 npm bundle 安装进运行中的 profile，并看到持久化的结果事实或可操作的拒绝信息。本包不注册任何面向模型的东西，也不注册任何会话事件，因此没有快照持有它的输出。两个 spec 文件钉住行为：jsdom 组件 spec 用脚本化的 install 面孔覆盖提交去空白、运行态锁定、成功事实与错误渲染；浏览器插件 spec 对注册、locale 跟随标签与 Remote 失败映射做 bench。
+web-app bundle 增加一条操作员门控的客户端行与一个依赖，`tsconfig.client.json` 引用新包。默认部署不受影响：没有 `DSH_PLUGIN_INSTALL=true` 时标签页与 Remote 都不注册。开关打开时，操作员可以从设置里把源码目录或 npm bundle 安装进运行中的 profile，并看到持久化的结果事实或可操作的拒绝信息。本包不注册任何面向模型的东西，也不注册任何会话事件，因此没有快照持有它的输出。两个 spec 文件钉住行为：jsdom 组件 spec 用脚本化的 install 面孔覆盖提交去空白、运行态锁定、成功事实与错误渲染；浏览器插件 spec 对注册、locale 跟随标签与 Remote 失败映射做 bench。同一组件后续新增一个[卸载区域](../feature/2026-09-14-plugin-uninstall-remote.zh.md)，用于移除先前安装的插件。
