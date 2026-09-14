@@ -1,5 +1,5 @@
 ---
-description: "面向 Web UI 的运算符门控插件安装/卸载 Remote：把外部插件安装/卸载进运行中 dsh profile 的 pluginInstall 服务，含 install Remote（file-dir 拷贝、npm-bundle 与 npm-register 三种形式）与针对可 patch 行寻址形式的 uninstallPlugin Remote。"
+description: "面向 Web UI 的运算符门控插件安装/卸载 Remote：把外部插件安装/卸载进运行中 dsh profile 的 pluginInstall 服务，含 install Remote（file-dir 拷贝、npm-bundle 与 npm-register 三种形式）与覆盖全部形式的单一 uninstallPlugin Remote。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 profile 目录：以 `file-dir` 形式调用 `pluginInstall/installPlugin` 会把源目录拷贝到 profile 的 `plugins/<id>` 下，并在用户 patch 层登记其 patch 行；`npm-bundle` 形式则在 profile 目录运行 `pnpm add`，并把 bundle 提升进 profile 的 `dsh.profile.bundles` 层列表；`npm-register` 形式则为已安装的 Cordis npm 插件补写启动行。以三种可 patch 行寻址形式（`file-dir`、`upload-directory` 或 `npm-register`）之一的 id 调用 `pluginInstall/uninstallPlugin`，会移除该插件的 patch 行；对拷贝类安装还会一并删除其 `plugins/<id>` 目录。`npm-bundle` 形式没有逐插件 id，本卸载不覆盖它——运算符需在 profile 目录手动执行 `pnpm remove`。该服务受运算符门控：`PluginInstallGateway` 类在 `enabled: true` 之外拒绝挂载，且 web-app 组合在运算符设置 `DSH_PLUGIN_INSTALL=true` 之前禁用整行，因此默认部署从不加载该包。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
+Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 profile 目录：以 `file-dir` 形式调用 `pluginInstall/installPlugin` 会把源目录拷贝到 profile 的 `plugins/<id>` 下，并在用户 patch 层登记其 patch 行；`npm-bundle` 形式则在 profile 目录运行 `pnpm add`，并把 bundle 提升进 profile 的 `dsh.profile.bundles` 层列表；`npm-register` 形式则为已安装的 Cordis npm 插件补写启动行。以 id 调用 `pluginInstall/uninstallPlugin` 覆盖全部三种形式：若 id 命中某个 npm-bundle 依赖，会运行 `pnpm remove` 并通过与安装路径相同的调和逻辑把它从 `dsh.profile.bundles` 中移除；其余 id 则回退到移除对应的 patch 行（`file-dir`、`upload-directory` 或 `npm-register`），对拷贝类安装还会一并删除其 `plugins/<id>` 目录。该服务受运算符门控：`PluginInstallGateway` 类在 `enabled: true` 之外拒绝挂载，且 web-app 组合在运算符设置 `DSH_PLUGIN_INSTALL=true` 之前禁用整行，因此默认部署从不加载该包。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
 
 ## 目录
 
@@ -41,11 +41,11 @@ Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 prof
 
 ### 卸载插件
 
-以安装时使用的 id 调用 `pluginInstall/uninstallPlugin`。它会移除 `cordis.patch.yml` 中该 id 分隔的 patch 行，若该 id 还带有 `plugins/<id>` 目录（`file-dir` 或 `upload-directory` 安装），也一并删除该目录；`npm-register` 的 id 没有这样的目录需要删除。当没有 patch 行与该 id 匹配时调用以 `plugin-install/not-installed` 失败——无需再检查别的东西，因为对这三种形式而言 patch 行就是唯一的安装记录。`npm-bundle` 安装没有逐插件 id，无法以此方式定位；请改为在 profile 目录运行 `pnpm remove <package>` 来移除它。
+以安装时使用的 id（patch 行 id）或 npm 包名（针对 npm-bundle 安装）调用 `pluginInstall/uninstallPlugin`。该 id 首先与 profile `package.json` 的 dependencies 比对：命中即运行 `pnpm remove <name>` 并调和 profile 的层栈——与 `npm-bundle` 安装提升新依赖走的是同一条调和路径——这也会把被移除的名字从 `dsh.profile.bundles` 中一并去掉。不是真实依赖的 id（`@deepseek-ai/dsh-base` 这类盒内模板 bundle 虽列在 `dsh.profile.bundles` 中，但从不是 dependencies 条目，因此永远不会在此处命中）会回退到 patch 行移除：移除 `cordis.patch.yml` 中该 id 分隔的 patch 行，若该 id 还带有 `plugins/<id>` 目录（`file-dir` 或 `upload-directory` 安装），也一并删除该目录；`npm-register` 的 id 没有这样的目录需要删除。当给定 id 既不是 npm-bundle 依赖也没有匹配的 patch 行时，调用以 `plugin-install/not-installed` 失败。
 
 ### 失败词汇表
 
-安装失败抛出带稳定码的 `RemoteError`：`plugin-install/unknown-profile`（无法定位 profile）、`plugin-install/invalid-spec`（id 不安全、源路径不可用或 JSON 配置畸形/非对象）、`plugin-install/unresolved-package`（登记的解析符不是已安装依赖）、`plugin-install/pnpm-missing`（PATH 上没有 pnpm）、`plugin-install/pnpm-failed`（`pnpm add` 非零退出）、`plugin-install/write-failed`（拷贝、清单、patch 或调和写入失败）。卸载还会在给定 id 没有 patch 行时另外抛出 `plugin-install/not-installed`。
+安装失败抛出带稳定码的 `RemoteError`：`plugin-install/unknown-profile`（无法定位 profile）、`plugin-install/invalid-spec`（id 不安全、源路径不可用或 JSON 配置畸形/非对象）、`plugin-install/unresolved-package`（登记的解析符不是已安装依赖）、`plugin-install/pnpm-missing`（PATH 上没有 pnpm）、`plugin-install/pnpm-failed`（`pnpm add` 或 `pnpm remove` 非零退出）、`plugin-install/write-failed`（拷贝、清单、patch 或调和写入失败）。卸载还会在给定 id 既不是 npm-bundle 依赖也没有匹配 patch 行时另外抛出 `plugin-install/not-installed`。
 
 -----
 
@@ -111,7 +111,7 @@ Typert 生成由 `./typert` 与 `./remote` 导出的 Host 和 Client Remote 产�
 - **宿主必须装有 pnpm**——`npm-bundle` 形式调用外部 `pnpm`；未装 pnpm 的宿主以 `plugin-install/pnpm-missing` 失败，安装永不自带包管理器。
 - **file-dir 不远程抓取**——`file-dir` 形式只拷贝本地目录；从 registry 或 URL 抓取插件是 `npm-bundle` 的职责。
 - **不热重载**——安装只改动磁盘上的 profile 与 patch 层；运行中的 Loader 不会重新读取，效果在下一次 profile 加载时生效。
-- **`npm-bundle` 卸载不在范围内**——该形式没有逐插件 id 可供移除定位；`pluginInstall/uninstallPlugin` 只覆盖 `file-dir`、`upload-directory` 与 `npm-register`。
+- **npm-bundle 卸载以 `package.json` 依赖名而非原始安装解析符寻址**——git 托管或别名安装解析符（`pnpm add npm:alias@spec` 或 git URL）解析出的 `dependencies` 键与安装时输入的字符串不同；卸载时请使用安装响应 `bundlesAdded` 中给出的名字或 `dsh.profile.bundles` 中的名字。
 - **默认部署永不挂载**——除非运算符显式启用该行并设置 `DSH_PLUGIN_INSTALL=true`，命名空间保持关闭；忘记环境开关的部署得到的是没有安装界面，而不是一个静默半开的命名空间。
 
 <a id="dev-note"></a>

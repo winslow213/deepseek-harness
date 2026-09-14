@@ -828,5 +828,109 @@ describe('PluginInstallGateway', () => {
         kill.mockRestore()
       }
     })
+
+    it('removes an npm-bundle dependency: pnpm remove, then drops it from dsh.profile.bundles', async () => {
+      const profileDir = tmp()
+      const { gateway } = await harness(profileDir)
+      vi.mocked(spawnSync).mockImplementation((_command, args, options) => {
+        // Simulate `pnpm add external-bundle` materializing the dependency.
+        const dir = (options as { cwd: string }).cwd
+        const name = args![1]!
+        writeProfileManifest(dir, {
+          name: `dsh-profile-${basename(dir)}`,
+          dependencies: { [name]: '0.0.0' },
+        })
+        stageBundle(dir, name)
+        return { status: 0, signal: null, pid: 1, output: [], stdout: '', stderr: '' }
+      })
+      gateway.installPlugin({ form: 'npm-bundle', spec: 'external-bundle' })
+      expect(readProfileManifest('dsh', profileDir).dsh?.profile?.bundles).toEqual(['external-bundle'])
+
+      vi.mocked(spawnSync).mockImplementation((_command, args, options) => {
+        // Simulate `pnpm remove external-bundle`: drop the dependency, but
+        // leave `dsh.profile.bundles` untouched — pnpm never edits it, only
+        // `reconcileProfileBundles` does, after this call returns.
+        const dir = (options as { cwd: string }).cwd
+        expect(args).toEqual(['remove', 'external-bundle'])
+        writeProfileManifest(dir, {
+          name: `dsh-profile-${basename(dir)}`,
+          dependencies: {},
+          dsh: { profile: { bundles: ['external-bundle'] } },
+        })
+        return { status: 0, signal: null, pid: 1, output: [], stdout: '', stderr: '' }
+      })
+      const result = gateway.uninstallPlugin('external-bundle')
+      expect(result).toEqual({ profileDir, pluginId: 'external-bundle' })
+      expect(readProfileManifest('dsh', profileDir).dsh?.profile?.bundles).toEqual([])
+      expect(readProfileManifest('dsh', profileDir).dependencies ?? {}).toEqual({})
+    })
+
+    it('never runs pnpm remove for an in-box bundle name that is not a real dependency', async () => {
+      const profileDir = tmp()
+      const { gateway } = await harness(profileDir)
+      writeProfileManifest(profileDir, {
+        name: 'dsh-profile-test',
+        dependencies: {},
+        dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } },
+      })
+
+      // `@deepseek-ai/dsh-base` is in dsh.profile.bundles but not a dependency,
+      // so it falls through to the patch-row path and is rejected as an
+      // unsafe id (it contains `/`), never reaching pnpm.
+      expect(() => gateway.uninstallPlugin('@deepseek-ai/dsh-base')).toThrow(
+        expect.objectContaining({ code: 'plugin-install/invalid-spec' }),
+      )
+      expect(spawnSync).not.toHaveBeenCalled()
+    })
+
+    it('reports a non-zero pnpm remove exit as a pnpm failure', async () => {
+      const profileDir = tmp()
+      const { gateway } = await harness(profileDir)
+      vi.mocked(spawnSync).mockImplementation((_command, args, options) => {
+        const dir = (options as { cwd: string }).cwd
+        const name = args![1]!
+        writeProfileManifest(dir, { name: `dsh-profile-${basename(dir)}`, dependencies: { [name]: '0.0.0' } })
+        stageBundle(dir, name)
+        return { status: 0, signal: null, pid: 1, output: [], stdout: '', stderr: '' }
+      })
+      gateway.installPlugin({ form: 'npm-bundle', spec: 'external-bundle' })
+
+      vi.mocked(spawnSync).mockReturnValue({
+        status: 1, signal: null, pid: 1, output: [], stdout: '', stderr: 'pnpm remove failed',
+      })
+      expect(() => gateway.uninstallPlugin('external-bundle')).toThrow(
+        expect.objectContaining({ code: 'plugin-install/pnpm-failed' }),
+      )
+    })
+
+    it('requests a supervisor restart after a successful npm-bundle uninstall when supervised', async () => {
+      const profileDir = tmp()
+      const { gateway } = await harness(profileDir)
+      vi.mocked(spawnSync).mockImplementation((_command, args, options) => {
+        const dir = (options as { cwd: string }).cwd
+        const name = args![1]!
+        writeProfileManifest(dir, { name: `dsh-profile-${basename(dir)}`, dependencies: { [name]: '0.0.0' } })
+        stageBundle(dir, name)
+        return { status: 0, signal: null, pid: 1, output: [], stdout: '', stderr: '' }
+      })
+      gateway.installPlugin({ form: 'npm-bundle', spec: 'external-bundle' })
+      vi.mocked(spawnSync).mockImplementation((_command, _args, options) => {
+        const dir = (options as { cwd: string }).cwd
+        writeProfileManifest(dir, { name: `dsh-profile-${basename(dir)}`, dependencies: {} })
+        return { status: 0, signal: null, pid: 1, output: [], stdout: '', stderr: '' }
+      })
+      const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+      const previous = process.env.DSH_SUPERVISED
+      process.env.DSH_SUPERVISED = '1'
+      try {
+        const result = gateway.uninstallPlugin('external-bundle')
+        expect(result.restartRequested).toBe(true)
+        expect(existsSync(join(profileDir, '.dsh-restart-requested'))).toBe(true)
+        expect(kill).not.toHaveBeenCalled()
+      } finally {
+        process.env.DSH_SUPERVISED = previous
+        kill.mockRestore()
+      }
+    })
   })
 })

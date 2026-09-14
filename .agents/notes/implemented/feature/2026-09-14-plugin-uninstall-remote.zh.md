@@ -12,7 +12,7 @@ Status: implemented
 
 **`PluginInstallGateway` 新增第二个 `@Remote('uninstallPlugin')` 方法 `uninstallPlugin(id: string): PluginUninstallResult`。** 它解析与 `installPlugin` 相同的 profile 目录，用相同的路径安全检查校验 id，并移除 `cordis.patch.yml` 中该 id 分隔的行。当该 id 还拥有一个 `plugins/<id>` 目录时——`file-dir` 或 `upload-directory` 安装——该目录也会一并删除；`npm-register` 的 id 没有这样的目录，因此只移除行。当没有行与该 id 匹配时，调用以新增的 `plugin-install/not-installed` RemoteError 失败，因为对这三种形式而言 patch 行就是唯一的安装记录。
 
-**范围刻意只限于三种可 patch 行寻址的形式；`npm-bundle` 被排除在外。** `file-dir`、`upload-directory` 与 `npm-register` 都以写入相同标记分隔行形态的稳定逐插件 `id` 为键，因此一个 `removeMarkedBlock()`（现有 `upsertMarkedBlock()` 的逆操作）加一个 `uninstallPluginById()` 就能覆盖全部三种。`npm-bundle` 完全没有逐插件 id——它通过 `pnpm add` 与 `dsh.profile.bundles` 层列表集成，这是一个由包管理器所有的依赖图，本服务无法安全剥离其中一行而不冒破坏另一 bundle 传递依赖的风险。Remote 的文档注释与设置标签页文案都指引运算符改为在 profile 目录运行 `pnpm remove`。
+**范围最初只限于三种可 patch 行寻址的形式；`npm-bundle` 被排除在外——[被后续笔记推翻](2026-09-14-plugin-uninstall-npm-bundle.zh.md)。** `file-dir`、`upload-directory` 与 `npm-register` 都以写入相同标记分隔行形态的稳定逐插件 `id` 为键，因此一个 `removeMarkedBlock()`（现有 `upsertMarkedBlock()` 的逆操作）加一个 `uninstallPluginById()` 就能覆盖全部三种。`npm-bundle` 最初没有覆盖：它通过 `pnpm add` 与 `dsh.profile.bundles` 层列表集成，这是一个由包管理器所有的依赖图，本笔记当时的调研尚未找到安全移除它的路径。
 
 **`requestRestartIfSupervised()` 原样复用，措辞被泛化。** `installPlugin` 使用的「先落盘，再请求监督者重启实例」机制现在同时服务两条路径；其日志行从安装专属的「install complete」改为「plugin change complete」，因为它不再只描述单一方向。
 
@@ -28,4 +28,4 @@ Status: implemented
 
 ## Consequences
 
-运算符现在无需离开浏览器即可从设置标签页移除 `file-dir`、`upload-directory` 或 `npm-register` 安装，语义上与安装一样需要重启。`npm-bundle` 安装仍只能手动移除（在 profile 目录运行 `pnpm remove`），这一限制由 Remote 的失败词汇表与标签页文案共同说明，而非静默缺口。宿主包的测试套件新增 8 个用例，覆盖三种受支持形式各自的移除、无关 patch 行的保留、两个失败码，以及受监督重启请求；客户端包的 jsdom 规格新增 4 个用例，覆盖填写前禁用的按钮、成功移除、重启倒计时与 Remote 失败映射。没有会话事件或面向模型的表面发生变化，因此没有快照拥有这条路径。
+运算符现在无需离开浏览器即可从设置标签页移除 `file-dir`、`upload-directory` 或 `npm-register` 安装，语义上与安装一样需要重启。`npm-bundle` 安装最初只能手动移除（在 profile 目录运行 `pnpm remove`）——[后续笔记](2026-09-14-plugin-uninstall-npm-bundle.zh.md)通过改为以 profile 清单的依赖列表而非逐插件 id 来定位 npm-bundle 移除，解除了这一排除。宿主包的测试套件新增 8 个用例，覆盖三种受支持形式各自的移除、无关 patch 行的保留、两个失败码，以及受监督重启请求；客户端包的 jsdom 规格新增 4 个用例，覆盖填写前禁用的按钮、成功移除、重启倒计时与 Remote 失败映射。没有会话事件或面向模型的表面发生变化，因此没有快照拥有这条路径。

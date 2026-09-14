@@ -589,6 +589,56 @@ function installNpmBundle(profileDir: string, spec: NpmBundleInstallSpec): Plugi
   return { form: 'npm-bundle', profileDir, bundlesAdded: added }
 }
 
+/**
+ * Whether `packageName` is an npm-bundle dependency in the profile: a direct
+ * `package.json` dependency, distinct from an in-box template bundle (`dsh-base`
+ * and friends), which is never a dependency and so never matches here. Reading
+ * the manifest is safe for any string — this is the sole gate before a name
+ * reaches `pnpm remove`.
+ * @param profileDir - the profile directory to inspect.
+ * @param packageName - the candidate dependency name.
+ * @returns whether `packageName` is currently a profile dependency.
+ */
+function isNpmBundleDependency(profileDir: string, packageName: string): boolean {
+  if (!existsSync(join(profileDir, 'package.json'))) return false
+  const manifest = readProfileManifest(NAME, profileDir)
+  return Object.hasOwn(manifest.dependencies ?? {}, packageName)
+}
+
+/**
+ * Uninstall the npm-bundle form: `pnpm remove` the dependency, then reconcile
+ * the layer stack so `dsh.profile.bundles` drops it alongside the dependency.
+ * `reconcileProfileBundles` already treats a dependency that disappeared
+ * between `before` and the post-removal manifest as removed, so this reuses
+ * the same reconcile call `installNpmBundle` makes, just after `pnpm remove`
+ * instead of `pnpm add`.
+ * @param profileDir - the profile directory to uninstall from.
+ * @param packageName - the dependency name to remove, already confirmed installed.
+ * @returns the profile directory and the removed package name.
+ */
+function uninstallNpmBundle(profileDir: string, packageName: string): PluginUninstallResult {
+  const before = readProfileManifest(NAME, profileDir)
+  const run = runPnpm(profileDir, ['remove', packageName])
+  if (run.exitCode !== 0) throwPnpmFailure(run, profileDir, 'remove')
+  try {
+    reconcileProfileBundles({
+      binName: NAME,
+      installAnchor: join(profileDir, 'package.json'),
+      profileDir,
+      before,
+      warn: (message) => { console.warn(`[${NAME}] ${message}`) },
+    })
+  } catch (error) {
+    throw new RemoteError(
+      'plugin-install/write-failed',
+      `failed to reconcile the profile layer stack after pnpm remove: ${String(error)}`,
+      { reason: String(error) },
+      { cause: error },
+    )
+  }
+  return { profileDir, pluginId: packageName }
+}
+
 /** A registered entry config must be a plain JSON object, never an array or scalar. */
 interface RegisterConfig {
   readonly value: Record<string, unknown>
@@ -833,18 +883,26 @@ export class PluginInstallGateway extends TypertRemoteService {
   }
 
   /**
-   * Remove one patch-row-registered plugin (file-dir, upload-directory, or
-   * npm-register): delete its patch row and, when present, its
-   * `plugins/<id>` copy. An npm-bundle dependency has no per-plugin id and is
-   * not covered here — `pnpm remove` it directly in the profile directory.
-   * @param id - the plugin id the install request named.
+   * Remove one installed plugin, whichever form installed it. An
+   * npm-bundle dependency (a real `package.json` dependency, checked first
+   * since its name may not be path-safe) is removed with `pnpm remove` and
+   * dropped from `dsh.profile.bundles` by the same reconcile the install path
+   * uses. Otherwise `id` must be a path-safe patch-row id (file-dir,
+   * upload-directory, or npm-register): its patch row is deleted and, when
+   * present, its `plugins/<id>` copy alongside it.
+   * @param id - the plugin id or npm-bundle package name to remove.
    * @returns the profile directory and id removed, and whether a supervised
    *   restart was requested.
    */
   @Remote('uninstallPlugin')
   uninstallPlugin(id: string): PluginUninstallResult {
-    assertPluginId(id)
     const profileDir = this.resolveProfileDir()
+    if (isNpmBundleDependency(profileDir, id)) {
+      const result = uninstallNpmBundle(profileDir, id)
+      const restartRequested = requestRestartIfSupervised(profileDir)
+      return restartRequested ? { ...result, restartRequested: true } : result
+    }
+    assertPluginId(id)
     if (!uninstallPluginById(profileDir, id)) {
       throw new RemoteError(
         'plugin-install/not-installed',
