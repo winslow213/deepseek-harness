@@ -91,12 +91,22 @@ function signalOptions(signal?: AbortSignal): { signal: AbortSignal } | undefine
   return signal === undefined ? undefined : { signal }
 }
 
+// EACCES is included alongside ENOENT/ENOTDIR: a path the process cannot read
+// carries no marker or instruction content it could report either way, so an
+// upward walk (findProjectRoot) or a candidate-file probe treats it the same
+// as absent instead of surfacing (and, for the walk, aborting on) a permission error.
 function isMissingPathError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+  return error instanceof Error && 'code' in error
+    && (error.code === 'ENOENT' || error.code === 'ENOTDIR' || error.code === 'EACCES')
 }
 
+// FS_PERMISSION_DENIED is included alongside FS_NOT_FOUND for the same reason:
+// a fs seam boundary (e.g. the team-shell region-router's workspace fence)
+// denying a path is indistinguishable, from this probe's perspective, from
+// that path not existing — both mean "no marker readable here."
 function isMissingProviderPathError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'FS_NOT_FOUND'
+  return error instanceof Error && 'code' in error
+    && (error.code === 'FS_NOT_FOUND' || error.code === 'FS_PERMISSION_DENIED')
 }
 
 async function nodeStatFile(path: string, signal?: AbortSignal): Promise<StatFileProbe> {

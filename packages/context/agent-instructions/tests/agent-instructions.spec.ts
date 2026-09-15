@@ -79,6 +79,7 @@ class RecordingFileSystem extends FileSystem {
   entries = new Map<string, { type: FsInfo['type']; content?: string; version?: FsVersion }>()
   missingOnResolve = new Set<string>()
   throwOnStat = new Set<string>()
+  denyOnStat = new Set<string>()
   throwOnRead = new Set<string>()
   omitSizes = new Set<string>()
   readTargets: string[] = []
@@ -110,6 +111,9 @@ class RecordingFileSystem extends FileSystem {
     if (signal !== undefined) this.signals.push(signal)
     signal?.throwIfAborted()
     if (this.throwOnStat.has(target.targetKey)) throw new Error(`stat failed: ${target.displayPath}`)
+    if (this.denyOnStat.has(target.targetKey)) {
+      throw Object.assign(new Error(`cannot read "${target.displayPath}": access denied`), { code: 'FS_PERMISSION_DENIED' })
+    }
     const entry = this.entries.get(target.targetKey)
     if (entry === undefined) return undefined
     const info: FsInfo = {
@@ -2343,6 +2347,33 @@ describe('workspace context request injection', () => {
     }
   })
 
+  it('treats a denied ancestor marker probe as absent instead of crashing the walk', async () => {
+    const root = await tempRepo()
+    const cwd = join(root, 'pkg')
+    const home = await tempRepo()
+    try {
+      const ctx = new Context()
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      // A fs seam boundary (e.g. the team-shell region-router's workspace
+      // fence) denies the ancestor marker probe rather than the marker not
+      // existing; the walk must treat this the same as "not found" and keep
+      // climbing instead of throwing.
+      fs.denyOnStat.add(join(cwd, '.git'))
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: 'ancestor rule' })
+      await mountWorkspaceContextPlugin(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = await stubAgent(cwd)
+
+      await composeBaselinePrefix(ctx, agent)
+
+      expect(derivedText(agent)).toContain('ancestor rule')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('keeps different session cwd instruction files isolated in one context', async () => {
     const repoA = await tempRepo()
     const repoB = await tempRepo()
@@ -2551,7 +2582,7 @@ describe('workspace context request injection', () => {
           ...actual,
           stat: async (path: string) => {
             if (path === join(root, 'AGENTS.md')) {
-              throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+              throw Object.assign(new Error('input/output error'), { code: 'EIO' })
             }
             return actual.stat(path)
           },
@@ -2570,7 +2601,7 @@ describe('workspace context request injection', () => {
     }
   })
 
-  it('surfaces host marker metadata failures instead of crossing into an ancestor project', async () => {
+  it('treats a denied host marker probe (EACCES) as absent instead of crashing the walk', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {
@@ -2578,6 +2609,43 @@ describe('workspace context request injection', () => {
       const markerPath = join(cwd, '.git')
       const failure = Object.assign(new Error(`permission denied: ${markerPath}`), {
         code: 'EACCES',
+        path: markerPath,
+      })
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'ancestor rule')
+      await mkdir(cwd, { recursive: true })
+      vi.resetModules()
+      vi.doMock('node:fs/promises', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('node:fs/promises')>()
+        return {
+          ...actual,
+          stat: async (path: string) => {
+            if (path === markerPath) throw failure
+            return actual.stat(path)
+          },
+        }
+      })
+      const isolated = await import('@deepseek-ai/dsh-agent-instructions')
+
+      const rendered = await isolated.loadBaselineInstructions({ cwd, dshHome: home, maxBytes: 65536 })
+
+      expect(rendered?.text).toContain('ancestor rule')
+    } finally {
+      vi.doUnmock('node:fs/promises')
+      vi.resetModules()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('still surfaces a genuine host marker probe failure instead of treating it as absent', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      const cwd = join(root, 'pkg')
+      const markerPath = join(cwd, '.git')
+      const failure = Object.assign(new Error(`input/output error: ${markerPath}`), {
+        code: 'EIO',
         path: markerPath,
       })
       await mkdir(join(root, '.git'), { recursive: true })
