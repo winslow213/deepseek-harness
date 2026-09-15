@@ -59,6 +59,62 @@ export async function listMounts(hubBase: string): Promise<MountRecord[]> {
   return (await res.json()) as MountRecord[]
 }
 
+/** Time to wait before reconnecting a dropped mount-stream subscription. */
+const MOUNTS_STREAM_RECONNECT_DELAY_MS = 2_000
+
+/**
+ * Subscribe to the hub's mount-table push channel (GET /api/mounts/stream):
+ * one NDJSON line immediately, and one more each time a pair, reconnect, or
+ * disconnect changes the table. Reconnects with a fixed delay on any drop
+ * (hub restart, network blip) so a transient outage self-heals instead of
+ * leaving the subscriber on a permanently stale table.
+ * @returns a disposer that stops the subscription (aborts the in-flight
+ *   connection and skips any further reconnect).
+ */
+export function subscribeMounts(hubBase: string, onChange: (mounts: MountRecord[]) => void): () => void {
+  const controller = new AbortController()
+  let stopped = false
+
+  async function connectOnce(): Promise<void> {
+    const res = await fetch(`${hubControlBase(hubBase)}/api/mounts/stream`, { signal: controller.signal })
+    if (!res.ok || res.body === null) throw new Error(`hub returned ${String(res.status)}`)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let pending = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return
+      pending += decoder.decode(value, { stream: true })
+      let newline: number
+      while ((newline = pending.indexOf('\n')) >= 0) {
+        const line = pending.slice(0, newline)
+        pending = pending.slice(newline + 1)
+        if (line.length === 0) continue
+        onChange(JSON.parse(line) as MountRecord[])
+      }
+    }
+  }
+
+  void (async () => {
+    while (!stopped) {
+      try {
+        await connectOnce()
+      } catch {
+        // Aborted by dispose, or a transient connect/stream failure — either
+        // way, fall through to the reconnect delay below (dispose also flips
+        // `stopped`, so the loop exits before reconnecting).
+      }
+      if (stopped) return
+      await new Promise((resolve) => setTimeout(resolve, MOUNTS_STREAM_RECONNECT_DELAY_MS))
+    }
+  })()
+
+  return () => {
+    stopped = true
+    controller.abort()
+  }
+}
+
 /** Parse an NDJSON body into frames; rejects on HTTP errors. */
 export async function readFrames(res: Response, onFrame: (frame: ResultFrame) => void): Promise<void> {
   if (!res.ok) {

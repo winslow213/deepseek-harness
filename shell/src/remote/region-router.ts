@@ -38,7 +38,7 @@ import type {
 } from '@deepseek-ai/dsh-fs'
 import { isAbsolute, resolve as pathResolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { listMounts, fsOp, HubFsError } from './client.ts'
+import { listMounts, subscribeMounts, fsOp, HubFsError } from './client.ts'
 import { translateShadowPath, type ShadowTranslation } from './shadow.ts'
 import type { MountRecord } from './hub.ts'
 
@@ -104,7 +104,13 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
       user: config.user,
       ...config.workspaceRoot === undefined ? {} : { workspaceRoot: canonicalPath(config.workspaceRoot.replace(/\/+$/, '')) },
     }
+    // Fast bootstrap fetch for anything that arrives before the subscription
+    // below lands its first message; the subscription is the source of
+    // truth afterward — a mount's shadow path is keyed by agent id alone, so
+    // a re-pair with a different `--root` keeps the same shadow path and an
+    // on-access-only cache would never notice the change without this push.
     void this.refreshMounts()
+    ctx.effect(() => subscribeMounts(this.region.hubUrl, (mounts) => { this.mountsCache = mounts }))
   }
 
   private async refreshMounts(): Promise<void> {
@@ -117,9 +123,10 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
 
   /**
    * Ensure the mount cache is warm for a shadow path before dispatch. The
-   * cache is pulled fire-and-forget at construction, so an access that arrives
-   * before the pull settles (or before a freshly paired agent registered)
-   * would otherwise fall through to the empty local shadow stub.
+   * cache is pulled fire-and-forget at construction (and refreshed on the
+   * background poll above), so an access that arrives before the first pull
+   * settles — or before a freshly paired agent registered, ahead of the next
+   * poll tick — would otherwise fall through to the empty local shadow stub.
    */
   private async refreshFor(path: string): Promise<void> {
     if (!this.isShadow(path) || this.remoteOf(path) !== undefined) return

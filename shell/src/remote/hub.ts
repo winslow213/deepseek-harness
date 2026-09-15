@@ -332,6 +332,10 @@ export function createHub(options: HubOptions): TeamHub {
   const byAgentId = new Map<string, AgentConn>()
   const pairings = new Map<string, PendingPairing>()
   const pending = new Map<string, PendingRequest>()
+  // Streamed to every `/api/mounts/stream` subscriber whenever an agent pairs,
+  // reconnects, or disconnects — the region-router's push channel, so it
+  // learns of a root change at the moment it happens instead of on a timer.
+  const mountSubscribers = new Set<ServerResponse>()
   const tokens = new Map(options.tokens)
   const heartbeatMs = options.heartbeatMs ?? 15_000
   const pairingTtlMs = options.pairingTtlMs ?? 10 * 60 * 1000
@@ -375,6 +379,7 @@ export function createHub(options: HubOptions): TeamHub {
             conn = result
             authenticating = false
             console.log(`[hub] agent online user=${conn.user} agent=${conn.agentId} remote=${conn.remote}`)
+            notifyMountsChanged()
           })
       },
       (message) => {
@@ -396,6 +401,7 @@ export function createHub(options: HubOptions): TeamHub {
       }
       if (byAgentId.get(conn.agentId) === conn) byAgentId.delete(conn.agentId)
       console.log(`[hub] agent offline user=${conn.user} agent=${conn.agentId}`)
+      notifyMountsChanged()
       // Fail open request streams still waiting on the dead channel.
       for (const [id, p] of pending) {
         if (p.conn === conn) {
@@ -437,6 +443,16 @@ export function createHub(options: HubOptions): TeamHub {
     if (url.pathname === '/api/mounts' && (req.method ?? 'GET') === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify(mounts(), null, 2))
+      return
+    }
+    if (url.pathname === '/api/mounts/stream' && (req.method ?? 'GET') === 'GET') {
+      // Long-lived NDJSON push: one line now, and one more each time a pair,
+      // reconnect, or disconnect changes the mount table (notifyMountsChanged
+      // above) — the region-router subscribes instead of polling.
+      res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache' })
+      res.write(`${JSON.stringify(mounts())}\n`)
+      mountSubscribers.add(res)
+      req.on('close', () => { mountSubscribers.delete(res) })
       return
     }
     if (req.method !== 'POST') {
@@ -627,6 +643,15 @@ export function createHub(options: HubOptions): TeamHub {
     return result.sort((a, b) => a.shadowPath.localeCompare(b.shadowPath))
   }
 
+  /** Push the current mount table to every subscribed region-router. */
+  function notifyMountsChanged(): void {
+    if (mountSubscribers.size === 0) return
+    const line = `${JSON.stringify(mounts())}\n`
+    for (const res of mountSubscribers) {
+      if (!res.destroyed && !res.writableEnded) res.write(line)
+    }
+  }
+
   function pairingList(): PendingPairing[] {
     return [...pairings.values()].sort((a, b) => b.createdAt - a.createdAt)
   }
@@ -651,6 +676,12 @@ export function createHub(options: HubOptions): TeamHub {
         if (!p.res.destroyed && !p.res.writableEnded) p.res.end()
       }
       pending.clear()
+      // Long-lived mount-stream subscriptions never end on their own; leaving
+      // one open would keep controlServer.close() waiting forever below.
+      for (const res of mountSubscribers) {
+        if (!res.destroyed && !res.writableEnded) res.end()
+      }
+      mountSubscribers.clear()
       let remaining = 2
       const done = () => {
         remaining -= 1
