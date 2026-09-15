@@ -4,7 +4,9 @@ import { createServer } from 'node:http'
 import type { Server, ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
+import { stat } from 'node:fs/promises'
 import { Context } from '@deepseek-ai/cordis'
+import { FsError } from '@deepseek-ai/dsh-fs'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { RegionRouterFileSystem } from '../src/remote/region-router.ts'
@@ -139,6 +141,37 @@ describe('RegionRouterFileSystem mount cache', () => {
       const target = await fs.resolve(parentPath)
       const info = await fs.stat(target)
       assert.equal(info, undefined, 'a nonexistent path outside any live mount reads as a plain miss, not a permission error')
+    } finally {
+      await fiber.dispose()
+    }
+  })
+
+  it('rejects a write under the shadow tree with no live mount instead of writing it to local disk', async () => {
+    hub.setRoot('D:\\workspace\\hap_project\\OH_Hap')
+
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: tmpdir() })
+    const fiber = await ctx.plugin(RegionRouterFileSystem, {
+      hubUrl: url,
+      shadowRoot: SHADOW_ROOT,
+      user: USER,
+      workspaceRoot: tmpdir(),
+    })
+    try {
+      const fs = ctx.fs as RegionRouterFileSystem
+      await new Promise((resolve) => setTimeout(resolve, 30))
+
+      // Under the shadow root but not a live mount (a stale directory from an
+      // earlier pairing, or a sibling agent id this hub doesn't report).
+      const unmatchedPath = `${SHADOW_ROOT}/${USER}/some-other-agent/file.txt`
+      const target = await fs.resolve(unmatchedPath)
+      await assert.rejects(
+        () => fs.writeText(target, 'hello'),
+        (error: unknown) => error instanceof FsError && error.code === 'FS_IO_ERROR',
+        'a shadow-tree write with no live mount must fail loudly, not silently create a local file',
+      )
+      await assert.rejects(() => stat(unmatchedPath), 'must not have created anything on local disk')
     } finally {
       await fiber.dispose()
     }

@@ -308,6 +308,23 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
     return super.listDir(target, signal)
   }
 
+  /**
+   * Reject a write/edit under the shadow tree with no live matching mount.
+   * Unlike a read (which falls back to ordinary local semantics, since a miss
+   * there is harmless — see `assertLocalReadable`), silently writing real
+   * bytes to the local shadow directory would create content that diverges
+   * from the actual remote root the moment its agent reconnects: the caller
+   * believes it wrote to the mounted machine, but the bytes never left this
+   * server. Surface that loudly instead of writing them anywhere.
+   */
+  private assertShadowWriteRoutable(target: FsTarget): void {
+    if (!this.isShadow(target.displayPath)) return
+    throw new FsError(
+      `cannot write "${target.displayPath}": the mounted agent is offline or no longer paired`,
+      'FS_IO_ERROR',
+    )
+  }
+
   override async writeText(
     target: FsTarget,
     content: string,
@@ -332,6 +349,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
         after: outcome.after,
       }
     }
+    this.assertShadowWriteRoutable(target)
     return super.writeText(target, content, expected, signal, sandboxPolicy)
   }
 
@@ -359,6 +377,7 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
         after: outcome.after,
       }
     }
+    this.assertShadowWriteRoutable(target)
     return super.editText(target, edit, expected, signal)
   }
 
