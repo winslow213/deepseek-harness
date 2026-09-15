@@ -114,4 +114,33 @@ describe('RegionRouterFileSystem mount cache', () => {
       await fiber.dispose()
     }
   })
+
+  it('probes a shadow-tree path with no live mount as ordinary local semantics instead of denying it', async () => {
+    hub.setRoot('D:\\workspace\\hap_project\\OH_Hap')
+
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: tmpdir() })
+    const fiber = await ctx.plugin(RegionRouterFileSystem, {
+      hubUrl: url,
+      shadowRoot: SHADOW_ROOT,
+      user: USER,
+      workspaceRoot: tmpdir(),
+    })
+    try {
+      const fs = ctx.fs as RegionRouterFileSystem
+      await new Promise((resolve) => setTimeout(resolve, 30))
+
+      // A parent of the mounted shadow path (e.g. the user-level shadow
+      // directory) has no matching mount: an upward walk from cwd looking for
+      // a marker file (a git-root search is the common case) must see this as
+      // an ordinary miss, not a hard FS_PERMISSION_DENIED that fails the turn.
+      const parentPath = `${SHADOW_ROOT}/${USER}/.git`
+      const target = await fs.resolve(parentPath)
+      const info = await fs.stat(target)
+      assert.equal(info, undefined, 'a nonexistent path outside any live mount reads as a plain miss, not a permission error')
+    } finally {
+      await fiber.dispose()
+    }
+  })
 })

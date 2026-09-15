@@ -181,12 +181,18 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
   /**
    * Enforce the account's read boundary on a LOCAL target: a read outside the
    * private workspace is denied with `FS_PERMISSION_DENIED`. Mounted shadow
-   * targets are remote-served and skip this fence; a region-router with no
-   * `workspaceRoot` keeps the inherited read-anywhere semantics.
+   * targets are remote-served and skip this fence, and so does any other path
+   * under the shadow root: an unmatched shadow-tree path (a stale directory
+   * left behind by an earlier pairing under a different root, or a parent
+   * directory a caller's upward walk — e.g. git-repo-root detection — probes
+   * looking for a marker file) is neither the account's private workspace nor
+   * a live mount, so it falls back to ordinary local semantics instead of a
+   * hard permission error. A region-router with no `workspaceRoot` keeps the
+   * inherited read-anywhere semantics.
    * @param target - the resolved target (its `targetKey` is the canonical path).
    */
   private async assertLocalReadable(target: FsTarget): Promise<void> {
-    if (this.shadowTarget(target) !== undefined) return
+    if (this.shadowTarget(target) !== undefined || this.isShadow(target.displayPath)) return
     const root = this.region.workspaceRoot
     if (root === undefined) return
     if (!isLexicallyUnder(String(target.targetKey), root)) {
