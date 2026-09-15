@@ -206,6 +206,27 @@ async function resolveUnderRoot(absPath: string, realRoots: readonly string[]): 
 }
 
 /**
+ * Resolve the real path `lstat` should probe without following: the parent
+ * directory is realpath-resolved and whitelist-checked, then the final
+ * component is re-appended literal, so a symlink at the final component is
+ * reported instead of followed. An allowlisted root itself has no parent
+ * inside the allowlist by construction (its parent is one level above the
+ * boundary), so that specific case falls back to resolving the whole path
+ * directly — this only relaxes the boundary at exactly a configured root,
+ * never a path genuinely outside it, since the fallback still enforces the
+ * same allowlist through `resolveUnderRoot`.
+ */
+export async function resolveLstatTarget(absPath: string, realRoots: readonly string[]): Promise<string> {
+  try {
+    const dirReal = await resolveUnderRoot(dirname(absPath), realRoots)
+    return join(dirReal, basename(absPath))
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith('path outside allowed roots')) throw error
+    return resolveUnderRoot(absPath, realRoots)
+  }
+}
+
+/**
  * Reject exec path arguments that could escape the allowlisted roots.
  *
  * Command-level allowlists alone are leaky (`head /etc/hostname`). This
@@ -372,10 +393,8 @@ async function runFsOp(session: Session, req: FsOpRequest): Promise<void> {
       }
       case 'lstat': {
         if (req.path === undefined) { fail('lstat: path is required'); return }
-        // Whitelist-check the parent directory (realpath-resolved) but keep the
-        // final component literal so a symlink is reported, not followed.
-        const dirReal = await resolveUnderRoot(dirname(req.path), session.realRoots)
-        succeed(await probeNoFollow(join(dirReal, basename(req.path))))
+        const target = await resolveLstatTarget(req.path, session.realRoots)
+        succeed(await probeNoFollow(target))
         return
       }
       case 'list': {
