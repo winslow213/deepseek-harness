@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-settings-plugin-install` 向 Web 设置的「插件」分区贡献**安装插件**标签页。标签页提供四种安装方式——把本地插件目录复制进 profile、对 npm 包执行 `pnpm add`、上传所选目录、或为已安装的 npm 插件注册启动行——并把所选方式提交给 `ctx.remote.pluginInstall.installPlugin()`。安装运行期间表单被锁定、提交按钮显示进度；成功后标签页报告写入的配置目录以及安装的插件 id 或被提升的 bundle，失败时显示 Remote 错误消息与错误码。同一标签页的第二个区域按安装时使用的 id（patch 行 id 或 npm-bundle 包名）卸载插件，提交给 `ctx.remote.pluginInstall.uninstallPlugin()` 并报告被移除的配置目录与 id，或 Remote 错误消息与错误码；它覆盖全部四种安装方式。两种改动都只在 Web 实例重启后生效，两种状态下标签页都会说明这一点。只有设置操作员开关 `DSH_PLUGIN_INSTALL=true` 时标签页才注册，与宿主侧安装 Remote 一致。
+`dsh-client-ui-settings-plugin-install` 向 Web 设置的「插件」分区贡献**安装插件**标签页。它提供四种安装方式——把本地插件目录复制进 profile、对 npm 包执行 `pnpm add`、上传所选目录、或为已安装的 npm 插件注册启动行——提交给 `ctx.remote.pluginInstall.installPlugin()`；表单会锁定并显示进度，随后报告写入的配置目录与插件 id，或 Remote 错误。第二个区域按安装时的 id 通过 `ctx.remote.pluginInstall.uninstallPlugin()` 卸载插件，覆盖全部四种安装方式。两种操作都只在 Web 实例重启后生效。只有设置 `DSH_PLUGIN_INSTALL=true` 时标签页才会注册。
 
 ## 目录
 

@@ -9,9 +9,9 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package adds two rows to Web Settings General: **Pairing code** (生成配对码) and **Sign out** (退出登录). Both appear only when the served document carries the `<meta name="team-shell">` marker that the team reverse proxy injects, so a plain single-user dsh deployment stays unchanged.
+This package adds two rows to Web Settings General: **Pairing code** (生成配对码) and **Sign out** (退出登录). Both appear only when the served document carries the `<meta name="team-shell">` marker the team reverse proxy injects, so a plain single-user dsh deployment stays unchanged.
 
-The **Sign out** row posts to the same-origin `/api/logout` — the proxy answers by clearing both the team session and the dsh instance cookie — and then navigates to `/`, where the unauthenticated entry serves the login page. The **Pairing code** row posts to the same-origin `/api/pairings` (proxied to the account service, session-authenticated), then shows the minted code, the claim command to run on each device, and a copy control; the code is multi-use within its TTL so one code can mount several devices.
+**Sign out** posts to same-origin `/api/logout`, clearing the team session and dsh instance cookie, then navigates to `/` for the unauthenticated login page. **Pairing code** posts to same-origin `/api/pairings` (proxied to the account service, session-authenticated) and shows the minted code, claim command, and a copy control; the code is multi-use within its TTL, so one code mounts several devices.
 
 ## Table of Contents
 

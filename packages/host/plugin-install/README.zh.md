@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 profile 目录：以 `file-dir` 形式调用 `pluginInstall/installPlugin` 会把源目录拷贝到 profile 的 `plugins/<id>` 下，并在用户 patch 层登记其 patch 行；`npm-bundle` 形式则在 profile 目录运行 `pnpm add`，并把 bundle 提升进 profile 的 `dsh.profile.bundles` 层列表；`npm-register` 形式则为已安装的 Cordis npm 插件补写启动行。以 id 调用 `pluginInstall/uninstallPlugin` 覆盖全部三种形式：若 id 命中某个 npm-bundle 依赖，会运行 `pnpm remove` 并通过与安装路径相同的调和逻辑把它从 `dsh.profile.bundles` 中移除；其余 id 则回退到移除对应的 patch 行（`file-dir`、`upload-directory` 或 `npm-register`），对拷贝类安装还会一并删除其 `plugins/<id>` 目录。该服务受运算符门控：`PluginInstallGateway` 类在 `enabled: true` 之外拒绝挂载，且 web-app 组合在运算符设置 `DSH_PLUGIN_INSTALL=true` 之前禁用整行，因此默认部署从不加载该包。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
+Web 实例可以通过 Remote 命名空间把外部插件安装进自己的 profile 目录。`pluginInstall/installPlugin` 支持三种形式：`file-dir` 把源目录拷贝到 `plugins/<id>` 下并登记 patch 行；`npm-bundle` 运行 `pnpm add` 并把 bundle 提升进 `dsh.profile.bundles`；`npm-register` 为已安装的 npm 插件补写启动行。`pluginInstall/uninstallPlugin` 通过同一套调和逻辑覆盖全部三种形式：npm-bundle id 运行 `pnpm remove` 并移除 bundles 条目，其余 id（`file-dir`、`upload-directory`、`npm-register`）移除对应 patch 行，对拷贝类安装还会一并删除其 `plugins/<id>` 目录。该服务受运算符门控（`enabled: true`、`DSH_PLUGIN_INSTALL=true`）；client 包通过 [`api-remotes`](../../api/remotes/README.zh.md) 消费它。
 
 ## 目录
 

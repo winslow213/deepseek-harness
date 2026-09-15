@@ -9,9 +9,9 @@ kind: "package-reference"
 
 ## 概述
 
-借助 `dsh-tool-a2ui-store`，模型用 `a2ui_surface` 生成的页面可以保存为独立文件并分享：`a2ui_export` 工具与 `ctx.a2uiStore` 能力把规范的页面定义——声明式 DSL、字段逻辑（`visibleWhen`/`validateWhen`/`compute`）以及 `actions`——按「每个工具一个 JSON 文档」持久化到 `<harness home>/a2ui-tools/`。每次写入都是原子替换，读取时畸形的文档会被跳过而不遮蔽其余文件。存储层就是分发边界：保存的文件可在部署之间复制、重新导入，而无需重新生成页面；保存的工具也可以作为自包含的承载令牌跨用户分享（`a2ui_share`/`a2ui_import`，或能力上的 `share`/`import`）。
+借助 `dsh-tool-a2ui-store`，用 `a2ui_surface` 生成的页面可以保存为独立文件并分享：`a2ui_export`/`ctx.a2uiStore` 把规范的页面定义——DSL、字段逻辑与 `actions`——按「每个工具一个 JSON 文档」原子写入 `<harness home>/a2ui-tools/`；读取时畸形的文档会被跳过。保存的文件可在部署之间复制、重新导入而无需重新生成页面，或作为自包含的承载令牌跨用户分享（`a2ui_share`/`a2ui_import`）。
 
-本包还拥有两条页面关联的执行通道：`ctx.a2uiRun` 在会话工作区内通过组合的 shell 服务启动 `command` action，并把其输出记录为持久的 `a2ui/update` 流；`ctx.a2uiLive` 则把 `model` action 的后台 job 流式进入同一持久流（经 `a2ui_attach_output` 工具，模型用其刚启动的 job id 调用它）。
+本包还拥有两条页面关联的执行通道：`ctx.a2uiRun` 通过组合的 shell 服务启动 `command` action，并把输出记录为 `a2ui/update` 流；`ctx.a2uiLive` 经 `a2ui_attach_output` 把 `model` action 的后台 job 流式接入同一流。
 
 ## 目录
 

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-With `dsh-tool-a2ui-surface`, the model can open an interactive page in the web UI instead of collecting structured input through free text: it authors a declarative page JSON — a fillable form or a draggable node canvas — and the browser draws the page natively from the durable session log. Each call appends one `a2ui/surface` record to the calling agent's session, so the page survives refresh, replay, and later session opens. The user's submission returns to the model as an ordinary `user/message` carrying the same `surfaceId` and the collected payload, which keeps the round trip inside the message loop the model already understands. The page vocabulary is deliberately small (five field kinds and one node-graph shape) so the browser can trust and replay the record; a deployment chooses whether the model may refine an existing surface through the required `allowUpdate` config.
+With `dsh-tool-a2ui-surface`, the model opens an interactive page in the web UI instead of free text: it authors a page JSON — a form or a draggable node canvas — and the browser draws it from the session log. Each call appends one `a2ui/surface` record to the agent's session, so the page survives refresh, replay, and later opens. The submission returns as an ordinary `user/message` carrying the same `surfaceId` and payload, keeping the round trip inside the message loop. The page vocabulary stays small; a deployment chooses whether the model may refine a surface via the required `allowUpdate` config.
 
 ## Table of Contents
 

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-a2ui-store` is the browser plugin that adds a sidebar footer entry for saved A2UI tools. Clicking the entry opens a popover listing every page previously saved by the `a2ui_export` tool into the harness home's `a2ui-tools` directory; clicking a tool re-opens its page into the current session, and the trash control removes the saved file. The list and each action travel over the `a2uiStore` Typert Remote to the host-side `dsh-tool-a2ui-store` controller, so the browser never touches the filesystem. Re-opening a tool appends a fresh `a2ui/surface` record to the live session, which the existing `ui-a2ui` projection renders as an interactive Chat node. Copy lives in the `a2uiStore` locale namespace (zh and en); the plugin takes no configuration.
+`dsh-client-ui-a2ui-store` is the browser plugin that adds a sidebar footer entry for saved A2UI tools. Clicking the entry opens a popover listing every page previously saved by `a2ui_export` into the harness home's `a2ui-tools` directory; clicking a tool re-opens its page into the current session, and the trash control removes the saved file. The list and each action travel over the `a2uiStore` Typert Remote to the host-side `dsh-tool-a2ui-store` controller, so the browser never touches the filesystem. Re-opening a tool appends a fresh `a2ui/surface` record, which `ui-a2ui` renders as an interactive Chat node. The plugin takes no configuration.
 
 ## Table of Contents
 

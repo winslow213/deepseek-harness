@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-a2ui` 是在 dsh web 客户端中绘制模型创作的 A2UI 页面的浏览器插件：它把每条持久 `a2ui/surface` 会话记录投影为可交互的 Chat 节点，根据声明式页面 JSON 原生渲染。用户填写表单字段或拖拽 canvas 节点与连线后提交；面板把收集到的载荷作为携带相同 `surfaceId` 的 `user/message` 发回模型，但以插件 `notice` 来源记录，因此聊天区把提交折叠为一行上下文行而不是完整的提示气泡，模型仍完整收到载荷。投影是确定性回放：每次打开事件都成为以 `surfaceId#seq` 为键的独立会话行，因此刻意复用的 surface 身份会打开新页面，而不是修改更早的页面。轮次中途打开的页面即使在紧凑 transcript 下关闭该轮次后，仍作为独立会话行保持可见。文案位于 `a2ui` locale 命名空间（中文与英文）；插件不需要任何配置。
+`dsh-client-ui-a2ui` 是在 dsh web 客户端中绘制模型创作的 A2UI 页面的浏览器插件：它把每条持久 `a2ui/surface` 记录投影为可交互的 Chat 节点，根据页面 JSON 渲染。用户填写表单字段或拖拽 canvas 节点后提交；面板把载荷作为携带相同 `surfaceId` 的 `user/message` 发回，但以插件 `notice` 来源记录，从而把提交折叠为一行。回放是确定性的：每次打开事件都成为以 `surfaceId#seq` 为键的独立会话行，因此复用的 surface 身份会打开新页面，而轮次中途打开的页面在该轮次关闭后仍保持可见。插件不需要任何配置。
 
 ## 目录
 

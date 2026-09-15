@@ -82,6 +82,8 @@ flowchart LR
   svc_storageDomain["ctx.storageDomain<br/>Domain data facility"]
   pkg_workspace["workspace"]
   svc_messageFeedback["ctx.messageFeedback<br/>Lifecycle-bound message feedback"]
+  pkg_command_feedback["command-feedback"]
+  svc_sessionFeedback["ctx.sessionFeedback<br/>Session-level feedback recorder"]
   svc_workspaceRegistry["ctx.workspaceRegistry<br/>Workspace entity registry"]
   svc_sessionQuery["ctx.sessionQuery<br/>Session reads, traces, filters, and search"]
   pkg_session_reference["session-reference"]
@@ -227,6 +229,13 @@ flowchart LR
   svc_a2uiRun["ctx.a2uiRun<br/>A2UI command-run capability"]
   svc_a2uiStoreController["ctx.a2uiStoreController<br/>A2UI store Remote controller"]
   svc_a2uiRunController["ctx.a2uiRunController<br/>A2UI run Remote controller"]
+  svc_a2uiLive["ctx.a2uiLive<br/>A2UI live-result streaming"]
+  svc_a2uiLiveController["ctx.a2uiLiveController<br/>A2UI live Remote controller"]
+  pkg_client_ui_a2ui["client-ui-a2ui"]
+  pkg_tool_a2ui_data["tool-a2ui-data"]
+  svc_a2uiData["ctx.a2uiData<br/>A2UI dynamic data-source capability"]
+  pkg_tool_a2ui_data_bash["tool-a2ui-data-bash"]
+  svc_a2uiDataController["ctx.a2uiDataController<br/>A2UI data Remote controller"]
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
   pkg_agent_loop --> svc_agentLoop
@@ -249,6 +258,7 @@ flowchart LR
   pkg_client_modules --> svc_clientModules
   pkg_code_runtime --> svc_codeRuntime
   pkg_code_runtime_worker_thread --> svc_codeRuntime
+  pkg_command_feedback --> svc_sessionFeedback
   pkg_commands --> svc_commands
   pkg_compaction --> svc_compaction
   pkg_compaction_basic --> svc_compaction
@@ -331,6 +341,11 @@ flowchart LR
   pkg_terminal --> svc_terminals
   pkg_terminal_bash --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
+  pkg_tool_a2ui_data --> svc_a2uiData
+  pkg_tool_a2ui_data --> svc_a2uiDataController
+  pkg_tool_a2ui_data_bash --> svc_a2uiData
+  pkg_tool_a2ui_store --> svc_a2uiLive
+  pkg_tool_a2ui_store --> svc_a2uiLiveController
   pkg_tool_a2ui_store --> svc_a2uiRun
   pkg_tool_a2ui_store --> svc_a2uiRunController
   pkg_tool_a2ui_store --> svc_a2uiStore
@@ -349,6 +364,8 @@ flowchart LR
   pkg_workflow --> svc_workflowEngine
   pkg_workflow_worker_thread --> svc_workflowEngine
   pkg_workspace --> svc_workspaceRegistry
+  svc_a2uiDataController --> pkg_client_ui_a2ui
+  svc_a2uiLiveController --> pkg_client_ui_a2ui
   svc_agentDefaultModel --> pkg_api_session_controller
   svc_agentDefaultModel --> pkg_headless
   svc_agentLoop --> pkg_base
@@ -507,6 +524,7 @@ flowchart LR
 | `ctx.storage` | `seam` | [`storage`](../packages/storage/storage) | [`storage-json`](../packages/storage/storage-json), [`storage-sqlite`](../packages/storage/storage-sqlite) | [`storage-domain`](../packages/storage/storage-domain) | - | Backends register side by side under names; data forms (domain first) mount on the hub and translate typed operations into opaque KV-unit primitives. |
 | `ctx.storageDomain` | `core` | [`storage-domain`](../packages/storage/storage-domain) | - | [`workspace`](../packages/workspace/workspace) | - | Waits for every configured backend, then publishes the domain form as one lifecycle-bound service for typed durable state. |
 | `ctx.messageFeedback` | `core` | [`message-feedback`](../packages/feedback/message-feedback) | - | - | - | Owns per-assistant-message feedback in the canonical Session log, target validation, per-item compare-and-set, and the Host unary Remote contract. Feedback stays outside model history; log export follows the consumer policy. |
+| `ctx.sessionFeedback` | `core` | [`command-feedback`](../packages/feedback/command-feedback) | - | - | - | Records one Session-level remark with its category as a log-only feedback/record event on a live Session through the Host unary Remote contract; the /feedback command shares the same producer. |
 | `ctx.workspaceRegistry` | `core` | [`workspace`](../packages/workspace/workspace) | - | [`api-workspace-controller`](../packages/api/workspace-controller), [`api-session-controller`](../packages/api/session-controller) | - | Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections. |
 | `ctx.sessionQuery` | `seam` | [`session-query`](../packages/session-query/session-query) | [`session-query-sqlite`](../packages/session-query/session-query-sqlite) | [`session-reference`](../packages/context/session-reference), [`tool-session-query`](../packages/session-query/tool-session-query) | - | The interface supplies exact reads, filters, and traces; its concrete backend adds full-text reconciliation, ranking, snippets, and cursor generations, while the model consumer owns workspace authority and cursor-free rendering. |
 | `ctx.fileReferences` | `seam` | [`file-reference`](../packages/context/file-reference) | [`file-reference-local`](../packages/context/file-reference-local) | [`api-session-controller`](../packages/api/session-controller) | - | The interface returns path-only completion candidates within an Agent cwd; providers own namespace access and ranking without reading file contents. |
@@ -555,5 +573,9 @@ flowchart LR
 | `ctx.a2uiRun` | `core` | [`tool-a2ui-store`](../packages/web/tool-a2ui-store) | - | - | - | Host execution of A2UI `command` actions: fills a field template, starts it through the composed shell service, and serves reads and stops to the Remote controller. |
 | `ctx.a2uiStoreController` | `core` | [`tool-a2ui-store`](../packages/web/tool-a2ui-store) | - | - | - | Projects the A2UI store capability onto the generated Remote namespace: list, open, and delete. |
 | `ctx.a2uiRunController` | `core` | [`tool-a2ui-store`](../packages/web/tool-a2ui-store) | - | - | - | Projects the A2UI run capability onto the generated Remote namespace: start, read, stop, and script run. |
+| `ctx.a2uiLive` | `core` | [`tool-a2ui-store`](../packages/web/tool-a2ui-store) | - | - | - | Attaches one background job's output stream to a surface and drains bounded deltas per poll through an independent job-output reader, leaving the model's own reads untouched. |
+| `ctx.a2uiLiveController` | `core` | [`tool-a2ui-store`](../packages/web/tool-a2ui-store) | - | [`client-ui-a2ui`](../packages/client/ui-a2ui) | - | Projects the A2UI live capability onto the generated Remote namespace: attach and read. |
+| `ctx.a2uiData` | `seam` | [`tool-a2ui-data`](../packages/web/tool-a2ui-data) | [`tool-a2ui-data-bash`](../packages/web/tool-a2ui-data-bash) | - | - | Resolves a stable source name declared on a `select` field into that field's options; a deployment composes exactly one provider beside the surface tool. |
+| `ctx.a2uiDataController` | `core` | [`tool-a2ui-data`](../packages/web/tool-a2ui-data) | - | [`client-ui-a2ui`](../packages/client/ui-a2ui) | - | Projects the composed `a2uiData` provider onto the generated Remote namespace: resolve. |
 
 Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.

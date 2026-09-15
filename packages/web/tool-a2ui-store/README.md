@@ -9,9 +9,9 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-With `dsh-tool-a2ui-store`, a page the model authored with `a2ui_surface` can be saved as a standalone file and shared: the `a2ui_export` tool and the `ctx.a2uiStore` capability persist the canonical page definition — its declarative DSL, field logic (`visibleWhen`/`validateWhen`/`compute`), and `actions` — as one JSON document per tool under `<harness home>/a2ui-tools/`. Each write is an atomic replace, and a malformed document is skipped on read rather than hiding the rest. The store is the distribution boundary: a saved file can be copied between deployments and re-imported without re-authoring the page, and a saved tool can be shared across users as a self-contained bearer token (`a2ui_share`/`a2ui_import`, or `share`/`import` on the capability).
+With `dsh-tool-a2ui-store`, a page authored with `a2ui_surface` can be saved as a standalone file and shared: `a2ui_export`/`ctx.a2uiStore` persist the canonical page definition — DSL, field logic, and `actions` — as one atomically-written JSON document per tool under `<harness home>/a2ui-tools/`; a malformed document is skipped on read. A saved file copies between deployments and re-imports without re-authoring, or shares across users as a self-contained bearer token (`a2ui_share`/`a2ui_import`).
 
-The package also owns the two page-correlated execution channels: `ctx.a2uiRun` starts `command` actions on the composed shell service in the session's workspace and records their output as a durable `a2ui/update` stream, and `ctx.a2uiLive` streams a `model`-action background job into the same durable stream (via the `a2ui_attach_output` tool, which the model calls with the job id it just started).
+The package also owns two page-correlated execution channels: `ctx.a2uiRun` starts `command` actions on the composed shell service and records output as an `a2ui/update` stream; `ctx.a2uiLive` streams a `model`-action job into that stream via `a2ui_attach_output`.
 
 ## Table of Contents
 

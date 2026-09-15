@@ -88,6 +88,9 @@
     },
     {
       "path": "../../web/tool-a2ui-store"
+    },
+    {
+      "path": "../../feedback/command-feedback"
     }
   ]
 }

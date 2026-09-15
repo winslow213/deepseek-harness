@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
+import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentLayerInput } from '@deepseek-ai/dsh-launch-environment'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import type { NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
 import * as OpenInApp from '../src/index.ts'
@@ -37,6 +37,7 @@ afterEach(async () => {
   root = undefined
   internals.catalog = {}
   trust.rejection = undefined
+  vi.unstubAllEnvs()
 })
 
 /** PATH-resolution fake answering from a fixed name-to-path table. */
@@ -45,7 +46,8 @@ function pathTable(entries: Record<string, string> = {}): (name: string) => Prom
 }
 
 /** Boot webserver + open-in-app rows through the real Loader. */
-async function boot(env: Record<string, string> = {}): Promise<string> {
+async function boot(layers: readonly LaunchEnvironmentLayerInput[] = []): Promise<string> {
+  internals.catalog = { env: {}, ...internals.catalog }
   root = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-loader-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -62,10 +64,8 @@ async function boot(env: Record<string, string> = {}): Promise<string> {
   ].join('\n'))
 
   context = new Context()
+  context.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot(layers))
   context.baseUrl = pathToFileURL(root).href + '/'
-  context.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([
-    { source: 'process', values: env },
-  ]))
   context.provide('connection', { requestRejection: () => trust.rejection } as never)
   // The plugin resolves PATH names through the composition's subprocess
   // capability; the not-found rejection is the provider's real signal.
@@ -129,6 +129,43 @@ async function cursorBundle(home: string): Promise<void> {
 }
 
 describe('open-in-app host routes (real Loader composition)', () => {
+  it.each(['project-env', 'user-env'] as const)('ignores materialized SSH markers from %s', async (source) => {
+    vi.stubEnv('SSH_CONNECTION', 'stale-connection')
+    vi.stubEnv('SSH_TTY', '/dev/pts/stale')
+    internals.catalog = {
+      platform: 'darwin', applicationRoots: [], env: process.env,
+      run: () => Promise.reject(new Error('fixture rejects')), resolveExecutable: pathTable(),
+    }
+    const base = await boot([{ source, values: { SSH_CONNECTION: 'stale-connection', SSH_TTY: '/dev/pts/stale' } }])
+
+    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: ['finder', 'terminal'], clientLaunch: false })
+  })
+
+  it.each([
+    { SSH_CONNECTION: '10.0.0.2 55000 10.0.0.9 22' },
+    { SSH_TTY: '/dev/pts/3' },
+  ])('returns an empty catalog and refuses icons and launches over SSH: %j', async (env) => {
+    const run = vi.fn<NativeCommandRunner>()
+    const launch = vi.fn<OpenInAppLauncher>()
+    const resolveExecutable = vi.fn(pathTable())
+    internals.catalog = { platform: 'darwin', env, run, launch, resolveExecutable }
+    const base = await boot([{ source: 'process', values: env }])
+
+    const apps = await fetch(`${base}/open-in-app/apps`)
+    expect(apps.status).toBe(200)
+    expect(await apps.json()).toEqual({ apps: [], clientLaunch: true })
+    expect((await fetch(`${base}/open-in-app/icon/finder`)).status).toBe(404)
+    const open = await fetch(`${base}/open-in-app/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ app: 'finder', path: root }),
+    })
+    expect(open.status).toBe(400)
+    expect(run).not.toHaveBeenCalled()
+    expect(resolveExecutable).not.toHaveBeenCalled()
+    expect(launch).not.toHaveBeenCalled()
+  })
+
   it('keeps the function-plugin runtime surface to Loader exports', () => {
     expect(Object.keys(OpenInApp).sort()).toEqual(['Config', 'apply', 'inject', 'name'])
   })
@@ -153,11 +190,11 @@ describe('open-in-app host routes (real Loader composition)', () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
     await cursorBundle(home)
     darwinFixture(home, [])
-    const base = await boot({ SSH_CONNECTION: '10.0.0.1 43210 10.0.0.2 22' })
+    const base = await boot([{ source: 'process', values: { SSH_CONNECTION: '10.0.0.1 43210 10.0.0.2 22' } }])
     try {
       const apps = await fetch(`${base}/open-in-app/apps`)
       expect(apps.status).toBe(200)
-      expect(await apps.json()).toEqual({ apps: ['finder', 'cursor', 'terminal'], clientLaunch: true })
+      expect(await apps.json()).toEqual({ apps: [], clientLaunch: true })
     } finally {
       await rm(home, { recursive: true, force: true })
     }

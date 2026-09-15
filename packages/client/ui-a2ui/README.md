@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-a2ui` is the browser plugin that draws model-authored A2UI pages in the dsh web client: it projects each durable `a2ui/surface` session record into an interactive Chat node, rendered natively from the declarative page JSON. Users fill form fields or drag canvas nodes and edges, then submit; the panel sends the collected payload back to the model as a `user/message` carrying the same `surfaceId` but logged with a plugin `notice` source, so the chat collapses the submission into a one-line context row instead of a full prompt bubble while the model still receives the payload. The projection is deterministic replay: every opening event becomes its own standalone transcript row keyed by `surfaceId#seq`, so a deliberately reused surface identity opens a fresh page instead of mutating an earlier one. A page opened mid-turn stays visible as an independent transcript row even after the turn closes under the compact transcript. Copy lives in the `a2ui` locale namespace (zh and en); the plugin takes no configuration.
+`dsh-client-ui-a2ui` is the browser plugin that draws model-authored A2UI pages: it projects each durable `a2ui/surface` record into an interactive Chat node, rendered from the page JSON. Users fill form fields or drag canvas nodes, then submit; the panel returns the payload as a `user/message` carrying the same `surfaceId`, logged with a plugin `notice` source that collapses submission into a one-line row. Replay is deterministic: each opening event becomes its own transcript row keyed by `surfaceId#seq`, so a reused surface identity opens a fresh page, and a page opened mid-turn stays visible after the turn closes. The plugin takes no configuration.
 
 ## Table of Contents
 

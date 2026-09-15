@@ -37,10 +37,12 @@
   display: flex;
   flex-direction: column;
   padding: 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-specific-input-major);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .header {
@@ -143,7 +145,7 @@
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
@@ -157,7 +159,7 @@
   align-items: center;
   gap: 4px;
   padding: 5px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
   background: var(--dsw-specific-input-minor);
   color: var(--dsw-alias-label-primary);

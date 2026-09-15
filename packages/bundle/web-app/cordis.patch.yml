@@ -234,10 +234,10 @@
       name: '@deepseek-ai/dsh-client-ui-sidebar-right'
 
 
-    # The right Sidebar's first outside tab type: workspace text files, read
-    # through the bounded workspaceFiles endpoint.
-    - id: ui-sidebar-textpreview
-      name: '@deepseek-ai/dsh-client-ui-sidebar-textpreview'
+    # The right Sidebar's document tab: bounded file reads with selectable
+    # Markdown, code, HTML, PDF, and plain-text renderers.
+    - id: ui-sidebar-documentpreview
+      name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
 
     # The right Sidebar's workspace file tree tab type.
     - id: ui-sidebar-files
@@ -255,12 +255,13 @@
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
 
-    # Operator-gated install tab beside the inventory read-only list; its
-    # Remote requires the plugin-install host row above (DSH_PLUGIN_INSTALL),
-    # so the tab registers only when that switch is on.
+    # Always mounted; its `inject: ['remote.pluginInstall']` leaves it pending
+    # until that Remote exists, so the tab only ever activates when the host
+    # plugin-install row above is enabled (DSH_PLUGIN_INSTALL). Browser-tier
+    # rows must keep a plain-boolean `disabled` (bundle-roster.ts), so the gate
+    # lives in the inject wait instead of a `!!js` expression here.
     - id: ui-settings-plugin-install
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-install'
-      disabled: !!js process.env.DSH_PLUGIN_INSTALL !== 'true'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
@@ -341,8 +342,9 @@
     - id: ui-goal
       name: '@deepseek-ai/dsh-client-ui-goal'
 
-    # Per-message feedback: Like/Dislike plus an optional note in the
-    # assistant-message action strip, over the messageFeedback Remote.
+    # The feedback surface: Like/Dislike in the assistant-message action
+    # strip, the feedback dialog behind Dislike and /feedback with its
+    # acknowledgement toast, over the messageFeedback and sessionFeedback Remotes.
     - id: ui-message-feedback
       name: '@deepseek-ai/dsh-client-ui-message-feedback'
 

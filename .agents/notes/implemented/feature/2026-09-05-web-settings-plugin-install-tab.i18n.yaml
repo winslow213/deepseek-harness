@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-05-web-settings-plugin-install-tab.md
-2026-09-05-web-settings-plugin-install-tab.md: 1ad04923ac17d3d1137d328f0cd08fea0acdcfa4
-2026-09-05-web-settings-plugin-install-tab.zh.md: c6239320599e9f57639101ca56373e9b12e2b192
+2026-09-05-web-settings-plugin-install-tab.md: 26a007af6c33c14ac4b712af5ab20adcd11ac3fa
+2026-09-05-web-settings-plugin-install-tab.zh.md: 9f1a1da63e5d5f488b95da4ea5600bf2e2aa1295

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-a2ui-store` 是一个浏览器插件，为已保存的 A2UI 工具增加一个侧边栏底部入口。点击该入口会打开一个弹层，列出此前由 `a2ui_export` 工具保存到 Harness 主目录 `a2ui-tools` 目录下的每一个页面；点击某个工具会将其页面重新打开到当前会话，垃圾桶按钮则删除已保存的文件。列表及每个操作都通过 `a2uiStore` Typert Remote 发送到宿主端的 `dsh-tool-a2ui-store` 控制器，因此浏览器从不直接接触文件系统。重新打开一个工具会向当前会话追加一条新的 `a2ui/surface` 记录，由既有的 `ui-a2ui` 投影渲染为交互式聊天节点。文案位于 `a2uiStore` 语言命名空间（中英双语）；该插件无需任何配置。
+`dsh-client-ui-a2ui-store` 是一个浏览器插件，为已保存的 A2UI 工具增加一个侧边栏底部入口。点击该入口会打开一个弹层，列出此前由 `a2ui_export` 保存到 Harness 主目录 `a2ui-tools` 下的每一个页面；点击某个工具会将其页面重新打开到当前会话，垃圾桶按钮则删除已保存的文件。列表及每个操作都通过 `a2uiStore` Typert Remote 发送到宿主端的 `dsh-tool-a2ui-store` 控制器，因此浏览器从不直接接触文件系统。重新打开一个工具会追加一条新的 `a2ui/surface` 记录，由 `ui-a2ui` 渲染为交互式聊天节点。该插件无需任何配置。
 
 ## 目录
 
