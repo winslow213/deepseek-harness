@@ -310,8 +310,10 @@ function writeTeamSandboxPatch(home: string): void {
     `    workspaceRoot: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
     '# Read isolation between accounts sharing this host: hide every sibling',
     "# account's home, then re-expose this account's own.",
-    `    readDeniedRoots: !!js [process.env.${DSH_USERS_ROOT_ENV}].filter(Boolean)`,
-    `    readAllowedRoots: !!js [process.env.DSH_HOME].filter(Boolean)`,
+    // Quoted: an unquoted `!!js` value starting with `[` parses as a YAML flow
+    // sequence, and the trailing `.filter(...)` then fails the whole patch.
+    `    readDeniedRoots: !!js '[process.env.${DSH_USERS_ROOT_ENV}].filter(Boolean)'`,
+    '    readAllowedRoots: !!js \'[process.env.DSH_HOME].filter(Boolean)\'',
   ].join('\n')
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_SANDBOX_PATCH_ID)
 }
