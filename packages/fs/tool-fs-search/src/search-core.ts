@@ -28,6 +28,8 @@ import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessOutputRead, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-sandbox'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 
 /**
  * Default cap on the complete raw `rg` stdout the tools will parse (the
@@ -181,6 +183,38 @@ export function resolveRgPath(): Promise<string> {
 }
 
 /**
+ * Wrap the ripgrep argv in the deployment's sandbox, or return it unchanged
+ * when no sandbox governs this call.
+ *
+ * `rg` reads files on the tool's behalf, so an unconfined spawn is a read
+ * channel that bypasses every boundary the sandbox enforces for `bash`. The
+ * policy comes from the calling session, exactly as it does for a shell call,
+ * which is what makes `grep`/`glob` and `bash` agree on where a session may
+ * read.
+ *
+ * Both services are read OPTIONALLY rather than injected. Searching files has
+ * no inherent need for a sandbox stack, and compositions exist (test and
+ * embedded ones) that mount these tools with no provider at all; a hard
+ * dependency would stop `grep`/`glob` from loading there. When a sandbox IS
+ * mounted, confinement is not optional: the policy is applied, and a runner
+ * that cannot confine fails the search rather than falling back to an
+ * unconfined `rg`.
+ *
+ * @param ctx - the plugin context carrying the sandbox seam.
+ * @param exec - the tool-execution context; supplies the calling session.
+ * @param argv - the ripgrep argv to confine.
+ * @returns the argv to spawn.
+ */
+function confineSearch(ctx: Context, exec: ToolExecution, argv: string[]): string[] {
+  const sandbox = ctx.get('sandbox')
+  const policyService = ctx.get('sandboxPolicy')
+  if (sandbox === undefined || policyService === undefined) return argv
+  const policy = policyService.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })
+  if (policy.mode === 'danger-full-access') return argv
+  return [...sandbox.confine(argv, { ...policy, mode: policy.mode }).argv]
+}
+
+/**
  * Run the packaged ripgrep binary with a plain argv vector and return its
  * complete raw stdout. The working directory is the calling agent's session
  * cwd (`exec.agent.session.header.cwd`) when available, else
@@ -188,12 +222,15 @@ export function resolveRgPath(): Promise<string> {
  * (`@deepseek-ai/dsh-tool-call-timeout-policy`) and caller cancellation terminate the
  * process tree.
  *
- * The spawn is unconfined (a plain `ctx.subprocess` call), so `--no-config`
- * is prepended: a host `RIPGREP_CONFIG_PATH` (or `rg.conf` next to the
+ * The spawn is wrapped through `ctx.sandbox` ({@link confineSearch}), so the
+ * session's read boundary applies to what ripgrep may open. `--no-config` is
+ * prepended regardless: a host `RIPGREP_CONFIG_PATH` (or `rg.conf` next to the
  * binary) can otherwise inject `--pre` and make ripgrep execute an arbitrary
- * preprocessor for every matched file. The collect dispositions are the
- * seam's diagnostic-tail shape (no spill files): the tools never read a raw
- * spill path, and truncated stdout fails as `SEARCH_RAW_OUTPUT_OVERFLOW`.
+ * preprocessor for every matched file — a path the sandbox does not govern,
+ * since the preprocessor is a child of ripgrep. The collect dispositions are
+ * the seam's diagnostic-tail shape (no spill files): the tools never read a
+ * raw spill path, and truncated stdout fails as
+ * `SEARCH_RAW_OUTPUT_OVERFLOW`.
  *
  * Exit semantics are tool-owned: exit 0 is success with results, exit 1 is
  * success with zero results (`noMatches`), anything else throws a
@@ -233,7 +270,7 @@ export async function runRipgrep(
   let handle: SubprocessHandle
   try {
     handle = ctx.subprocess.spawn({
-      argv: [await resolveRgPath(), '--no-config', ...argv],
+      argv: confineSearch(ctx, exec, [await resolveRgPath(), '--no-config', ...argv]),
       cwd: workdir,
       stdio: {
         stdin: 'ignore',

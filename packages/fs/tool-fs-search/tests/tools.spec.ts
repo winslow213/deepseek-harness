@@ -39,6 +39,7 @@ import {
   sampleAcrossTopLevel,
   toWorkdirRelative,
 } from '@deepseek-ai/dsh-tool-fs-search'
+import { fakeSandbox, mountSandbox, sessionAgent } from './fake-sandbox.ts'
 
 const testToolSignal = new AbortController().signal
 
@@ -183,6 +184,8 @@ class FakeSpill extends SpillStore {
 interface SetupOptions {
   config?: Partial<ToolFsSearch.Config>
   spill?: boolean
+  /** Sandbox-policy overrides for tests that assert what reached the seam. */
+  sandbox?: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string; readDeniedRoots?: string[]; readAllowedRoots?: string[] }
 }
 
 const DEFAULT_CONFIG = { sampleOverCapGlobResults: true } satisfies ToolFsSearch.Config
@@ -194,6 +197,7 @@ async function setup(options: SetupOptions = {}) {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(FakeSubprocess)
+  await mountSandbox(ctx, options.sandbox ?? {})
   const subprocess = ctx.subprocess as FakeSubprocess
   if (options.spill === true) await ctx.plugin(FakeSpill)
   const fiber = await ctx.plugin(ToolFsSearch, { ...DEFAULT_CONFIG, ...options.config })
@@ -202,7 +206,7 @@ async function setup(options: SetupOptions = {}) {
 }
 
 /** A stand-in agent whose session header carries the given cwd (and a stable id). */
-const agent = (cwd?: string) => ({ session: { header: { id: 'session-1', ...cwd !== undefined ? { cwd } : {} } } })
+const agent = (cwd?: string) => sessionAgent(cwd)
 
 let callCounter = 0
 function call(
@@ -310,6 +314,7 @@ describe('config validation', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(FakeSubprocess)
+    await mountSandbox(ctx)
     await expect(ctx.plugin(ToolFsSearch, { ...DEFAULT_CONFIG, ...config })).rejects.toThrow(new RegExp(`tool-fs-search: ${name} must be a positive integer`))
   })
 
@@ -318,6 +323,7 @@ describe('config validation', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(FakeSubprocess)
+    await mountSandbox(ctx)
     await expect(ctx.plugin(ToolFsSearch, {
       ...DEFAULT_CONFIG,
       graceMs: MAX_TIMER_DELAY_MS + 1,
@@ -767,14 +773,15 @@ describe('glob results', () => {
       })],
     }))
     subprocess.handler = () => runResult('a.ts\nb.ts\nc.ts\nd.ts\n')
-    const result = await call(ctx, 'glob', { pattern: '*.ts' }, { agent: agent('/w') })
+    const caller = agent('/w')
+    const result = await call(ctx, 'glob', { pattern: '*.ts' }, { agent: caller })
     expect(result.isError).toBe(false)
     if (result.isError) throw new Error('expected glob success')
     expect(result.value).toEqual({ root: '.', paths: ['a.ts', 'b.ts', 'c.ts', 'd.ts'] })
     expect(text(result)).toBe('a.ts\nb.ts\n\n(Showing 2 of 4 paths. Full sorted result stored at: /spill/glob-results.txt. Use the fake retrieval hint.)')
     expect(spill?.saves).toHaveLength(1)
     expect(spill?.saves[0]).toMatchObject({
-      owner: { sessionId: 'session-1' },
+      owner: { sessionId: caller.session.id },
       source: { toolName: 'glob', label: 'result' },
       suggestedName: 'glob-results.txt',
       content: 'a.ts\nb.ts\nc.ts\nd.ts',
@@ -1264,3 +1271,55 @@ describe('scope-aware search guidance', () => {
 function withPersona(...sections: string[]): string {
   return ['You are an AI agent powered by DeepSeek Harness.', ...sections].join('\n\n')
 }
+
+/**
+ * `rg` reads files on the tool's behalf, so an unconfined spawn is a read
+ * channel that bypasses every boundary `bash` respects. These cases pin the
+ * wiring: the session's resolved policy reaches the sandbox seam, and the
+ * shielded roots travel with it. The mounts themselves are proven by
+ * `@deepseek-ai/dsh-sandbox-local`'s bwrap e2e.
+ */
+describe('sandbox confinement of the ripgrep spawn', () => {
+  it('wraps the spawn through ctx.sandbox with the calling session policy', async () => {
+    const { ctx, subprocess } = await setup({ sandbox: { mode: 'workspace-write', workspaceRoot: '/w' } })
+    const sandbox = fakeSandbox(ctx)
+    subprocess.handler = () => runResult('a.ts\n')
+    await call(ctx, 'glob', { pattern: '*' }, { agent: agent('/sessions/s1') })
+
+    expect(sandbox.confinements).toHaveLength(1)
+    // The session cwd, not the deployment root, is the confinement boundary —
+    // the same rule bash follows for the same session.
+    expect(sandbox.confinements[0]?.policy.workspaceRoot).toBe('/sessions/s1')
+    expect(sandbox.confinements[0]?.policy.mode).toBe('workspace-write')
+    // The confined argv is what actually spawns, not the raw ripgrep argv.
+    expect(subprocess.spawns[0]?.argv).toEqual(sandbox.confinements[0]?.argv)
+  })
+
+  it('carries the read shield to the seam, so grep cannot read past it', async () => {
+    const { ctx, subprocess } = await setup({
+      sandbox: {
+        mode: 'workspace-write',
+        workspaceRoot: '/w',
+        readDeniedRoots: ['/users'],
+        readAllowedRoots: ['/users/caller'],
+      },
+    })
+    const sandbox = fakeSandbox(ctx)
+    subprocess.handler = () => runResult('a.ts\n')
+    await call(ctx, 'grep', { pattern: 'x' }, { agent: agent('/w') })
+
+    expect(sandbox.confinements[0]?.policy.readDeniedRoots).toEqual(['/users'])
+    expect(sandbox.confinements[0]?.policy.readAllowedRoots).toEqual(['/users/caller'])
+  })
+
+  it('skips the seam entirely under danger-full-access, which promises no sandbox', async () => {
+    const { ctx, subprocess } = await setup({ sandbox: { mode: 'danger-full-access', workspaceRoot: '/w' } })
+    const sandbox = fakeSandbox(ctx)
+    subprocess.handler = () => runResult('a.ts\n')
+    await call(ctx, 'glob', { pattern: '*' }, { agent: agent('/w') })
+
+    expect(sandbox.confinements).toHaveLength(0)
+    // The raw ripgrep argv still spawns, unwrapped by any runner.
+    expect(subprocess.spawns[0]?.argv.slice(0, 3)).toEqual([rgPath, '--no-config', '--files'])
+  })
+})
