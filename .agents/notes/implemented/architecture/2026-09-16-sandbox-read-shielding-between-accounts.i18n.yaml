@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-16-sandbox-read-shielding-between-accounts.md
-2026-09-16-sandbox-read-shielding-between-accounts.md: 8415e1654f8bd6c5f36a4e0fc1f09d6590d95ab4
-2026-09-16-sandbox-read-shielding-between-accounts.zh.md: 9211f7faf13f7e83d539081c3f0441e84377f2fc
+2026-09-16-sandbox-read-shielding-between-accounts.md: 2cda42c7d983b633d40a0e79af0412fb7c02a889
+2026-09-16-sandbox-read-shielding-between-accounts.zh.md: fd07367213d93f23db1ef08ddd81928c678158da

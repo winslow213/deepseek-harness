@@ -24,7 +24,9 @@ Status: implemented
 - **Seatbelt** 依次追加 `(deny file-read* (subpath …))` 和 `(allow file-read* (subpath …))`，因为 Seatbelt 取最后一条匹配的规则。
 - **Landlock** 把它那句一刀切的 `readOnly: ['/']` 换成"系统路径白名单 + 重新暴露的子树"，但**仅在存在遮蔽时**这么做——Landlock 是白名单语言，无法从一刀切授权中减掉某个路径，因此未启用遮蔽的部署保持今天的写法。
 
-**团队 shell 部署隐藏用户根目录，并重新暴露账号自己的 home。** 注入的 `sandbox-policy` patch 从环境变量（`DSH_USERS_ROOT` 和 `DSH_HOME`）读取两者，而不是写死任何路径，因此目录布局仍然是一个部署选择。
+**团队 shell 部署隐藏用户根目录，并重新暴露账号自己的 home。** 注入的 `sandbox-policy` patch 从环境变量（`DSH_USERS_ROOT` 和 `DSH_HOME`）读取两者，而不是写死任何路径，因此目录布局仍然是一个部署选择。两个 `!!js` 表达式都是带引号的：一个以 `[` 开头的未加引号的值会被解析成 YAML 流式序列，后面的 `.filter(...)` 随之让整个 patch 解析失败——这会让账号根本启动不了，而不只是丢掉读遮蔽。
+
+**团队 shell 通过它自己的、会消费沙箱的 executor 来执行 bash。** home patch 禁用了 `bash-sandbox` 这个 bundle 条目，改为插入 `region-shell`，后者的存在是为了让一个 `ctx.shell` 同时服务本地世界和每个配对 agent 挂载的根目录。该 executor 继承 `SandboxBashExecutor`，因此它解析同一份策略、应用同一个 profile——被禁用的那个条目只是避免重复注册，而不是放弃限制。在依赖这一点之前已核实：禁用一个 bundle 条目、同时让 router 继承带沙箱的 executor，恰恰是那种会悄悄丢掉限制的替换。
 
 ## Alternatives considered
 

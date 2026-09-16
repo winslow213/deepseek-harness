@@ -24,7 +24,9 @@ That is the shape of the defect worth naming: **write confinement is not read is
 - **Seatbelt** appends `(deny file-read* (subpath …))` then `(allow file-read* (subpath …))`, because Seatbelt takes the last matching rule.
 - **Landlock** replaces its blanket `readOnly: ['/']` with a system-path allow-list plus the re-exposed subtrees, but **only** when a shield is present — it is an allow-list language and cannot subtract a path from a blanket grant, so an unshielded deployment keeps today's spelling.
 
-**The team-shell deployment hides the users root and re-exposes the account's own home.** The injected `sandbox-policy` patch reads both from the environment (`DSH_USERS_ROOT` and `DSH_HOME`) rather than baking in any path, so the layout stays a deployment choice.
+**The team-shell deployment hides the users root and re-exposes the account's own home.** The injected `sandbox-policy` patch reads both from the environment (`DSH_USERS_ROOT` and `DSH_HOME`) rather than baking in any path, so the layout stays a deployment choice. Both `!!js` expressions are quoted: an unquoted value beginning with `[` parses as a YAML flow sequence and the trailing `.filter(...)` then fails the entire patch, which stops the account from booting rather than merely dropping its shield.
+
+**The team-shell runs bash through its own sandbox-consuming executor.** The home patch disables the `bash-sandbox` bundle entry and inserts `region-shell` instead, which exists so one `ctx.shell` serves both the local world and every paired agent's mounted root. That executor extends `SandboxBashExecutor`, so it resolves the same policy and applies the same profile — the disabled entry is a double-registration avoidance, not a retreat from confinement. Verified before relying on it: disabling the bundle entry while the router inherits the sandboxed executor is exactly the kind of swap that would silently drop confinement.
 
 ## Alternatives considered
 
