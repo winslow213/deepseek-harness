@@ -34,4 +34,33 @@ CREATE TABLE IF NOT EXISTS dsh_instances (
 -- Keep an existing table (created before launch_token existed) in sync.
 ALTER TABLE dsh_instances ADD COLUMN IF NOT EXISTS launch_token TEXT;
 ALTER TABLE dsh_instances ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- Self-service registration requests. A row is the pending request, not an
+-- account: the account is created only when the operator approves. The status
+-- column is pending | approved | rejected | notify_failed; a failed operator
+-- notification is its own status so the applicant can retry the same address
+-- instead of being locked out by an undelivered request.
+CREATE TABLE IF NOT EXISTS dsh_registrations (
+  id           BIGSERIAL PRIMARY KEY,
+  email        TEXT NOT NULL,
+  username     TEXT NOT NULL,
+  display_name TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending',
+  token_hash   TEXT,
+  reason       TEXT,
+  decided_at   TIMESTAMPTZ,
+  decided_by   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One open request per address and per account name. Decided rows stay for
+-- audit without blocking a later request, and an undelivered request is not
+-- open either, so the applicant can retry the same address.
+CREATE UNIQUE INDEX IF NOT EXISTS dsh_registrations_open_email
+  ON dsh_registrations (lower(email)) WHERE status = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS dsh_registrations_open_username
+  ON dsh_registrations (username) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS dsh_registrations_token
+  ON dsh_registrations (token_hash) WHERE token_hash IS NOT NULL;
 `

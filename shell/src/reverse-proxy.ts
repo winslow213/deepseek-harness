@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto'
 import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
+import { LOGIN_PAGE, NOT_READY_PAGE } from './team-pages.ts'
 
 /** A stream with just the listener surface the proxy guards. */
 type ErrorGuard = { on(event: 'error', listener: () => void): unknown }
@@ -54,95 +55,6 @@ export interface ProxyOptions {
 
 /** Session cookie name shared with the team account service. */
 export const TEAM_SESSION_COOKIE = 'dsh_team_session'
-
-/** Minimal login page served when a request carries no valid session. */
-const LOGIN_PAGE = `<!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><title>天问星 · 登录</title>
-<style>
-  :root { color-scheme: dark; }
-  body {
-    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-    margin: 0; min-height: 100vh; color: #e8edf7;
-    background: radial-gradient(ellipse at 50% 120%, #0b1e3f 0%, #060a18 60%, #04060f 100%);
-    display: grid; place-items: center; overflow: hidden;
-  }
-  /* star field */
-  .stars { position: fixed; inset: 0; background-image:
-      radial-gradient(1px 1px at 20% 30%, #fff8, transparent),
-      radial-gradient(1px 1px at 70% 20%, #fff6, transparent),
-      radial-gradient(1.5px 1.5px at 40% 70%, #aebfff, transparent),
-      radial-gradient(1px 1px at 85% 60%, #fff9, transparent),
-      radial-gradient(1px 1px at 10% 85%, #fff5, transparent),
-      radial-gradient(1.5px 1.5px at 60% 90%, #8fa8ff, transparent),
-      radial-gradient(1px 1px at 30% 45%, #ffffff88, transparent),
-      radial-gradient(1px 1px at 90% 15%, #ffffff66, transparent);
-    pointer-events: none; }
-  .card {
-    position: relative; z-index: 1; width: 22rem; text-align: center;
-    background: rgba(13, 24, 54, .55); border: 1px solid rgba(120, 160, 255, .25);
-    border-radius: 16px; padding: 2.6rem 2.2rem 2.2rem; backdrop-filter: blur(8px);
-    box-shadow: 0 0 60px rgba(30, 70, 200, .25);
-  }
-  .brand { font-size: 2.1rem; font-weight: 700; letter-spacing: .3em; margin: 0 0 .3rem;
-    background: linear-gradient(120deg, #8ab6ff, #dfe9ff, #7fa0ff);
-    -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .tagline { font-size: .82rem; color: #93a4cc; margin: 0 0 2rem; letter-spacing: .08em; }
-  form { text-align: left; }
-  label { display: block; margin: .9rem 0 .3rem; font-size: .85rem; color: #b8c6e2; }
-  input {
-    width: 100%; box-sizing: border-box; padding: .65rem .8rem;
-    background: rgba(255,255,255,.05); border: 1px solid rgba(140,170,255,.3);
-    border-radius: 8px; color: #eef2fb; font-size: .95rem; outline: none;
-  }
-  input:focus { border-color: #6f9bff; box-shadow: 0 0 0 3px rgba(111,155,255,.15); }
-  button {
-    width: 100%; margin-top: 1.6rem; padding: .7rem; border: 0; border-radius: 8px;
-    background: linear-gradient(120deg, #2f6bff, #5b8cff); color: #fff;
-    font-size: .98rem; letter-spacing: .2em; cursor: pointer; transition: filter .15s;
-  }
-  button:hover { filter: brightness(1.12); }
-  #err { color: #ff7d7d; min-height: 1em; font-size: .85rem; margin-top: .8rem; text-align: center; }
-</style></head>
-<body>
-<div class="stars"></div>
-<div class="card">
-  <h1 class="brand">天问星</h1>
-  <p class="tagline">鸿蒙科专用 Agent 赋能研发平台</p>
-  <form id="f">
-    <label for="u">用户名</label><input id="u" autocomplete="username" required>
-    <label for="p">密码</label><input id="p" type="password" autocomplete="current-password" required>
-    <button type="submit">登 录</button>
-    <div id="err"></div>
-  </form>
-</div>
-<script>
-const f = document.getElementById('f')
-f.addEventListener('submit', async (e) => {
-  e.preventDefault()
-  const err = document.getElementById('err')
-  err.textContent = ''
-  try {
-    const r = await fetch('/api/login', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value }),
-    })
-    if (!r.ok) { err.textContent = '用户名或密码错误'; return }
-    window.location.href = '/'
-  } catch { err.textContent = '网络错误' }
-})
-</script></body></html>`
-
-/** The "instance not ready" page for an authenticated member with no spawned instance. */
-const NOT_READY_PAGE = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Instance not ready</title>
-<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f6f7f9}
-.card{background:#fff;border:1px solid #d9dee3;border-radius:12px;padding:2rem;width:24rem;text-align:center}
-h1{font-size:1.2rem}code{background:#eef1f4;padding:.15rem .4rem;border-radius:4px}</style></head>
-<body><div class="card"><h1>Your dsh instance is not running</h1>
-<p>The account service could not find a running instance for this session.
-Try signing in again or contact the service operator.</p>
-<p><a href="/api/logout" id="lo">Sign out</a></p></div></body></html>`
 
 /** Proxy one HTTP request to the upstream, stripping the route prefix. */
 function proxyHttp(req: IncomingMessage, res: ServerResponse, upstream: Upstream, prefix: string): void {
@@ -527,12 +439,21 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
       return
     }
     // The other public account endpoints proxy straight to the account service
-    // (it owns cookie issuance and login state). `/api/pairings` mints a code
-    // for the signed-in session; the browser only ever sees the code, never the
-    // agent token, which the account service keeps server-side. `/api/me/idle-exempt`
-    // is the self-service idle-reclaim-whitelist toggle, scoped server-side to
-    // the caller's own session.
-    if (pathname === '/api/login' || pathname === '/api/me' || pathname === '/api/me/idle-exempt' || pathname === '/api/pairings') {
+    // (it owns cookie issuance, login state, and the registration policy).
+    // `/api/pairings` mints a code for the signed-in session; the browser only
+    // ever sees the code, never the agent token, which the account service keeps
+    // server-side. `/api/me/idle-exempt` is the self-service idle-reclaim-whitelist
+    // toggle, scoped server-side to the caller's own session. `/register`,
+    // `/approve`, and `/api/register` are sessionless by design: registration is
+    // authorized by the operator's approval, not by the applicant holding an
+    // account. `/approve` renders the operator's decision page; the token in the
+    // link is its only credential. `/password` and `/api/me/password` are the
+    // signed-in self-service password change.
+    if (pathname === '/api/login' || pathname === '/api/me' || pathname === '/api/me/idle-exempt'
+      || pathname === '/api/me/password' || pathname === '/api/pairings'
+      || pathname === '/register' || pathname === '/api/register'
+      || pathname === '/approve' || pathname === '/api/approvals'
+      || pathname === '/password') {
       proxyAccount(req, res, options.accountUrl)
       return
     }

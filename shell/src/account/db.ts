@@ -7,6 +7,25 @@ const { Pool } = pg
 
 export type Db = pg.Pool
 
+/**
+ * The query surface stores depend on. A `Pool` and a checked-out `PoolClient`
+ * both satisfy it, so a store can run inside a caller's transaction without a
+ * second implementation.
+ */
+export interface Queryable {
+  query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>
+}
+
+/** A checked-out client, released when its transaction ends. */
+export interface QueryableClient extends Queryable {
+  release(): void
+}
+
+/** A pool: queryable directly, or able to check out a client for one transaction. */
+export interface TransactionalDb extends Queryable {
+  connect(): Promise<QueryableClient>
+}
+
 /** Create a pool and apply the schema (idempotent). */
 export async function createDb(url: string): Promise<Db> {
   const pool = new Pool({ connectionString: url })

@@ -175,6 +175,27 @@ node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
 
 `set-idle-exempt on` whitelists a user against the idle-instance reclaim sweep (`TEAM_IDLE_TIMEOUT_SECS`, default 30 minutes): `InstanceStore.idleUsers` excludes users whose `dsh_users.idle_exempt` flag is set, so their instance stays up regardless of activity until toggled back off. A signed-in member can also flip the same flag on their own account without operator involvement: `GET /api/me` reports the current `idleExempt` state and `POST /api/me/idle-exempt` (session-authenticated, proxied) sets it — surfaced as a "Keep instance running" row in Settings → General.
 
+### Self-service registration
+
+`GET /register` (proxied, sessionless) serves the application form. A request creates nothing: it records the work email, derives the account name from the address, and sends the operator one Feishu message carrying a single-use approval link. The account exists only after the operator approves, and is created with `TEAM_DEFAULT_PASSWORD`.
+
+| Route | Auth | Purpose |
+| --- | --- | --- |
+| `GET /register` | none | Application form, rendered from the service's own policy |
+| `POST /api/register` | none | Record a request and notify the operator |
+| `GET /approve?token=…` | link token | Operator's decision page |
+| `POST /api/approvals` | link token | Spend the token; approve creates the account |
+| `GET /password` | session | Signed-in password-change form |
+| `POST /api/me/password` | session | Replace the password after re-checking the current one |
+
+Deciding is a POST, never a GET: a link prefetcher or a Feishu message preview must not be able to approve an account by fetching the notification URL. The token carries 256 bits of entropy, is stored only as a SHA-256 hash, is spent by the decision that consumes it, and expires after `TEAM_REGISTRATION_TTL_SECS` (default 7 days). The decision and the account insert share one transaction, so a failed insert leaves the request pending rather than burning the link.
+
+`TEAM_REGISTRATION_DOMAINS` (comma-separated, default `quectel.com`) is the accepted-address allowlist; an address outside it is refused before the operator is notified. Because the approval link is opened from Feishu, `TEAM_ENTRY_BASE_URL` must name the entry host the operator's browser can reach, and it defaults to `http://$DSH_ENTRY_HOST:3999`.
+
+Notifications go to the `dsh-feishu` integration under `$DSH_USERS_ROOT/winslow` — `integrations/dsh-feishu/config.json` for the app id and owner open id, and the app secret through its `secretRef` in `.credentials.yaml`. `TEAM_FEISHU_APP_ID`, `TEAM_FEISHU_APP_SECRET`, `TEAM_FEISHU_OWNER_OPEN_ID`, and `TEAM_FEISHU_DOMAIN` override that lookup entirely. Without a usable channel the service still boots and logs one error; a request then fails with `502` and is recorded as `notify_failed`, which is not an open request, so the applicant can retry the same address.
+
+Pending and decided requests live in `dsh_registrations`; partial unique indexes allow one *pending* request per address and per account name while keeping decided rows for audit.
+
 ## Development
 
 The standalone shell typechecks without the workspace; the modules that run inside a dsh instance (`executor.ts`, `fs-provider.ts`, and the region-router/mount-sync family) import `@deepseek-ai/*` seams and are checked under the repository's source graph:

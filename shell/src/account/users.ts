@@ -1,7 +1,7 @@
 /** Member account operations over the dsh_users table. */
 
 import { randomBytes } from 'node:crypto'
-import type { Db, UserRow } from './db.ts'
+import type { Queryable, UserRow } from './db.ts'
 import { rowToUser } from './db.ts'
 import { hashPassword } from './password.ts'
 
@@ -18,13 +18,21 @@ export function newAgentToken(bytes = 32): string {
 }
 
 export class UserStore {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Queryable) {}
 
-  async create(input: CreateUserInput): Promise<UserRow> {
+  /**
+   * Create an account.
+   * @param input - the account's name, optional display name and role, and password.
+   * @param executor - a checked-out client to run inside the caller's
+   * transaction; approval creates the account atomically with the registration
+   * it consumes, so the token is never spent on a failed insert.
+   * @returns the created account row.
+   */
+  async create(input: CreateUserInput, executor?: Queryable): Promise<UserRow> {
     const userId = input.username
     const role = input.role ?? 'member'
     const agentToken = newAgentToken()
-    const result = await this.db.query(
+    const result = await (executor ?? this.db).query(
       `INSERT INTO dsh_users (user_id, username, display_name, role, status, password_hash, agent_token)
        VALUES ($1, $2, $3, $4, 'active', $5, $6)
        RETURNING *`,

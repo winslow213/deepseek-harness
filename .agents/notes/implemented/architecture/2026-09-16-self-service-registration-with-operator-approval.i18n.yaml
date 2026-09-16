@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-16-self-service-registration-with-operator-approval.md
+2026-09-16-self-service-registration-with-operator-approval.md: c81adaff2dd37c7eec38cb49b9cf479fc15c9496
+2026-09-16-self-service-registration-with-operator-approval.zh.md: 90e3a408fda53cf35fad75208521fb48a546909e

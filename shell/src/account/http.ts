@@ -9,9 +9,18 @@ import { InstanceStore } from './instances.ts'
 import type { InstanceManager } from './instance-manager.ts'
 import type { PairingStore } from './pairings.ts'
 import type { EnvConfig } from './env.ts'
+import { RegistrationError, type RegistrationService } from './registrations.ts'
+import { verifyPassword } from './password.ts'
+import { approvalPage, changePasswordPage, registerPage, resultPage } from '../team-pages.ts'
 
 const COOKIE_NAME = 'dsh_team_session'
 const MAX_BODY_BYTES = 16 * 1024
+
+/** Shortest accepted password for a member-chosen replacement. */
+const MIN_PASSWORD_LENGTH = 8
+
+/** Longest accepted password, bounding the scrypt input. */
+const MAX_PASSWORD_LENGTH = 200
 
 interface HttpServices {
   auth: AuthService
@@ -20,7 +29,12 @@ interface HttpServices {
   instances: InstanceStore
   pairings: PairingStore
   lifecycle: InstanceManager
+  registrations: RegistrationService
   sessionTtlSecs: number
+  /** Email domains the registration form accepts, shown on the page. */
+  registrationDomains: readonly string[]
+  /** Password issued to an approved account, shown on the registration page. */
+  defaultPassword: string
   /** Shared secret operator-side services present on instance-registration calls. */
   adminSecret?: string
 }
@@ -58,7 +72,12 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload)
 }
 
-function readJsonBody(req: IncomingMessage): Promise<unknown> {
+function sendHtml(res: ServerResponse, status: number, body: string): void {
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(body) })
+  res.end(body)
+}
+
+function readRawBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let raw = ''
     req.on('data', (chunk: Buffer) => {
@@ -68,16 +87,24 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
         req.destroy()
       }
     })
-    req.on('end', () => {
-      if (raw === '') { resolve({}); return }
-      try {
-        resolve(JSON.parse(raw) as unknown)
-      } catch {
-        reject(new Error('invalid JSON body'))
-      }
-    })
+    req.on('end', () => { resolve(raw) })
     req.on('error', reject)
   })
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const raw = await readRawBody(req)
+  if (raw === '') return {}
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    throw new Error('invalid JSON body')
+  }
+}
+
+/** Parse an `application/x-www-form-urlencoded` body (the approval form's post). */
+async function readFormBody(req: IncomingMessage): Promise<URLSearchParams> {
+  return new URLSearchParams(await readRawBody(req))
 }
 
 async function handleLogin(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
@@ -297,6 +324,139 @@ async function handleClaimPairing(req: IncomingMessage, res: ServerResponse, s: 
   sendJson(res, 200, { user: user.user_id, agentToken: user.agent_token })
 }
 
+/** The public registration form, rendered by the service that owns its policy. */
+function handleRegisterPage(res: ServerResponse, s: HttpServices): void {
+  sendHtml(res, 200, registerPage(s.registrationDomains, s.defaultPassword))
+}
+
+/**
+ * Accept one registration request and notify the operator. Reachable without a
+ * session by design — the operator's approval, not authentication, is what
+ * creates an account.
+ */
+async function handleRegister(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  let body: unknown
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'invalid request body' }); return }
+  const b = body as { email?: unknown; name?: unknown }
+  if (typeof b.email !== 'string' || b.email === '') {
+    sendJson(res, 400, { error: '请填写有效的邮箱地址' })
+    return
+  }
+  const name = typeof b.name === 'string' ? b.name : undefined
+  try {
+    const opened = await s.registrations.open(b.email, name)
+    sendJson(res, 200, { pending: true, username: opened.username })
+  } catch (error) {
+    if (error instanceof RegistrationError) { sendJson(res, error.status, { error: error.message }); return }
+    throw error
+  }
+}
+
+/** Render the operator's approval page for one token. */
+async function handleApprovalPage(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const token = new URL(req.url ?? '/', 'http://account.invalid').searchParams.get('token')
+  if (token === null || token === '') {
+    sendHtml(res, 400, resultPage('缺少审批令牌', '该链接不完整，请使用飞书通知里的完整链接。', false))
+    return
+  }
+  const pending = await s.registrations.pending(token)
+  if (pending === undefined) {
+    sendHtml(res, 404, resultPage(
+      '链接已失效',
+      '该审批链接已被处理、已过期，或从未有效。\n若仍需开通账号，请让申请人重新提交一次。',
+      false,
+    ))
+    return
+  }
+  const requestedAt = new Date(pending.created_at)
+  sendHtml(res, 200, approvalPage([
+    ['邮箱', pending.email],
+    ['用户名', pending.username],
+    ...pending.display_name === null ? [] : [['姓名', pending.display_name] as const],
+    ['申请时间', Number.isNaN(requestedAt.getTime())
+      ? pending.created_at
+      : requestedAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })],
+  ], token))
+}
+
+/**
+ * Spend an approval token. The decision arrives as a form post so a link
+ * preview or crawler fetching the notification URL can never approve an
+ * account; only the operator pressing a button on the rendered page does.
+ */
+async function handleApprovalDecision(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const form = await readFormBody(req)
+  const token = form.get('token')
+  const action = form.get('action')
+  if (token === null || token === '' || (action !== 'approve' && action !== 'reject')) {
+    sendHtml(res, 400, resultPage('请求无效', '审批请求缺少必要的参数。', false))
+    return
+  }
+  let outcome: Awaited<ReturnType<RegistrationService['decide']>>
+  try {
+    outcome = await s.registrations.decide(token, action === 'approve', 'operator-link')
+  } catch (error) {
+    if (error instanceof RegistrationError) {
+      sendHtml(res, error.status, resultPage('未能创建账号', error.message, false))
+      return
+    }
+    throw error
+  }
+  if (!outcome.ok) {
+    sendHtml(res, 404, resultPage('链接已失效', '该审批链接已被处理或已过期。', false))
+    return
+  }
+  const { registration } = outcome
+  sendHtml(res, 200, outcome.action === 'approve'
+    ? resultPage('已创建账号', [
+      `用户名：${registration.username}`,
+      `初始密码：${s.defaultPassword}`,
+      '',
+      '已通知申请人用该密码登录；用户登录后可自行修改密码。',
+    ].join('\n'), true)
+    : resultPage('已拒绝申请', `已拒绝 ${registration.email} 的注册申请，未创建任何账号。`, true))
+}
+
+/** The signed-in password-change form. */
+async function handleChangePasswordPage(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const user = await sessionUser(req, s)
+  if (user === undefined) {
+    res.writeHead(302, { location: '/' })
+    res.end()
+    return
+  }
+  sendHtml(res, 200, changePasswordPage(user.username))
+}
+
+/** Replace the signed-in member's password after re-checking the current one. */
+async function handleChangePassword(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const session = await sessionUser(req, s)
+  if (session === undefined) { sendJson(res, 401, { error: '请先登录' }); return }
+  let body: unknown
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'invalid request body' }); return }
+  const b = body as { currentPassword?: unknown; newPassword?: unknown }
+  if (typeof b.currentPassword !== 'string' || typeof b.newPassword !== 'string') {
+    sendJson(res, 400, { error: '请填写当前密码和新密码' })
+    return
+  }
+  if (b.newPassword.length < MIN_PASSWORD_LENGTH || b.newPassword.length > MAX_PASSWORD_LENGTH) {
+    sendJson(res, 400, { error: `新密码长度需在 ${String(MIN_PASSWORD_LENGTH)}-${String(MAX_PASSWORD_LENGTH)} 个字符之间` })
+    return
+  }
+  const user = await s.users.findByUsername(session.username)
+  if (user === undefined) { sendJson(res, 401, { error: '请先登录' }); return }
+  if (!verifyPassword(b.currentPassword, user.password_hash)) {
+    sendJson(res, 403, { error: '当前密码不正确' })
+    return
+  }
+  if (b.newPassword === b.currentPassword) {
+    sendJson(res, 400, { error: '新密码不能与当前密码相同' })
+    return
+  }
+  await s.users.setPassword(user.user_id, b.newPassword)
+  sendJson(res, 200, { changed: true })
+}
+
 export function createAccountServer(s: HttpServices) {
   return createServer((req, res) => {
     const url = req.url ?? '/'
@@ -306,6 +466,18 @@ export function createAccountServer(s: HttpServices) {
       try {
         if (path === '/health' && method === 'GET') {
           sendJson(res, 200, { ok: true })
+        } else if (path === '/register' && method === 'GET') {
+          handleRegisterPage(res, s)
+        } else if (path === '/api/register' && method === 'POST') {
+          await handleRegister(req, res, s)
+        } else if (path === '/approve' && method === 'GET') {
+          await handleApprovalPage(req, res, s)
+        } else if (path === '/api/approvals' && method === 'POST') {
+          await handleApprovalDecision(req, res, s)
+        } else if (path === '/password' && method === 'GET') {
+          await handleChangePasswordPage(req, res, s)
+        } else if (path === '/api/me/password' && method === 'POST') {
+          await handleChangePassword(req, res, s)
         } else if (path === '/api/login' && method === 'POST') {
           await handleLogin(req, res, s)
         } else if (path === '/api/logout' && method === 'POST') {

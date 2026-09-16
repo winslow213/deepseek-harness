@@ -10,6 +10,8 @@ import { PairingStore } from './pairings.ts'
 import { AuthService } from './auth.ts'
 import { createAccountServer } from './http.ts'
 import { loadEnv } from './env.ts'
+import { RegistrationService } from './registrations.ts'
+import { FeishuNotifyError, loadFeishuConfig, sendOperatorText } from './feishu.ts'
 
 /** Boot the account service (HTTP API + instance lifecycle) and hold it open. */
 export async function main(): Promise<void> {
@@ -31,9 +33,29 @@ export async function main(): Promise<void> {
     idleTimeoutSecs: env.idleTimeoutSecs,
   })
 
+  const feishu = loadFeishuConfig()
+  if (feishu === undefined) {
+    // Login and every existing account keep working without a notification
+    // channel, but no registration can be approved, so say so once at boot
+    // instead of leaving applicants waiting on a request nobody sees.
+    console.error('[team-account] no Feishu integration found; account registration cannot notify the operator')
+  }
+  const registrations = new RegistrationService(db, users, {
+    domains: env.registrationDomains,
+    defaultPassword: env.defaultPassword,
+    ttlSecs: env.registrationTtlSecs,
+    entryBaseUrl: env.entryBaseUrl,
+    notify: async (text) => {
+      if (feishu === undefined) throw new FeishuNotifyError('no Feishu integration is configured')
+      await sendOperatorText(feishu, text)
+    },
+  })
+
   const server = createAccountServer({
-    auth, sessions, users, instances, pairings, lifecycle,
+    auth, sessions, users, instances, pairings, lifecycle, registrations,
     sessionTtlSecs: env.sessionTtlSecs,
+    registrationDomains: env.registrationDomains,
+    defaultPassword: env.defaultPassword,
     adminSecret: env.adminSecret,
   })
   server.listen(env.httpPort, '127.0.0.1', () => {

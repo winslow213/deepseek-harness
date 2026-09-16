@@ -20,6 +20,26 @@ export interface EnvConfig {
   pairingTtlSecs: number
   /** Idle timeout after which a member's instance is reclaimed (default 30 minutes). */
   idleTimeoutSecs: number
+  /** Email domains allowed to self-register; empty means any domain. */
+  registrationDomains: readonly string[]
+  /** Password issued on approval; the member is expected to change it. */
+  defaultPassword: string
+  /** Lifetime of an approval link, in seconds (default 7 days). */
+  registrationTtlSecs: number
+  /** Absolute entry-host base URL used to build operator approval links (no trailing slash). */
+  entryBaseUrl: string
+}
+
+/** Email domains allowed to self-register when `TEAM_REGISTRATION_DOMAINS` is unset. */
+const DEFAULT_REGISTRATION_DOMAINS = ['quectel.com']
+
+/** Password issued to an approved account when `TEAM_DEFAULT_PASSWORD` is unset. */
+const DEFAULT_ACCOUNT_PASSWORD = 'quectel@123'
+
+/** Split a comma-separated list, trimming blanks and lowercasing entries. */
+function splitList(value: string | undefined, fallback: readonly string[]): readonly string[] {
+  if (value === undefined) return fallback
+  return value.split(',').map(part => part.trim().toLowerCase()).filter(part => part !== '')
 }
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
@@ -65,9 +85,26 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   if (Number.isNaN(idleTimeoutSecs) || idleTimeoutSecs <= 0) {
     throw new Error(`TEAM_IDLE_TIMEOUT_SECS must be a positive number; got ${JSON.stringify(rawIdle)}`)
   }
+  const rawRegTtl = env.TEAM_REGISTRATION_TTL_SECS ?? String(7 * 24 * 60 * 60)
+  const registrationTtlSecs = Number(rawRegTtl)
+  if (Number.isNaN(registrationTtlSecs) || registrationTtlSecs <= 0) {
+    throw new Error(`TEAM_REGISTRATION_TTL_SECS must be a positive number; got ${JSON.stringify(rawRegTtl)}`)
+  }
+  const defaultPassword = env.TEAM_DEFAULT_PASSWORD ?? DEFAULT_ACCOUNT_PASSWORD
+  if (defaultPassword === '') {
+    throw new Error('TEAM_DEFAULT_PASSWORD must not be empty')
+  }
+  const entryBaseUrl = (env.TEAM_ENTRY_BASE_URL ?? `http://${env.DSH_ENTRY_HOST ?? '127.0.0.1'}:3999`).replace(/\/+$/u, '')
+  if (!/^https?:\/\//u.test(entryBaseUrl)) {
+    throw new Error(`TEAM_ENTRY_BASE_URL must be an absolute http(s) URL; got ${JSON.stringify(entryBaseUrl)}`)
+  }
   return {
     dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes,
     adminSecret: adminSecret === '' ? undefined : adminSecret,
     portStart, portEnd, pairingTtlSecs, idleTimeoutSecs,
+    registrationDomains: splitList(env.TEAM_REGISTRATION_DOMAINS, DEFAULT_REGISTRATION_DOMAINS),
+    defaultPassword,
+    registrationTtlSecs,
+    entryBaseUrl,
   }
 }

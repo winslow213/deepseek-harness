@@ -172,6 +172,40 @@ node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
 `GET /api/me` 会回传当前 `idleExempt` 状态，`POST /api/me/idle-exempt`（会话鉴权、经代理转发）
 可以设置它——对应设置页 General 分组下的"保持实例常驻"开关。
 
+### 自助注册
+
+`GET /register`（经代理、无需会话）提供申请表。提交申请不会创建任何东西：服务记录工作邮箱、
+从邮箱推导账号名，并向运营者发一条带一次性审批链接的飞书消息。只有运营者批准后账号才存在，
+并以 `TEAM_DEFAULT_PASSWORD` 创建。
+
+| 路由 | 鉴权 | 用途 |
+| --- | --- | --- |
+| `GET /register` | 无 | 申请表，由服务按自身策略渲染 |
+| `POST /api/register` | 无 | 记录申请并通知运营者 |
+| `GET /approve?token=…` | 链接令牌 | 运营者的审批页 |
+| `POST /api/approvals` | 链接令牌 | 消费令牌；批准即创建账号 |
+| `GET /password` | 会话 | 已登录的改密表单 |
+| `POST /api/me/password` | 会话 | 复核当前密码后替换密码 |
+
+审批一律走 POST，绝不走 GET：链接预取器或飞书消息预览抓取通知 URL 时，不能因此批准账号。
+令牌含 256 位熵，只以 SHA-256 哈希落库，被消费它的那次决策用掉，并在
+`TEAM_REGISTRATION_TTL_SECS`（默认 7 天）后过期。决策与账号插入在同一个事务里，
+所以插入失败只会让申请保持待审批，而不会白白烧掉链接。
+
+`TEAM_REGISTRATION_DOMAINS`（逗号分隔，默认 `quectel.com`）是可受理邮箱的允许列表；
+列表之外的地址在通知运营者之前就被拒绝。由于审批链接是从飞书打开的，
+`TEAM_ENTRY_BASE_URL` 必须是运营者浏览器能访问到的入口地址，默认取
+`http://$DSH_ENTRY_HOST:3999`。
+
+通知发往 `$DSH_USERS_ROOT/winslow` 下的 `dsh-feishu` 集成——app id 与 owner open id 取自
+`integrations/dsh-feishu/config.json`，app secret 通过 `.credentials.yaml` 中的 `secretRef` 解析。
+`TEAM_FEISHU_APP_ID`、`TEAM_FEISHU_APP_SECRET`、`TEAM_FEISHU_OWNER_OPEN_ID`、`TEAM_FEISHU_DOMAIN`
+可完全覆盖该查找。没有可用通道时服务仍会启动并只记录一条错误；此时申请返回 `502` 并记为
+`notify_failed`——它不算待审批申请，因此申请人可以用同一邮箱重试。
+
+待审批与已决策的申请存放在 `dsh_registrations`；部分唯一索引允许每个邮箱、每个账号名各有一条
+*待审批* 申请，同时保留已决策记录用于审计。
+
 ## 开发
 
 独立 shell 可不依赖 workspace 单独类型检查；在 dsh 实例内部运行的模块（`executor.ts`、`fs-provider.ts` 以及 region-router/mount-sync 一族）引用 `@deepseek-ai/*` seam，须在仓库源图下检查：
