@@ -14,6 +14,19 @@ node --import tsx/esm shell/src/bin.ts spawn-user alice 32001
 
 `spawn-user` 在 users 根目录（默认 `$TMPDIR/dsh-users`，可用 `DSH_USERS_ROOT` 覆盖）下预建该用户的 DSH_HOME，启动 `dsh --profile web`，并打印实例的带鉴权 URL，例如 `USER URL: http://127.0.0.1:32001/?token=...`。Ctrl-C 可停止实例。
 
+## 个人 wiki（每用户长期记忆）
+
+每个账号在实例启动之前，就由 `provisionUserHome` 在其工作区下预建一套四层个人
+wiki：`.dsh-wiki-identity.md` 与 `.dsh-wiki-preferences.md` 位于工作区根目录
+（通过 `agent-instructions` 的 `localInstructionFileCandidates` 每一轮都自动
+加载进基线上下文，无需额外检索即可看到身份/偏好事实）；`.dsh/wiki/timeline.md`
+与 `.dsh/wiki/decisions.md` 保存追加式、按需读取的日志（用普通文件工具读取，从
+不自动加载）。`wiki_note` 工具（`shell/src/remote/wiki-tool.ts` 与
+`wiki-fs.ts`，被拷贝进 `$DSH_HOME/plugins/wiki/` 并通过 home 级
+`cordis.patch.yml` 打入）让模型整体覆写身份/偏好，或追加一条带时间戳的时间线/
+决策记录；一个周期性 `<system-reminder>` 会在可配置的轮次后（`reminderEveryTurns`，
+默认 6）提醒模型调用它，避免长会话中被遗忘。
+
 ## 远程执行桥
 
 桥接服务的对象是每个用户自己的代码主机。该主机上的 agent 主动出站拨号 hub（方向 B：NAT 之后的主机无需入站端口）；hub 监听 agent 拨号端口并暴露 loopback HTTP 控制 API，per-user dsh 实例或 CLI 操作者经该 API 发出 exec 与文件请求。实现位于 `shell/src/remote/`：`hub.ts`、`agent.ts`、`client.ts`、`protocol.ts`、`executor.ts`（远程 ShellExecutor）、`fs-provider.ts`（远程 FileSystem）、`inject.ts`、`shadow.ts`、`region-router.ts`、`region-shell.ts` 与 `mount-sync.ts`。

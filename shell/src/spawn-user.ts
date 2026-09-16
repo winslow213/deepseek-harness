@@ -13,7 +13,8 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { injectRegionRouter, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { injectRegionRouter, injectUserWiki, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { scaffoldUserWiki } from './remote/wiki-fs.ts'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
 
 /** Repository root; resolves the source-launch dsh CLI. */
@@ -84,6 +85,7 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
   writeTeamSandboxPatch(home)
   writeTeamDirectoryPickerPatch(home)
   ensureRegionRouter(user, env)
+  ensureUserWiki(user, env)
   return home
 }
 
@@ -140,6 +142,29 @@ export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = proces
     declareMounts: true,
     fsCwd: workspace,
   })
+}
+
+/** The id marking the shell-owned personal-wiki block inside the home patch layer. */
+const TEAM_USER_WIKI_PATCH_ID = 'dsh-team-user-wiki'
+
+/**
+ * Ensure the user's home patch carries the `wiki_note` tool and points
+ * `agent-instructions` at the identity/preferences layer files, and that the
+ * four wiki layer files exist under the account's workspace. Runs on every
+ * `provisionUserHome` call (idempotent: scaffolding never overwrites an
+ * existing file, and the patch block is upserted), so the wiki is always in
+ * place by the user's first turn — not just at true first-instance creation.
+ * @param user - the account whose home/workspace is provisioned.
+ * @param env - environment carrying `DSH_USERS_ROOT`.
+ */
+export function ensureUserWiki(user: string, env: NodeJS.ProcessEnv = process.env): void {
+  const home = userHome(user, env)
+  const workspace = userWorkspace(user, env)
+  scaffoldUserWiki(workspace)
+  const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
+  const block = injectUserWiki({ runtimeSourceDir, home, workspaceRoot: workspace })
+  const [start, end] = teamMarkers(TEAM_USER_WIKI_PATCH_ID)
+  upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${block}\n${end}`, TEAM_USER_WIKI_PATCH_ID)
 }
 
 /** Environment key the account service reads the team API key from. */

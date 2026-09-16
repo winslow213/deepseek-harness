@@ -136,6 +136,8 @@ shell/
       executor.ts  # 远程 ShellExecutor (实现 dsh ShellExecutor seam)
       protocol.ts  # 中心 ↔ remote-agent wire 协议
       policy.ts    # 黑白名单策略模型
+      wiki-fs.ts   # 个人 wiki 四层文件布局 + 脚手架 + 读写语义 (纯 fs, 无 @deepseek-ai 依赖)
+      wiki-tool.ts # wiki_note 工具 + 周期性 system-reminder (cordis 插件, 运行时拷贝进 profile)
     agent/         # remote-agent (部署到每台用户 Linux)
       agent.ts     # daemon 入口
       bash-runner.ts  # 本机 bash 执行 + 黑白名单强制
@@ -413,3 +415,63 @@ catalog 重生成）不改变本节结论。
   决定 shell 层去留。
 
 ## 8. 验证状态
+
+## 11. 个人 wiki（每用户长期记忆）
+
+### 11.1 目标
+
+每个账号自动获得一份四层个人知识模型，由 dsh 在对话中通过工具调用维护，
+用于跨会话保留身份、偏好、进展与决策，不依赖用户手工整理。
+
+### 11.2 四层与加载策略
+
+| 层 | 文件 | 语义 | 加载方式 |
+|---|---|---|---|
+| L1 身份 | `.dsh-wiki-identity.md`（工作区根） | 稳定事实，整体覆写 | 每轮自动加载 |
+| L2 偏好 | `.dsh-wiki-preferences.md`（工作区根） | 半稳定模式，整体覆写 | 每轮自动加载 |
+| L3 时间线 | `.dsh/wiki/timeline.md` | 追加式，重大进展/突破 | 按需读取 |
+| L4 决策 | `.dsh/wiki/decisions.md` | 追加式，从不改写，推翻需追加新条目 | 按需读取 |
+
+L1/L2 必须落在 ancestor-chain 会遍历到的目录（即工作区根本身），因为
+`agent-instructions` 的 `localInstructionFileCandidates` 只在 project-root
+到 cwd 的祖先链每一层查找候选文件，不会下钻子目录；L3/L4 因为是"按需读取"，
+放进隐藏子目录 `.dsh/wiki/` 更整洁，模型用普通文件工具直接打开即可。
+
+### 11.3 写入路径：`wiki_note` 工具
+
+`shell/src/remote/wiki-tool.ts`（+ 同目录纯 fs 辅助 `wiki-fs.ts`）是一个
+cordis 插件，与 `region-router.ts` 等同属"运行时拷贝进 profile"的一员：
+`spawn-user.ts` 的 `ensureUserWiki` 在每次 `provisionUserHome` 时把两个文件
+拷贝进 `$DSH_HOME/plugins/wiki/`，并把 `- insert: [{id: tool-wiki, ...}]`
+与 `- id: agent-instructions` 两行配置 upsert 进**home 级** `cordis.patch.yml`
+（`$DSH_HOME/cordis.patch.yml`，由 `apps/cli/src/profile-boot.ts` 在 profile
+自身 patch 之后叠加，与 `writeTeamLlmPatch` 等既有 home 级 patch 同一约定）
+——刻意不复用 `injectRegionRouter` 写 profile 级 patch 的方式，因为那条路径
+是整份文件 `writeFileSync` 覆盖，会连同已有内容一起冲掉。
+
+`wiki_note` 的 `kind` 参数选择四层之一：`identity`/`preferences` 整体覆写
+（与 `todo_write` 的"整份列表替换"同构），`timeline`/`decision` 追加一条
+带时间戳的条目且从不改写更早的条目；`decision` 额外要求
+`alternativesConsidered`（考虑过并放弃的方案），格式参照本仓库 Agent Note
+的 Problem/Decision/Alternatives 范式，推翻一个决策时追加新条目引用旧条目
+而不是编辑它。
+
+### 11.4 遗忘对策：周期性 system-reminder
+
+单纯让模型"自己记得调用工具"在长会话里会被稀释。`wiki-tool.ts` 在
+`agent/pre-step`（模仿 `packages/skill/tool-skill` 的 `<system-reminder>`
+注入手法）里维护一个进程内 `WeakMap<Agent, number>` 计数器，每
+`reminderEveryTurns`（默认 6，可配置）轮注入一条提醒消息并清零计数——
+不是"只提醒一次"，而是持续复发，抵消模型随对话变长逐渐忘记该工具存在。
+
+### 11.5 未采纳的方案
+
+- **被动、会话结束时提取**（类似 `compaction-basic` 的摘要器）：不采纳，
+  因为"重大突破"往往发生在对话中途且转瞬即逝，等到会话结束/压缩时刻才
+  提取会错过上下文最丰富的时刻，且需要额外一次 LLM 调用。改为让模型在
+  产生突破的当下主动调用工具（选项 A），配合周期性提醒兜底遗忘风险。
+- **单一整份 wiki 文件（分 section 而非分文件）**：不采纳，因为 L1/L2
+  需要"每轮整份加载"、L3/L4 需要"追加且不可整体加载"，两种语义混进同一个
+  文件要么被迫解析/截断，要么退化为整份加载（L3/L4 无界增长后代价过高）。
+  分文件让 L1/L2 的自动加载可以直接复用 `agent-instructions` 现成的
+  `localInstructionFileCandidates` 机制，零新增管线。

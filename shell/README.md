@@ -14,6 +14,22 @@ node --import tsx/esm shell/src/bin.ts spawn-user alice 32001
 
 `spawn-user` provisions the user's DSH_HOME under the users root (default `$TMPDIR/dsh-users`, override with `DSH_USERS_ROOT`), boots `dsh --profile web`, and prints the instance's authenticated URL, e.g. `USER URL: http://127.0.0.1:32001/?token=...`. Ctrl-C stops the instance again.
 
+## Personal wiki (per-user memory)
+
+Every account gets a four-layer personal wiki, scaffolded under its workspace
+by `provisionUserHome` before the instance ever starts: `.dsh-wiki-identity.md`
+and `.dsh-wiki-preferences.md` sit at the workspace root (loaded into every
+turn's baseline context via `agent-instructions`'s `localInstructionFileCandidates`,
+so identity/preference facts are always visible without a retrieval step), and
+`.dsh/wiki/timeline.md` / `.dsh/wiki/decisions.md` hold append-only, on-demand
+logs (read with the ordinary file tool; never auto-loaded). A `wiki_note` tool
+(`shell/src/remote/wiki-tool.ts` + `wiki-fs.ts`, copied into
+`$DSH_HOME/plugins/wiki/` and patched in via the home-level
+`cordis.patch.yml`) lets the model overwrite identity/preferences whole or
+append a dated timeline/decision entry, and a periodic `<system-reminder>`
+nudges the model to call it after a configurable number of turns
+(`reminderEveryTurns`, default 6) so a long session does not forget it exists.
+
 ## Remote execution bridge
 
 The bridge serves each user's own code host. The agent on that host dials out to the hub (direction B: a host behind NAT needs no inbound port); the hub listens on an agent port and exposes a loopback HTTP control API, and per-user dsh instances or CLI operators issue exec and file requests over that API. The implementation lives in `shell/src/remote/`: `hub.ts`, `agent.ts`, `client.ts`, `protocol.ts`, `executor.ts` (remote ShellExecutor), `fs-provider.ts` (remote FileSystem), `inject.ts`, `shadow.ts`, `region-router.ts`, `region-shell.ts`, and `mount-sync.ts`.

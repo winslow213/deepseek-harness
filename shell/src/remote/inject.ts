@@ -330,3 +330,56 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
   }))
   return patch
 }
+
+/** Runtime modules copied into the home-level wiki plugin directory. */
+export const WIKI_RUNTIME_FILES = ['wiki-tool.ts', 'wiki-fs.ts'] as const
+
+/** Home-level plugin directory holding the copied `wiki_note` tool runtime. */
+export function wikiPluginsDirFor(home: string): string {
+  return join(home, 'plugins', 'wiki')
+}
+
+/**
+ * Copy the `wiki_note` tool runtime into the account's home-level plugin
+ * directory and return the config-patch rows selecting it and pointing
+ * `agent-instructions` at the identity/preferences layer files. The caller
+ * (`spawn-user.ts`) upserts the returned block into the home-level
+ * `cordis.patch.yml` alongside its other team-injected blocks; unlike
+ * {@link injectRegionRouter}, this never overwrites the whole patch file.
+ * @param options.runtimeSourceDir - directory of the wiki runtime sources to copy (`shell/src/remote`).
+ * @param options.home - the account's DSH_HOME (holds `plugins/wiki` and the home patch).
+ * @param options.workspaceRoot - the account's private workspace root the tool writes into.
+ * @returns the id-delimited YAML rows to upsert into the home patch.
+ */
+export function injectUserWiki(options: {
+  runtimeSourceDir: string
+  home: string
+  workspaceRoot: string
+}): string {
+  const pluginsDir = wikiPluginsDirFor(options.home)
+  mkdirSync(pluginsDir, { recursive: true })
+  writeLoosePluginManifest(pluginsDir)
+  for (const file of WIKI_RUNTIME_FILES) {
+    cpSync(join(options.runtimeSourceDir, file), join(pluginsDir, file), { force: true })
+  }
+  const toolFileUrl = pathToFileURL(join(pluginsDir, 'wiki-tool.ts')).href
+  const lines = [
+    '# Team-injected personal wiki: the wiki_note tool writes the four-layer',
+    "# memory model under the account's own workspace, and agent-instructions",
+    '# is pointed at the identity/preferences files so they load every turn.',
+    '- insert:',
+    '    - id: tool-wiki',
+    `      name: ${JSON.stringify(toolFileUrl)}`,
+    '      config:',
+    `        workspaceRoot: ${JSON.stringify(options.workspaceRoot)}`,
+    '- id: agent-instructions',
+    '  config:',
+    '    maxBytes: 65536',
+    '    localInstructionFileCandidates:',
+    '      - AGENTS.local.md',
+    '      - CLAUDE.local.md',
+    '      - .dsh-wiki-identity.md',
+    '      - .dsh-wiki-preferences.md',
+  ]
+  return lines.join('\n')
+}

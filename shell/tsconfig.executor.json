@@ -33,6 +33,8 @@
     "src/remote/mount-sync.ts",
     "src/remote/mount-declare.ts",
     "src/remote/mount-declare-render.ts",
-    "src/remote/client.ts"
+    "src/remote/client.ts",
+    "src/remote/wiki-tool.ts",
+    "src/remote/wiki-fs.ts"
   ]
 }

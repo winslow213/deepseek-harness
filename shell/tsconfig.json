@@ -29,6 +29,7 @@
     "src/remote/region-shell.ts",
     "src/remote/mount-sync.ts",
     "src/remote/mount-declare.ts",
+    "src/remote/wiki-tool.ts",
     "tests",
     "node_modules",
     "lib"
