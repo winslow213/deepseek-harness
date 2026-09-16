@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-team-shell-user-wiki.md
-2026-09-16-team-shell-user-wiki.md: 6aed5b58e1d1198d7aa06c896f88fb256e443293
-2026-09-16-team-shell-user-wiki.zh.md: 97d6365c78f37b57f98a30fa20d57581607dcdb2
+2026-09-16-team-shell-user-wiki.md: 7f2aa4bbd89860165a94c31eb256bee1de59a191
+2026-09-16-team-shell-user-wiki.zh.md: a0d3bf7f9a8e7674505dcf4486660bde2b48a977

@@ -1,0 +1,27 @@
+# Agent Note: Baseline-compare conflict guard on the personal wiki's whole-file layers
+
+Status: implemented
+
+English | [中文](2026-09-16-wiki-whole-file-write-conflict-guard.zh.md)
+
+## Problem
+
+The [personal wiki](../feature/2026-09-16-team-shell-user-wiki.md)'s L1 (`.dsh-wiki-identity.md`) and L2 (`.dsh-wiki-preferences.md`) layers are overwritten whole on every `wiki_note` call, by design — they mirror `todo_write`'s whole-list-replace discipline. In production, a user ran two sessions against the same account at once (a shadow-pairing instance and the main instance are separate OS processes but share one workspace, so they share one backing wiki file). One session wrote L1 at 11:53; a second session, holding a now-stale in-memory copy, wrote its own full L1 at 12:55 with no knowledge of the first write, silently destroying it. Nothing detected or reported the loss; the user only found out because they happened to compare the file's content against what they remembered writing. `writeWikiLayer` had no concept of "what was on disk when I last looked," so any two processes racing on a whole-replace layer were guaranteed to let last-write-win destroy the earlier write.
+
+## Decision
+
+**Snapshot-then-compare-on-write, not file locking.** `writeWikiLayer` (`shell/src/remote/wiki-fs.ts`) gains an optional `baseline` parameter for the two whole-replace layers. When supplied, the write first re-reads current on-disk content via the new `readWikiLayer` and compares it against `baseline`; a mismatch throws `WikiWriteConflictError` (carrying the layer and the actual current content) instead of overwriting. Omitting `baseline` preserves the original unconditional-overwrite behavior, which provisioning (`ensureUserWiki`) and older tests still rely on — only the live tool path opts into the check. A real file lock (e.g. an `mkdirSync`-based mutex closing the read-check-then-write window) was deliberately not added: the actual production incident had writes an hour apart, so the residual TOCTOU race is a microsecond-scale risk versus the incident's real window, and a lock adds cross-process cleanup complexity (stale lock recovery, crash handling) disproportionate to that residual risk.
+
+**The baseline lives in process-local memory, refreshed every turn, not in a per-`Agent` map.** `wiki-tool.ts` keeps a closure-level `lastSeen: Partial<Record<WholeReplaceWikiLayer, string>>`, populated once when the plugin loads and refreshed again at the top of every `agent/pre-step` hook (before `next()`), so the baseline always reflects "what this session could plausibly have read as of this turn's start." Because the comparison target is always live disk content — only the "last seen" side is in-memory — this design correctly detects conflicts across OS processes (the shadow-pairing-vs-main-instance case that caused the incident), not just within one process's turns.
+
+**A conflict surfaces as a tool-call failure carrying the latest content, not a silent merge.** `wiki-tool.ts`'s `execute()` catches `WikiWriteConflictError`, updates `lastSeen` to the conflicting current content (so an immediate retry with merged text succeeds without another round-trip), and throws an `Error` whose message embeds the full latest on-disk content plus instructions to merge and retry. The model sees this as an ordinary failed tool call it can recover from in the same turn — no new tool, no new protocol, and no risk of the harness silently picking a side.
+
+## Alternatives considered
+
+**A real lock file (`mkdirSync`/`flock`-style mutex) around the read-check-then-write window.** Rejected: it closes a race that, in the actual incident, was an hour wide — not a concurrency-tuning problem — while adding stale-lock recovery and crash-safety concerns of its own. Revisit only if evidence shows two writes landing within the same read-write window in practice.
+
+**Automatic three-way merge of the two versions instead of surfacing a tool-call error.** Rejected: L1/L2 are free-form prose written by a model reasoning about a person, not structured data with a safe merge algorithm; picking a merge strategy risks silently fabricating combined text neither writer intended. Surfacing the conflict to the model, which already reasons in prose and has the context of what it meant to write, produces a more faithful merge than any mechanical strategy could.
+
+## Consequences
+
+Two sessions racing a whole-replace write no longer destroy each other's content silently: the second writer gets a failed tool call with the first writer's content attached and can merge and retry in the same turn. `shell/tests/wiki-fs.spec.ts` gained three cases (unconditional overwrite still works without a baseline, a stale baseline throws `WikiWriteConflictError` and leaves the concurrent write untouched, a matching baseline succeeds) and `shell/tests/wiki-tool.spec.ts` gained one (a tool-level conflict becomes `isError: true` with the other session's content embedded, followed by a successful merged retry); the full `wiki-fs`/`wiki-tool`/`spawn-user-wiki` suite (17 cases across those three files) passes, and both `shell/tsconfig.json` and `shell/tsconfig.executor.json` typecheck clean. The narrow read-check-then-write race window remains open by design (see Decision); a future change that needs to close it should start from the lock-file alternative above rather than re-litigating snapshot-compare from scratch.

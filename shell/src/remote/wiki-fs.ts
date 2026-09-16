@@ -20,7 +20,7 @@
  * @module dsh-team-shell/wiki-fs
  */
 
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** L1 identity file: stable facts about the person, overwritten whole. */
@@ -90,6 +90,21 @@ export function wikiPaths(workspaceRoot: string): WikiPaths {
   }
 }
 
+/** A whole-replace wiki layer kind (identity/preferences), as opposed to the append-only pair. */
+export type WholeReplaceWikiLayer = 'identity' | 'preferences'
+
+/**
+ * Read the current on-disk content of a whole-replace layer (identity or
+ * preferences), or `''` if the file does not exist yet. Used both to render
+ * the layer and as the baseline for {@link writeWikiLayer}'s conflict check.
+ * @param workspaceRoot - the account's private workspace root.
+ * @param layer - `identity` or `preferences`.
+ */
+export function readWikiLayer(workspaceRoot: string, layer: WholeReplaceWikiLayer): string {
+  const path = wikiPaths(workspaceRoot)[layer]
+  return existsSync(path) ? readFileSync(path, 'utf8') : ''
+}
+
 /**
  * Create the four wiki layer files with their skeleton content when absent.
  * Idempotent: an existing file (including one the model has already written
@@ -133,6 +148,28 @@ function renderLogEntry(entry: WikiLogEntry): string {
 }
 
 /**
+ * Thrown by {@link writeWikiLayer} when a `baseline` was supplied for a
+ * whole-replace layer (identity/preferences) and the file's current on-disk
+ * content no longer matches it — evidence another session wrote to the same
+ * file since this caller last read it. The write is refused; nothing is
+ * overwritten. {@link currentContent} carries the latest on-disk content so
+ * the caller can merge into it before retrying.
+ */
+export class WikiWriteConflictError extends Error {
+  /** The layer whose write was refused. */
+  readonly layer: WholeReplaceWikiLayer
+  /** The file's actual current content at the time of the refused write. */
+  readonly currentContent: string
+
+  constructor(layer: WholeReplaceWikiLayer, currentContent: string) {
+    super(`wiki ${layer} file changed on disk since the caller's baseline was read`)
+    this.name = 'WikiWriteConflictError'
+    this.layer = layer
+    this.currentContent = currentContent
+  }
+}
+
+/**
  * Apply one `wiki_note` write: `identity`/`preferences` replace the whole
  * layer file (mirroring `todo_write`'s whole-list replace); `timeline`/
  * `decision` append a new dated entry and never rewrite an earlier one.
@@ -140,11 +177,28 @@ function renderLogEntry(entry: WikiLogEntry): string {
  * @param layer - which of the four layers this call targets.
  * @param entry - the content to write; `title` is required for the two
  *   append-only layers and ignored for `identity`/`preferences`.
+ * @param baseline - identity/preferences only: the content the caller last
+ *   read for this layer. When supplied, the write is refused with a
+ *   {@link WikiWriteConflictError} if the file's current content no longer
+ *   matches it — closing the whole-replace layers' data-loss window where a
+ *   second concurrent session (for example a shadow-pairing mount and the
+ *   user's main session sharing one backing workspace) silently clobbers the
+ *   first session's write. Omit it to keep the previous unconditional
+ *   overwrite (provisioning and tests that do not need the check).
  */
-export function writeWikiLayer(workspaceRoot: string, layer: WikiLayer, entry: WikiLogEntry): void {
+export function writeWikiLayer(
+  workspaceRoot: string,
+  layer: WikiLayer,
+  entry: WikiLogEntry,
+  baseline?: string,
+): void {
   const paths = wikiPaths(workspaceRoot)
   if (layer === 'identity' || layer === 'preferences') {
     mkdirSync(workspaceRoot, { recursive: true })
+    if (baseline !== undefined) {
+      const current = readWikiLayer(workspaceRoot, layer)
+      if (current !== baseline) throw new WikiWriteConflictError(layer, current)
+    }
     writeFileSync(paths[layer], `${entry.content.trim()}\n`)
     return
   }

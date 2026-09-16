@@ -7,6 +7,8 @@ import { join } from 'node:path'
 import {
   scaffoldUserWiki,
   writeWikiLayer,
+  readWikiLayer,
+  WikiWriteConflictError,
   wikiPaths,
   WIKI_IDENTITY_FILE,
   WIKI_PREFERENCES_FILE,
@@ -97,6 +99,54 @@ describe('writeWikiLayer', () => {
       assert.ok(existsSync(wikiPaths(root).decisions))
     } finally {
       await rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('overwrites identity/preferences unconditionally when no baseline is given', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-'))
+    try {
+      writeWikiLayer(root, 'identity', { title: '', content: 'v1' })
+      // Simulate another session writing in between, without going through this baseline.
+      writeWikiLayer(root, 'identity', { title: '', content: 'v2' })
+      writeWikiLayer(root, 'identity', { title: '', content: 'v3' })
+      assert.equal(await readFile(wikiPaths(root).identity, 'utf8'), 'v3\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to overwrite identity when the on-disk content no longer matches the baseline', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-'))
+    try {
+      writeWikiLayer(root, 'identity', { title: '', content: 'v1' })
+      const baseline = readWikiLayer(root, 'identity')
+      // Another session writes concurrently, without this caller's knowledge.
+      writeWikiLayer(root, 'identity', { title: '', content: 'v2 from another session' })
+      assert.throws(
+        () => writeWikiLayer(root, 'identity', { title: '', content: 'v3 stale write' }, baseline),
+        (err: unknown) => {
+          assert.ok(err instanceof WikiWriteConflictError)
+          assert.equal(err.layer, 'identity')
+          assert.equal(err.currentContent, 'v2 from another session\n')
+          return true
+        },
+      )
+      // The refused write left the concurrent session's content untouched.
+      assert.equal(await readFile(wikiPaths(root).identity, 'utf8'), 'v2 from another session\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('allows the write when the baseline still matches current disk content', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-'))
+    try {
+      writeWikiLayer(root, 'preferences', { title: '', content: 'v1' })
+      const baseline = readWikiLayer(root, 'preferences')
+      writeWikiLayer(root, 'preferences', { title: '', content: 'v2' }, baseline)
+      assert.equal(await readFile(wikiPaths(root).preferences, 'utf8'), 'v2\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
     }
   })
 })

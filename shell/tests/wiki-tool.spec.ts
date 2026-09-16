@@ -11,7 +11,7 @@ import AgentRegistry, { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as tool from '../src/remote/wiki-tool.ts'
-import { wikiPaths } from '../src/remote/wiki-fs.ts'
+import { wikiPaths, writeWikiLayer } from '../src/remote/wiki-fs.ts'
 
 const testToolSignal = new AbortController().signal
 
@@ -115,6 +115,32 @@ describe('wiki_note tool', () => {
       const content = await readFile(wikiPaths(root).decisions, 'utf8')
       assert.match(content, /chose X/)
       assert.match(content, /Y was slower/)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses an identity overwrite when another session wrote to it since this one last read it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-tool-'))
+    try {
+      const ctx = await setup(root)
+      const agent = sessionAgent()
+      const first = await callWikiNote(ctx, { kind: 'identity', content: 'v1' }, agent)
+      assert.equal(first.isError, false)
+      // A different session writes the same backing file without this tool instance's knowledge.
+      writeWikiLayer(root, 'identity', { title: '', content: 'v2 from another session' })
+      const conflicting = await callWikiNote(ctx, { kind: 'identity', content: 'v3 stale write' }, agent)
+      assert.equal(conflicting.isError, true)
+      const conflictText = conflicting.content.map(b => (b.type === 'text' ? b.text : '')).join('\n')
+      assert.match(conflictText, /conflict/)
+      assert.match(conflictText, /v2 from another session/)
+      // The refused write left the other session's content untouched.
+      assert.equal(await readFile(wikiPaths(root).identity, 'utf8'), 'v2 from another session\n')
+      // A follow-up call with the merged text now succeeds, since the tool
+      // remembered the conflicting content as its new baseline.
+      const merged = await callWikiNote(ctx, { kind: 'identity', content: 'v2 from another session, merged with v3' }, agent)
+      assert.equal(merged.isError, false)
+      assert.equal(await readFile(wikiPaths(root).identity, 'utf8'), 'v2 from another session, merged with v3\n')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
