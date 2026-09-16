@@ -529,8 +529,10 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
     // The other public account endpoints proxy straight to the account service
     // (it owns cookie issuance and login state). `/api/pairings` mints a code
     // for the signed-in session; the browser only ever sees the code, never the
-    // agent token, which the account service keeps server-side.
-    if (pathname === '/api/login' || pathname === '/api/me' || pathname === '/api/pairings') {
+    // agent token, which the account service keeps server-side. `/api/me/idle-exempt`
+    // is the self-service idle-reclaim-whitelist toggle, scoped server-side to
+    // the caller's own session.
+    if (pathname === '/api/login' || pathname === '/api/me' || pathname === '/api/me/idle-exempt' || pathname === '/api/pairings') {
       proxyAccount(req, res, options.accountUrl)
       return
     }
