@@ -383,3 +383,48 @@ export function injectUserWiki(options: {
   ]
   return lines.join('\n')
 }
+
+/** Runtime module copied into the home-level KB-search plugin directory. */
+export const KB_SEARCH_RUNTIME_FILES = ['kb-tool.ts'] as const
+
+/** Home-level plugin directory holding the copied `kb_search` tool runtime. */
+export function kbSearchPluginsDirFor(home: string): string {
+  return join(home, 'plugins', 'kb')
+}
+
+/**
+ * Copy the `kb_search` tool runtime into the account's home-level plugin
+ * directory and return the config-patch rows selecting it. The caller
+ * (`spawn-user.ts`) upserts the returned block into the home-level
+ * `cordis.patch.yml` alongside its other team-injected blocks.
+ * @param options.runtimeSourceDir - directory of the kb-tool source to copy (`shell/src/remote`).
+ * @param options.home - the account's DSH_HOME (holds `plugins/kb` and the home patch).
+ * @param options.userId - the account id the KB session is created under.
+ * @param options.kbBaseUrl - base URL of the team KB agent server.
+ * @returns the id-delimited YAML rows to upsert into the home patch.
+ */
+export function injectKbSearch(options: {
+  runtimeSourceDir: string
+  home: string
+  userId: string
+  kbBaseUrl: string
+}): string {
+  const pluginsDir = kbSearchPluginsDirFor(options.home)
+  mkdirSync(pluginsDir, { recursive: true })
+  writeLoosePluginManifest(pluginsDir)
+  for (const file of KB_SEARCH_RUNTIME_FILES) {
+    cpSync(join(options.runtimeSourceDir, file), join(pluginsDir, file), { force: true })
+  }
+  const toolFileUrl = pathToFileURL(join(pluginsDir, 'kb-tool.ts')).href
+  const lines = [
+    "# Team-injected kb_search: queries the team's knowledge base server over",
+    '# its HTTP job API and returns a citation-backed answer.',
+    '- insert:',
+    '    - id: tool-kb-search',
+    `      name: ${JSON.stringify(toolFileUrl)}`,
+    '      config:',
+    `        userId: ${JSON.stringify(options.userId)}`,
+    `        kbBaseUrl: ${JSON.stringify(options.kbBaseUrl)}`,
+  ]
+  return lines.join('\n')
+}

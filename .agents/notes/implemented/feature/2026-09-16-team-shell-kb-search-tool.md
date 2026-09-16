@@ -1,0 +1,33 @@
+# Agent Note: A `kb_search` tool giving dsh sessions read access to the team KB agent server
+
+Status: implemented
+
+English | [中文](2026-09-16-team-shell-kb-search-tool.zh.md)
+
+## Problem
+
+The team already runs an independent Rust/axum "Team KB Agent Server" (`/home/winslow/Desktop/wiki-server`, not part of this repository) holding a large, curated knowledge base (OpenHarmony platform docs, agent rules, entity/concept notes — thousands of documents) behind an HTTP job API. A prior change taught that server to use `dsh --profile headless` as one of its own pluggable answer-synthesis backends (see the KB server's own history), but that is the opposite direction: it lets the KB server call dsh, not the reverse. Nothing in team-shell let a normal dsh session — the ones users actually chat in — look anything up in that knowledge base; every dsh instance was blind to it.
+
+## Decision
+
+**A model-facing `kb_search` tool that is a thin HTTP client of the KB server's existing job API, not a new capability inside the KB server.** `shell/src/remote/kb-tool.ts` creates one cached session (`POST /api/sessions`), submits a query job (`POST /api/jobs/query`), and blocks on that job's SSE event stream (`GET /api/jobs/{id}/events`) until a terminal event arrives, returning the synthesized `{ answer, citations, used_docs }`. The KB server's own worker already does document retrieval, prompting, and JSON-schema verification (via whichever backend `config/default.toml` names, e.g. Copilot) — this tool adds no new server-side logic, mirroring how it would call any other internal HTTP service.
+
+**The session is cached per plugin instance (per dsh process lifetime), not created per call or persisted across restarts.** KB sessions carry a 24h server-side TTL, comfortably longer than a single dsh process's typical lifetime, so a `let cachedSessionId` closure variable avoids a round trip on every `kb_search` call without needing any expiry-refresh logic.
+
+**One blocking `GET .../events` request replaces a client-side poll loop.** The KB server's SSE endpoint is already designed to stay open until the job reaches a terminal state (see the KB server's `get_job_events.rs`), whether the job was already done by the time the client connects or not — so a single `fetch(...).then(r => r.text())` (parsed for its last terminal-state `data:` payload) is sufficient; no polling, backoff, or manual `Last-Event-ID` bookkeeping is needed for this tool's single-shot usage.
+
+**Wired into every account exactly like the wiki tool: a home-level plugin, upserted at every `provisionUserHome`.** `injectKbSearch` (`shell/src/remote/inject.ts`) copies `kb-tool.ts` into `$DSH_HOME/plugins/kb/` and `ensureKbSearch` (`shell/src/spawn-user.ts`) upserts an id-delimited block into the account's home-level `cordis.patch.yml`, configured with the account id (as the KB session's `user_id`) and the KB server's base URL (`TEAM_KB_BASE_URL` env, default `http://127.0.0.1:8080` — same host, loopback, since the KB server and every dsh instance it serves run on the same deploy host).
+
+**A job failure surfaces as an ordinary tool-call error, not a silent empty answer.** The KB server deliberately refuses to fabricate an answer when its documents do not support one; `kb-tool.ts` reads that failure's `error_message` off the terminal event and throws, so the model sees a clear, recoverable tool-call failure instead of an empty or misleading success.
+
+## Alternatives considered
+
+**Always-on context injection (loading a KB summary into every turn), mirroring how L1/L2 of the personal wiki auto-load via `agent-instructions`.** Rejected: the KB holds thousands of documents across many categories — nothing about it is small enough to summarize into every turn's context affordably, unlike the personal wiki's two bounded files. A pull-based tool the model calls only when a question needs it is the only viable shape at this KB's size.
+
+**Polling `GET /api/jobs/{id}` in a loop until the state is terminal, then fetching the result separately.** Rejected: `JobInfo` (the poll response) carries only `result_ref` (a server-local filesystem path), not the result content itself — a network client cannot resolve that path. The SSE events endpoint is the only network-reachable way to get the actual `{answer, citations, used_docs}` payload, and since it already blocks until terminal, it replaces both the poll loop and a separate "fetch result" step.
+
+**Fixing the KB server's `codex_runner.py` `top_k: null` crash inside that project.** Deferred, not rejected: `wiki-server` is a separate repository outside this change's scope. `kb-tool.ts` works around it by always sending a concrete `top_k` (default 8) instead of leaving it `undefined`/`null`, which is the correct client-side behavior regardless of whether the server bug is later fixed.
+
+## Consequences
+
+Every account's dsh instance now has a `kb_search` tool that can look up the team's real knowledge base and return a citation-backed answer, verified end-to-end against the actual running KB server (`cargo run --release` on this deploy host, real Postgres/Redis, real documents) with a live query ("NNRt 是什么") returning a correct, cited answer. `shell/tests/kb-tool.spec.ts` (registration, success path, session caching across calls, failure surfacing) and `shell/tests/spawn-user-kb.spec.ts` (runtime copy, patch content, default/overridden KB URL, idempotence) add 7 passing cases to the shell suite (53 total, all passing); both `shell/tsconfig.json` and `shell/tsconfig.executor.json` typecheck clean with `kb-tool.ts` added to their include/exclude lists the same way `wiki-tool.ts` is. The KB server itself must be kept running as a persistent service on the deploy host for this tool to work in production — it is not managed by team-shell's own `deploy.sh` and needs its own operational ownership (a follow-up, not designed here). Whether the KB server's own default answer-synthesis backend should switch to `--provider dsh` is an independent, still-open decision this note does not make.

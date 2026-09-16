@@ -13,7 +13,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { injectRegionRouter, injectUserWiki, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { injectRegionRouter, injectUserWiki, injectKbSearch, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
 import { scaffoldUserWiki } from './remote/wiki-fs.ts'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
 
@@ -86,6 +86,7 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
   writeTeamDirectoryPickerPatch(home)
   ensureRegionRouter(user, env)
   ensureUserWiki(user, env)
+  ensureKbSearch(user, env)
   return home
 }
 
@@ -165,6 +166,32 @@ export function ensureUserWiki(user: string, env: NodeJS.ProcessEnv = process.en
   const block = injectUserWiki({ runtimeSourceDir, home, workspaceRoot: workspace })
   const [start, end] = teamMarkers(TEAM_USER_WIKI_PATCH_ID)
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${block}\n${end}`, TEAM_USER_WIKI_PATCH_ID)
+}
+
+/** Environment key naming the team KB agent server's base URL. */
+const TEAM_KB_BASE_URL_ENV = 'TEAM_KB_BASE_URL'
+
+/** Default team KB agent server base URL (same host, loopback). */
+const DEFAULT_TEAM_KB_BASE_URL = 'http://127.0.0.1:8080'
+
+/** The id marking the shell-owned kb_search block inside the home patch layer. */
+const TEAM_KB_SEARCH_PATCH_ID = 'dsh-team-kb-search'
+
+/**
+ * Ensure the user's home patch carries the `kb_search` tool, pointed at the
+ * team's KB agent server. Runs on every `provisionUserHome` call (idempotent:
+ * the patch block is upserted), so the tool is in place by the user's first
+ * turn.
+ * @param user - the account whose home is provisioned; also the KB session's `user_id`.
+ * @param env - environment carrying `DSH_USERS_ROOT` / `TEAM_KB_BASE_URL`.
+ */
+export function ensureKbSearch(user: string, env: NodeJS.ProcessEnv = process.env): void {
+  const home = userHome(user, env)
+  const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
+  const kbBaseUrl = env[TEAM_KB_BASE_URL_ENV] ?? DEFAULT_TEAM_KB_BASE_URL
+  const block = injectKbSearch({ runtimeSourceDir, home, userId: user, kbBaseUrl })
+  const [start, end] = teamMarkers(TEAM_KB_SEARCH_PATCH_ID)
+  upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${block}\n${end}`, TEAM_KB_SEARCH_PATCH_ID)
 }
 
 /** Environment key the account service reads the team API key from. */

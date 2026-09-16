@@ -35,6 +35,7 @@
     "src/remote/mount-declare-render.ts",
     "src/remote/client.ts",
     "src/remote/wiki-tool.ts",
-    "src/remote/wiki-fs.ts"
+    "src/remote/wiki-fs.ts",
+    "src/remote/kb-tool.ts"
   ]
 }
