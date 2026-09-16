@@ -75,6 +75,19 @@ export interface Config {
    * `process.cwd()`). Normal agent calls use their session cwd instead.
    */
   workspaceRoot?: string
+  /**
+   * Absolute directories every confined command must not READ — typically the
+   * shared parent of per-account homes. Deployment-varying, so it is config
+   * rather than a constant; leaving it unset keeps the inherited read-anywhere
+   * semantics, which is what a single-tenant host wants.
+   */
+  readDeniedRoots?: string[]
+  /**
+   * Subtrees re-exposed inside `readDeniedRoots`, normally the account's own
+   * home. Named separately because hiding the shared parent would otherwise
+   * also hide the files the account's own tooling loads.
+   */
+  readAllowedRoots?: string[]
 }
 
 /** Inputs that select the sandbox policy for one capability call. */
@@ -113,6 +126,10 @@ export class SandboxPolicyService extends Service {
     // No schema default: process.cwd() is resolved in the constructor so the
     // stored root is always absolute regardless of how it was supplied.
     workspaceRoot: z.string(),
+    // Read shielding is opt-in: an absent list means "no read boundary beyond
+    // the mode's write effects".
+    readDeniedRoots: z.array(z.string()),
+    readAllowedRoots: z.array(z.string()),
   })
 
   static inject = ['sessionProjections']
@@ -121,6 +138,10 @@ export class SandboxPolicyService extends Service {
   readonly defaultMode: SandboxMode
   /** The absolute `workspace-write` fallback root for calls without a session cwd. */
   readonly workspaceRoot: string
+  /** Canonical directories every confined command must not read; empty when unshielded. */
+  readonly readDeniedRoots: readonly string[]
+  /** Canonical subtrees re-exposed inside {@link readDeniedRoots}. */
+  readonly readAllowedRoots: readonly string[]
   constructor(ctx: Context, config: Config) {
     super(ctx, 'sandboxPolicy')
     // schemastery (static Config) already filled `mode`; the cast records that
@@ -128,6 +149,8 @@ export class SandboxPolicyService extends Service {
     // the process cwd is real branching, resolved absolute either way.
     this.defaultMode = config.mode as SandboxMode
     this.workspaceRoot = resolveWorkspaceRoot(config.workspaceRoot ?? process.cwd())
+    this.readDeniedRoots = (config.readDeniedRoots ?? []).map(canonicalPath)
+    this.readAllowedRoots = (config.readAllowedRoots ?? []).map(canonicalPath)
 
     ctx.sessionProjections.register({
       key: 'sandboxMode',
@@ -165,6 +188,8 @@ export class SandboxPolicyService extends Service {
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
       workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
+      ...this.readDeniedRoots.length === 0 ? {} : { readDeniedRoots: this.readDeniedRoots },
+      ...this.readAllowedRoots.length === 0 ? {} : { readAllowedRoots: this.readAllowedRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
   }

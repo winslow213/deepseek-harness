@@ -53,3 +53,31 @@ export function writableRoots(policy: SandboxExecutionPolicy): string[] {
   if (policy.mode !== 'workspace-write') return []
   return [...new Set([policy.workspaceRoot, '/tmp', tmpdir()].map(canonicalPath))]
 }
+
+/**
+ * The read boundary one confined execution enforces, as a canonical
+ * denied/re-exposed pair. Like {@link writableRoots}, this is the meaning's one
+ * home so the three enforcement dialects cannot drift into disagreeing about
+ * which sibling directories a tenant may read.
+ *
+ * An allowed root that is not inside any denied root is dropped: re-exposing a
+ * path nothing hides would grant a read the caller never asked to widen, and
+ * the bwrap dialect cannot express it either (it has no mount to bind over).
+ *
+ * @param policy - the file-effect policy to derive the read boundary from.
+ * @returns canonical denied roots and the canonical allowed subtrees inside
+ *   them; both empty when the policy names no read shield.
+ */
+export function readShield(policy: SandboxExecutionPolicy): { denied: string[]; allowed: string[] } {
+  const denied = [...new Set((policy.readDeniedRoots ?? []).map(canonicalPath))].filter(root => root !== '/')
+  if (denied.length === 0) return { denied: [], allowed: [] }
+  const allowed = [...new Set((policy.readAllowedRoots ?? []).map(canonicalPath))]
+    .filter(root => denied.some(hidden => isUnder(root, hidden)))
+  return { denied, allowed }
+}
+
+/** Whether `path` is `root` itself or sits beneath it, compared on path segments. */
+function isUnder(path: string, root: string): boolean {
+  const base = root.endsWith('/') ? root.slice(0, -1) : root
+  return path === base || path.startsWith(`${base}/`)
+}

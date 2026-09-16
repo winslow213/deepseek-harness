@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-16-sandbox-read-shielding-between-accounts.md
+2026-09-16-sandbox-read-shielding-between-accounts.md: ddda76f4a7d3e3d8809e82b4395816bf95d4284c
+2026-09-16-sandbox-read-shielding-between-accounts.zh.md: 6c5c2259c347cd354362d46b88703d9b1800345e

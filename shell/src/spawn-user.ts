@@ -12,7 +12,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { injectRegionRouter, injectUserWiki, injectKbSearch, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
 import { scaffoldUserWiki } from './remote/wiki-fs.ts'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
@@ -279,12 +279,23 @@ function writeTeamLlmPatch(home: string): void {
 /** Environment key the child reads its workspace root from (set at spawn). */
 const DSH_WORKSPACE_ROOT_ENV = 'DSH_WORKSPACE_ROOT'
 
+/** Environment key the child reads the shared per-account root from (set at spawn). */
+const DSH_USERS_ROOT_ENV = 'DSH_USERS_ROOT'
+
 /**
  * Upsert the home-level patch confining the account's sandbox to its own
  * workspace: `sandbox-policy` gets `workspaceRoot` pointing at the account's
  * private directory (read via `!!js` at startup so one spawn always uses the
  * account's own path). The deployment mode stays operator-controlled through
  * `DSH_PERMISSION_MODE`, matching the base bundle's default.
+ *
+ * The same block carries the read shield. Workspace confinement only bounds
+ * what a command may MODIFY: without the shield every account's confined shell
+ * can still `cat` the other accounts' homes under the users root (their
+ * `.credentials.yaml` included). Denying that root and re-exposing this
+ * account's own home keeps its tooling working while hiding its siblings. Both
+ * sides are read from the environment at startup, so nothing about another
+ * account's layout is baked into this file.
  * @param home - the user's DSH_HOME.
  */
 function writeTeamSandboxPatch(home: string): void {
@@ -297,6 +308,10 @@ function writeTeamSandboxPatch(home: string): void {
     '  config:',
     "    mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'",
     `    workspaceRoot: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
+    '# Read isolation between accounts sharing this host: hide every sibling',
+    "# account's home, then re-expose this account's own.",
+    `    readDeniedRoots: !!js [process.env.${DSH_USERS_ROOT_ENV}].filter(Boolean)`,
+    `    readAllowedRoots: !!js [process.env.DSH_HOME].filter(Boolean)`,
   ].join('\n')
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_SANDBOX_PATCH_ID)
 }
@@ -356,6 +371,10 @@ function teamChildEnv(home: string, supervised: boolean): NodeJS.ProcessEnv {
   env.DSH_PLUGIN_INSTALL = process.env.TEAM_PLUGIN_INSTALL ?? 'true'
   // The account's private workspace is the sandbox confinement root.
   env[DSH_WORKSPACE_ROOT_ENV] = join(home, 'workspace')
+  // The shared users root every account home sits under is the read-shield
+  // boundary; the parent of this account's home is exactly that, whatever the
+  // operator chose to call it.
+  env[DSH_USERS_ROOT_ENV] = process.env[DSH_USERS_ROOT_ENV] ?? dirname(home)
   if (supervised) env[DSH_SUPERVISED_ENV] = '1'
   return env
 }

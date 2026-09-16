@@ -18,7 +18,7 @@ export {
   validateEscalationArgs,
 } from './escalation.ts'
 export type { EscalationApproval, EscalationApprover, EscalationOutcome, EscalationRequest } from './escalation.ts'
-export { canonicalPath, writableRoots } from './roots.ts'
+export { canonicalPath, readShield, writableRoots } from './roots.ts'
 
 /**
  * File-effect policy for confined processes. `read-only` permits only required
@@ -41,6 +41,26 @@ export interface SandboxExecutionPolicy {
   mode: SandboxMode
   /** Absolute root directory `workspace-write` may write under. */
   workspaceRoot: string
+  /**
+   * Absolute directories this execution must not READ, beyond whatever the
+   * mode already restricts. Write confinement alone does not stop a confined
+   * command from reading every readable file on the host, so a deployment that
+   * colocates mutually untrusted tenants under one shared parent — per-account
+   * homes under a users root — names that parent here to hide its other
+   * entries. Each entry hides its whole subtree.
+   *
+   * This is containment between tenants of one host, NOT a boundary against a
+   * hostile process: confinement runs under the caller's own OS identity, so
+   * anything that bypasses the sandbox seam is unaffected. See the read-shield
+   * Agent Note.
+   */
+  readDeniedRoots?: readonly string[]
+  /**
+   * Subtrees re-exposed inside {@link readDeniedRoots} — normally the calling
+   * tenant's own directory, without which the sandbox would also hide the
+   * files its own tools must load.
+   */
+  readAllowedRoots?: readonly string[]
   /**
    * Opaque identity of the calling session (the branded `dsh-session`
    * SessionId). Backends key per-session state off it (e.g. windows-acl gives

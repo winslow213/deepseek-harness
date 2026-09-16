@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -142,5 +142,91 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap confinement', () => {
     expect(result.status).toBe(0)
     expect(result.stdout).toBe('tmp-ok')
     expect(existsSync(target)).toBe(false)
+  })
+})
+
+/**
+ * The read shield is the one sandbox property that write confinement cannot
+ * express: a mode bounds what a command may MODIFY, never what it may READ, so
+ * every readable file on the host stays readable until a policy names a denied
+ * root. These cases run the real mounts because the masking depends on bwrap's
+ * argument-order semantics, which no profile-string assertion can prove.
+ */
+describe.skipIf(!bwrapUsable)('sandbox-local: read shielding between sibling tenants', () => {
+  /** A shared users root holding the caller's home and one sibling's home, each with a secret. */
+  async function tenants(): Promise<{ root: string; own: string; sibling: string }> {
+    // Under HOME, not tmpdir(): workspace-write mounts an ephemeral `/tmp`, so
+    // a tenants root placed there would be shadowed before any shield applied.
+    const root = await tempDir(homedir())
+    const own = join(root, 'caller')
+    const sibling = join(root, 'sibling')
+    await mkdir(own, { recursive: true })
+    await mkdir(sibling, { recursive: true })
+    await writeFile(join(own, 'own-secret.txt'), 'own')
+    await writeFile(join(sibling, 'credentials.yaml'), 'sk-sibling')
+    return { root, own, sibling }
+  }
+
+  function shieldPolicy(workdir: string, root: string, own: string): SandboxPolicy {
+    return {
+      mode: 'workspace-write',
+      workspaceRoot: workdir,
+      readDeniedRoots: [root],
+      readAllowedRoots: [own],
+    }
+  }
+
+  it('hides a sibling tenant entirely — its directory does not even appear', async () => {
+    const { root, own, sibling } = await tenants()
+    const workdir = await tempDir(homedir())
+    const sandbox = await provider()
+
+    const { result } = runConfined(sandbox, `ls ${root}`, shieldPolicy(workdir, root, own))
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('caller')
+    expect(result.stdout).not.toContain('sibling')
+    expect(existsSync(sibling)).toBe(true)
+  })
+
+  it('denies a read of the sibling tenant file, and the same read succeeds without the shield', async () => {
+    const { root, own, sibling } = await tenants()
+    const workdir = await tempDir(homedir())
+    const sandbox = await provider()
+
+    const unshielded = runConfined(sandbox, `cat ${sibling}/credentials.yaml`, { mode: 'workspace-write', workspaceRoot: workdir })
+    expect(unshielded.result.stdout).toBe('sk-sibling')
+
+    const shielded = runConfined(sandbox, `cat ${sibling}/credentials.yaml`, shieldPolicy(workdir, root, own))
+    expect(shielded.result.status).not.toBe(0)
+    expect(shielded.result.stdout).not.toContain('sk-sibling')
+  })
+
+  it('keeps the caller tenant readable and its workspace writable through the same shield', async () => {
+    const { root, own } = await tenants()
+    const workdir = await tempDir(homedir())
+    const sandbox = await provider()
+
+    const { result } = runConfined(
+      sandbox,
+      `cat ${own}/own-secret.txt && printf wrote > ${workdir}/out.txt`,
+      shieldPolicy(workdir, root, own),
+    )
+    expect(result.stdout).toContain('own')
+    expect(result.status).toBe(0)
+    expect(readFileSync(join(workdir, 'out.txt'), 'utf8')).toBe('wrote')
+  })
+
+  it('leaves the system toolchain usable, so the mask hides tenants without breaking the shell', async () => {
+    const { root, own } = await tenants()
+    const workdir = await tempDir(homedir())
+    const sandbox = await provider()
+
+    const { result } = runConfined(
+      sandbox,
+      'command -v bash && command -v node && bash -c "echo shell-ok"',
+      shieldPolicy(workdir, root, own),
+    )
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('shell-ok')
   })
 })
