@@ -25,7 +25,7 @@ export interface Config {
   userId: string
   /** KB catalog scope to search (default `wiki`). */
   scope?: string
-  /** Abort the whole query (session + job + result wait) after this many ms (default 60000). */
+  /** Abort the whole query (session + job + result wait) after this many ms (default 180000). */
   timeoutMs?: number
 }
 
@@ -34,7 +34,11 @@ export const Config: z<Config> = z.object({
   kbBaseUrl: z.string().required(),
   userId: z.string().required(),
   scope: z.string().default('wiki'),
-  timeoutMs: z.number().step(1).min(1000).default(60000),
+  // The KB server's LLM-backed synthesis step alone regularly runs 60-90s on
+  // real queries against the production KB (observed: 64s, 63s for ordinary
+  // questions); 60000 cut those off just short of completion, so the budget
+  // needs enough headroom over that observed range rather than matching it.
+  timeoutMs: z.number().step(1).min(1000).default(180000),
 })
 
 /** One event off the KB server's job SSE stream (`GET /api/jobs/{id}/events`). */
@@ -210,7 +214,16 @@ export function apply(ctx: Context, config: Config): void {
     },
     async execute(args, exec) {
       const controller = new AbortController()
-      const onCallerAbort = (): void => controller.abort(exec.signal.reason)
+      // The upstream signal's abort reason can be a non-Error value (e.g. the
+      // agent loop's `{ kind: 'aborted', reason: { kind: 'user' } }` on a
+      // user-cancelled turn); propagating it verbatim reaches the tool
+      // framework's generic `String(error)` fallback and renders as the
+      // unreadable "Error: [object Object]". Always forward a real Error with
+      // a readable cause instead.
+      const onCallerAbort = (): void => {
+        const reason = exec.signal.reason
+        controller.abort(reason instanceof Error ? reason : new Error(`kb_search: cancelled (${JSON.stringify(reason)})`))
+      }
       exec.signal.addEventListener('abort', onCallerAbort)
       const timer = setTimeout(() => controller.abort(new Error('kb_search: timed out waiting on the KB server')), timeoutMs)
       try {

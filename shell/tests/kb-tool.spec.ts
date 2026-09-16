@@ -88,6 +88,13 @@ class FakeKbServer {
       return
     }
     if (method === 'GET' && /^\/api\/jobs\/.+\/events$/.test(url)) {
+      // A job whose id encodes the never-completing query: hold the response
+      // open (no `res.end()`) so a caller-side abort test has something live
+      // to cancel instead of racing a response that already arrived.
+      if (url.includes(encodeURIComponent('never completes'))) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        return
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream' })
       const data = this.jobState === 'completed'
         ? { answer: 'A-law and u-law differ in companding curve.', citations: ['g711.md'], used_docs: ['g711'] }
@@ -157,5 +164,31 @@ describe('kb_search tool', () => {
     const result = await callKbSearch(ctx, { query: 'unanswerable' }, sessionAgent())
     assert.equal(result.isError, true)
     assert.match(JSON.stringify(result.content), /no relevant documents found/)
+  })
+
+  it('wraps a non-Error upstream abort reason (e.g. a user-cancelled turn) in a readable message', async () => {
+    fake.jobState = 'completed'
+    const ctx = await setup()
+    const controller = new AbortController()
+    const pending = ctx.tools.execute({
+      signal: controller.signal,
+      callId: ToolCallId(`call-${++callCounter}`),
+      name: 'kb_search',
+      arguments: { query: 'never completes' },
+      agent: sessionAgent(),
+    })
+    // The real agent loop aborts a cancelled turn with a plain object reason
+    // (`{ kind: 'aborted', reason: { kind: 'user' } }`), not an Error — the
+    // tool must not let that reach the model as "Error: [object Object]".
+    // Give the in-flight session/job-creation calls a moment to land before
+    // aborting, so the cancellation lands mid-request (matching the observed
+    // production failure) instead of the framework's own pre-dispatch check.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    controller.abort({ kind: 'aborted', reason: { kind: 'user' } })
+    const result = await pending
+    assert.equal(result.isError, true)
+    const text = JSON.stringify(result.content)
+    assert.doesNotMatch(text, /\[object Object\]/)
+    assert.match(text, /cancelled/)
   })
 })

@@ -20,6 +20,8 @@ Status: implemented
 
 **任务失败会以普通的工具调用错误呈现，而不是静默返回一个空答案。** 知识库服务在文档不支持某个答案时会刻意拒绝编造；`kb-tool.ts` 从终态事件里读出 `error_message` 并抛出，这样模型看到的是一次清晰、可恢复的工具调用失败，而不是一个空的或有误导性的"成功"。
 
+**每次调用的默认超时是 180000ms，来自上游的取消一定会被重新包装成真正的 `Error`。** 第一次生产环境冒烟测试同时踩到了这两个问题：一次普通查询的 LLM 合成步骤在真实知识库上耗时 63-64 秒，刚好超过工具原本 60000ms 的默认值，于是工具在服务端本会返回真正答案的前几秒就报出了一个虚假的超时；紧接着的下一次查询在进行中被用户取消，而 `kb-tool.ts` 把 `exec.signal.reason`（agent loop 的普通对象取消原因 `{ kind: 'aborted', reason: { kind: 'user' } }`，不是 `Error`）原样转发进了自己的 `AbortController`，工具框架通用的 `String(error)` 兜底逻辑把它渲染成了不可读的 `Error: [object Object]`。现在默认值改为 180000ms，任何非 `Error` 的上游取消原因在转发前都会被包装成带可读信息的新 `Error`。
+
 ## Alternatives considered
 
 **常驻式的上下文注入（把知识库摘要加载进每个回合），仿照个人 wiki 的 L1/L2 通过 `agent-instructions` 自动加载的方式。** 被否决：知识库涵盖跨多个分类的数千篇文档——完全不像个人 wiki 那两个体量有限的文件，没有哪种摘要能便宜地塞进每个回合的上下文里。以这份知识库的规模，只有"模型需要时才主动调用"的拉取式工具是唯一可行的形态。
@@ -30,4 +32,4 @@ Status: implemented
 
 ## Consequences
 
-现在每个账号的 dsh 实例都有一个 `kb_search` 工具，可以查询团队真正的知识库并返回带引用的答案；已经针对真实运行中的知识库服务做了端到端验证（在部署主机上 `cargo run --release`，真实的 Postgres/Redis，真实的文档），一次真实查询（"NNRt 是什么"）返回了正确且带引用的答案。`shell/tests/kb-tool.spec.ts`（注册、成功路径、跨调用的会话缓存、失败呈现）和 `shell/tests/spawn-user-kb.spec.ts`（运行时拷贝、patch 内容、默认/覆盖的知识库 URL、幂等性）为 shell 测试套件新增了 7 个通过的用例（共 53 个，全部通过）；`shell/tsconfig.json` 和 `shell/tsconfig.executor.json` 均 typecheck 干净，`kb-tool.ts` 已按 `wiki-tool.ts` 的方式加入它们的 include/exclude 列表。知识库服务本身必须作为一个持久化服务运行在部署主机上，这个工具才能在生产环境里工作——它不受团队 shell 自己的 `deploy.sh`管理，需要单独的运维归属（这是后续工作，本笔记未设计）。知识库服务自己的默认答案生成后端是否应该切换成 `--provider dsh`，是一个独立的、仍然悬而未决的决定，本笔记不做这个决定。
+现在每个账号的 dsh 实例都有一个 `kb_search` 工具，可以查询团队真正的知识库并返回带引用的答案；已经针对真实运行中的知识库服务做了端到端验证（在部署主机上 `cargo run --release`，真实的 Postgres/Redis，真实的文档），一次真实查询（"NNRt 是什么"）返回了正确且带引用的答案。`shell/tests/kb-tool.spec.ts`（注册、成功路径、跨调用的会话缓存、失败呈现、非 `Error` 取消原因的包装）和 `shell/tests/spawn-user-kb.spec.ts`（运行时拷贝、patch 内容、默认/覆盖的知识库 URL、幂等性）为 shell 测试套件新增了 8 个通过的用例（共 47 个，全部通过）；`shell/tsconfig.json` 和 `shell/tsconfig.executor.json` 均 typecheck 干净，`kb-tool.ts` 已按 `wiki-tool.ts` 的方式加入它们的 include/exclude 列表。知识库服务本身现在作为一个 `systemd --user` 服务运行（`team-kb-agent-server.service`，`Restart=always`），崩溃可以自愈；要在整机重启后也能存活，还需要为这个用户执行一次 `loginctl enable-linger`，这需要运维者的 `sudo` 权限，本笔记未自动化这一步。知识库服务自己的默认答案生成后端是否应该切换成 `--provider dsh`，是一个独立的、仍然悬而未决的决定，本笔记不做这个决定。
