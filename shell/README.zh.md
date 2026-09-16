@@ -168,7 +168,9 @@ node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
 
 `set-idle-exempt on` 把某用户列入空闲回收白名单（`TEAM_IDLE_TIMEOUT_SECS`，默认30分钟）：
 `InstanceStore.idleUsers` 会排除 `dsh_users.idle_exempt` 为真的用户，其实例无论是否
-活跃都不会被回收，直到再次关闭该开关。
+活跃都不会被回收，直到再次关闭该开关。已登录成员也可以不经运营者，自己切换同一个字段：
+`GET /api/me` 会回传当前 `idleExempt` 状态，`POST /api/me/idle-exempt`（会话鉴权、经代理转发）
+可以设置它——对应设置页 General 分组下的"保持实例常驻"开关。
 
 ## 开发
 

@@ -14,10 +14,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { TeamAccountRow } from './TeamAccountRow.tsx'
 import { PairingRow } from './PairingRow.tsx'
+import { IdleExemptRow } from './IdleExemptRow.tsx'
 import { en, zh, type TeamAccountLocaleKey } from './locales.ts'
 
 export type { TeamAccountRowProps } from './TeamAccountRow.tsx'
 export type { PairingRowProps } from './PairingRow.tsx'
+export type { IdleExemptRowProps } from './IdleExemptRow.tsx'
 export type { TeamAccountLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -34,7 +36,8 @@ export const NS = 'settings.teamAccount'
 export const inject = ['slots', 'locale']
 
 /**
- * Contribute the Pairing code and Sign out rows to the General settings section.
+ * Contribute the Pairing code, Keep-instance-running, and Sign out rows to
+ * the General settings section.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -46,6 +49,13 @@ export function apply(ctx: ClientContext): void {
     order: 90,
     locale: NS,
   }, PairingRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'team-idle-exempt',
+    order: 95,
+    locale: NS,
+  }, IdleExemptRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',

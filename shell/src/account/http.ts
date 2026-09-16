@@ -221,6 +221,7 @@ async function handleMe(req: IncomingMessage, res: ServerResponse, s: HttpServic
       username: user.username,
       role: user.role,
       displayName: user.display_name,
+      idleExempt: user.idle_exempt,
     },
     instance: port === undefined ? null : { port },
   })
@@ -235,6 +236,24 @@ export async function sessionUser(req: IncomingMessage, s: HttpServices): Promis
   if (userId === undefined) return undefined
   const user = await s.users.findByUsername(userId)
   return user === undefined ? undefined : { userId: user.user_id, username: user.username }
+}
+
+/** Self-service toggle against the idle-instance reclaim sweep (own account only). */
+async function handleSetIdleExempt(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const user = await sessionUser(req, s)
+  if (user === undefined) {
+    sendJson(res, 401, { error: 'no session' })
+    return
+  }
+  let body: unknown
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'invalid body' }); return }
+  const b = body as { exempt?: unknown }
+  if (typeof b.exempt !== 'boolean') {
+    sendJson(res, 400, { error: 'exempt (boolean) is required' })
+    return
+  }
+  await s.users.setIdleExempt(user.userId, b.exempt)
+  sendJson(res, 200, { idleExempt: b.exempt })
 }
 
 /** Mint a pairing code for the signed-in member (never exposes the agent token). */
@@ -293,6 +312,8 @@ export function createAccountServer(s: HttpServices) {
           await handleLogout(req, res, s)
         } else if (path === '/api/me' && method === 'GET') {
           await handleMe(req, res, s)
+        } else if (path === '/api/me/idle-exempt' && method === 'POST') {
+          await handleSetIdleExempt(req, res, s)
         } else if (path === '/api/session/route' && method === 'GET') {
           await handleSessionRoute(req, res, s)
         } else if (path === '/api/pairings' && method === 'POST') {

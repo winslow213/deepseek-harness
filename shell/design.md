@@ -96,9 +96,12 @@ DSH_HOME 在磁盘，历史会话/工作区恢复。
 
 `dsh_users.idle_exempt` 字段（默认 `false`）把用户从空闲回收扫描中排除：
 `InstanceStore.idleUsers` 联表 `dsh_users` 过滤 `NOT idle_exempt`，被标记的
-用户实例即使超过 `TEAM_IDLE_TIMEOUT_SECS` 也不会被回收。通过
-`account-cli set-idle-exempt <username> <on|off>` 切换；这是白名单粒度到单用户，
-而 `TEAM_IDLE_TIMEOUT_SECS` 仍是全局阈值，两者互补而非互斥。
+用户实例即使超过 `TEAM_IDLE_TIMEOUT_SECS` 也不会被回收。运营者侧通过
+`account-cli set-idle-exempt <username> <on|off>` 切换任意账号；已登录成员也可以
+自助切换自己的这个字段——`GET /api/me` 回传当前状态，`POST /api/me/idle-exempt`
+（会话鉴权）写入，对应客户端 `packages/client/ui-team-account` 里 Settings → General
+的"保持实例常驻"开关。这是白名单粒度到单用户，而 `TEAM_IDLE_TIMEOUT_SECS` 仍是全局阈值，
+两者互补而非互斥。
 
 ### 4.2 任务式（per-task）
 

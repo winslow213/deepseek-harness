@@ -13,6 +13,9 @@ export const zh = {
   'pairCommandLabel': '在目标主机运行',
   'pairCommand': 'dsh-shell remote agent --pair {code} --hub {host}:7101 --root <dir> [--allow-command ...]',
   'copy': '复制',
+  'idleExemptTitle': '保持实例常驻',
+  'idleExemptHint': '开启后长时间不活跃也不会被自动回收',
+  'idleExemptError': '设置失败，请重试',
 } satisfies Record<string, string>
 
 /** The settings.teamAccount namespace key union. */
@@ -31,4 +34,7 @@ export const en = {
   'pairCommandLabel': 'Run on the target host',
   'pairCommand': 'dsh-shell remote agent --pair {code} --hub {host}:7101 --root <dir> [--allow-command ...]',
   'copy': 'Copy',
+  'idleExemptTitle': 'Keep instance running',
+  'idleExemptHint': 'When on, your instance stays up even if idle for a long time',
+  'idleExemptError': 'Could not update the setting, please retry',
 } satisfies Record<TeamAccountLocaleKey, string>
