@@ -59,4 +59,12 @@ export class UserStore {
     )
     return token
   }
+
+  /** Whitelist (or un-whitelist) a user against the idle-instance reclaim sweep. */
+  async setIdleExempt(userId: string, exempt: boolean): Promise<void> {
+    await this.db.query(
+      'UPDATE dsh_users SET idle_exempt = $2, updated_at = now() WHERE user_id = $1',
+      [userId, exempt],
+    )
+  }
 }

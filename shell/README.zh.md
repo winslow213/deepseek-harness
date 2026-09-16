@@ -163,7 +163,12 @@ node --import tsx/esm src/bin.ts account-cli create-user <username> <password> [
 node --import tsx/esm src/bin.ts account-cli list-users
 node --import tsx/esm src/bin.ts account-cli reset-agent-token <username>
 node --import tsx/esm src/bin.ts account-cli reset-password <username> <password>
+node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
 ```
+
+`set-idle-exempt on` 把某用户列入空闲回收白名单（`TEAM_IDLE_TIMEOUT_SECS`，默认30分钟）：
+`InstanceStore.idleUsers` 会排除 `dsh_users.idle_exempt` 为真的用户，其实例无论是否
+活跃都不会被回收，直到再次关闭该开关。
 
 ## 开发
 

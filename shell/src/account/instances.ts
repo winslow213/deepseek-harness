@@ -36,14 +36,17 @@ export class InstanceStore {
 
   /**
    * List the users whose instance has been idle longer than the threshold —
-   * that is, whose `last_seen_at` predates `now() - idleSecs`.
+   * that is, whose `last_seen_at` predates `now() - idleSecs` — excluding
+   * users whitelisted via `dsh_users.idle_exempt`.
    * @param idleSecs - the idle timeout in seconds.
    */
   async idleUsers(idleSecs: number): Promise<string[]> {
     const result = await this.db.query(
-      `SELECT user_id FROM dsh_instances
-       WHERE last_seen_at < now() - make_interval(secs => $1)
-       ORDER BY last_seen_at`,
+      `SELECT i.user_id FROM dsh_instances i
+       JOIN dsh_users u ON u.user_id = i.user_id
+       WHERE i.last_seen_at < now() - make_interval(secs => $1)
+         AND NOT u.idle_exempt
+       ORDER BY i.last_seen_at`,
       [idleSecs],
     )
     return result.rows.map(row => String((row as Record<string, unknown>).user_id))

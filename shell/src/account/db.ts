@@ -22,6 +22,8 @@ export interface UserRow {
   status: string
   password_hash: string
   agent_token: string
+  /** Whitelisted against the idle-instance reclaim sweep when true. */
+  idle_exempt: boolean
   created_at: string
   updated_at: string
 }
@@ -35,6 +37,7 @@ export function rowToUser(row: Record<string, unknown>): UserRow {
     status: String(row.status),
     password_hash: String(row.password_hash),
     agent_token: String(row.agent_token),
+    idle_exempt: row.idle_exempt === true,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   }

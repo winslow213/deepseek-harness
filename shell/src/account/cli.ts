@@ -13,6 +13,7 @@ function usage(): never {
       '  list-users                                       list accounts',
       '  reset-agent-token <username>                     rotate a user\'s agent token',
       '  reset-password <username> <password>             set a new password',
+      '  set-idle-exempt <username> <on|off>              whitelist/un-whitelist against idle reclaim',
     ].join('\n') + '\n',
   )
   process.exit(1)
@@ -43,7 +44,7 @@ export async function main(argv: readonly string[]): Promise<void> {
       case 'list-users': {
         const rows = await users.list()
         for (const u of rows) {
-          console.log(`${u.username}\t${u.role}\t${u.status}\tuser_id=${u.user_id}\tagent_token=${u.agent_token}`)
+          console.log(`${u.username}\t${u.role}\t${u.status}\tuser_id=${u.user_id}\tagent_token=${u.agent_token}\tidle_exempt=${u.idle_exempt}`)
         }
         break
       }
@@ -72,6 +73,20 @@ export async function main(argv: readonly string[]): Promise<void> {
         }
         await users.setPassword(user.user_id, password)
         console.log(`password reset for ${username}`)
+        break
+      }
+      case 'set-idle-exempt': {
+        const username = args[0]
+        const setting = args[1]
+        if (username === undefined || (setting !== 'on' && setting !== 'off')) usage()
+        const user = await users.findByUsername(username)
+        if (user === undefined) {
+          console.error(`no such user ${JSON.stringify(username)}`)
+          process.exitCode = 1
+          break
+        }
+        await users.setIdleExempt(user.user_id, setting === 'on')
+        console.log(`idle_exempt for ${username} set to ${setting === 'on'}`)
         break
       }
       default:

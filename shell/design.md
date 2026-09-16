@@ -94,6 +94,12 @@ DSH_HOME 在磁盘，历史会话/工作区恢复。
 
 适合：长时间对话式交互（类 IDE/聊天）。活跃用户才有内存成本。
 
+`dsh_users.idle_exempt` 字段（默认 `false`）把用户从空闲回收扫描中排除：
+`InstanceStore.idleUsers` 联表 `dsh_users` 过滤 `NOT idle_exempt`，被标记的
+用户实例即使超过 `TEAM_IDLE_TIMEOUT_SECS` 也不会被回收。通过
+`account-cli set-idle-exempt <username> <on|off>` 切换；这是白名单粒度到单用户，
+而 `TEAM_IDLE_TIMEOUT_SECS` 仍是全局阈值，两者互补而非互斥。
+
 ### 4.2 任务式（per-task）
 
 壳中无长驻实例；发起任务 → spawn 实例跑完 → 销毁。

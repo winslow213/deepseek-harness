@@ -13,9 +13,13 @@ CREATE TABLE IF NOT EXISTS dsh_users (
   status        TEXT NOT NULL DEFAULT 'active',
   password_hash TEXT NOT NULL,
   agent_token   TEXT NOT NULL,
+  idle_exempt   BOOLEAN NOT NULL DEFAULT false,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Keep an existing table (created before idle_exempt existed) in sync.
+ALTER TABLE dsh_users ADD COLUMN IF NOT EXISTS idle_exempt BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS dsh_instances (
   user_id      TEXT PRIMARY KEY REFERENCES dsh_users(user_id) ON DELETE CASCADE,

@@ -170,7 +170,10 @@ node --import tsx/esm src/bin.ts account-cli create-user <username> <password> [
 node --import tsx/esm src/bin.ts account-cli list-users
 node --import tsx/esm src/bin.ts account-cli reset-agent-token <username>
 node --import tsx/esm src/bin.ts account-cli reset-password <username> <password>
+node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
 ```
+
+`set-idle-exempt on` whitelists a user against the idle-instance reclaim sweep (`TEAM_IDLE_TIMEOUT_SECS`, default 30 minutes): `InstanceStore.idleUsers` excludes users whose `dsh_users.idle_exempt` flag is set, so their instance stays up regardless of activity until toggled back off.
 
 ## Development
 
