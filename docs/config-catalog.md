@@ -1865,6 +1865,19 @@ export interface Config {
    * `process.cwd()`). Normal agent calls use their session cwd instead.
    */
   workspaceRoot?: string
+  /**
+   * Absolute directories every confined command must not READ — typically the
+   * shared parent of per-account homes. Deployment-varying, so it is config
+   * rather than a constant; leaving it unset keeps the inherited read-anywhere
+   * semantics, which is what a single-tenant host wants.
+   */
+  readDeniedRoots?: string[]
+  /**
+   * Subtrees re-exposed inside `readDeniedRoots`, normally the account's own
+   * home. Named separately because hiding the shared parent would otherwise
+   * also hide the files the account's own tooling loads.
+   */
+  readAllowedRoots?: string[]
 }
 ```
 
