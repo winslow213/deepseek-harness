@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-idle-reclaim-whitelist.md
-2026-09-16-idle-reclaim-whitelist.md: bc206b60859ea04b2204a94a24e48ff975ae6c12
-2026-09-16-idle-reclaim-whitelist.zh.md: 46f336b77dd9b7e75162983f14ec6b0afc7ee14d
+2026-09-16-idle-reclaim-whitelist.md: 44564d3430cc6f5a36937bf1b39c47a5a38b1eed
+2026-09-16-idle-reclaim-whitelist.zh.md: 98b326adc072d76f7e6351733f9bfbd658c0f705

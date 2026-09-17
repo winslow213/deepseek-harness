@@ -27,3 +27,7 @@ The client half is a Settings → General row (`packages/client/ui-team-account/
 ## Consequences
 
 Any signed-in member can now keep their own instance resident indefinitely without operator involvement, at the cost of one exempted account's ~270MB baseline RSS staying allocated permanently instead of being reclaimed between sessions — because the toggle is self-service rather than operator-gated, the memory-capacity headroom the reclaim sweep exists to provide now depends on how many members choose to flip it, not on operator policy alone. An operator can still audit or force-clear the flag directly (`account-cli set-idle-exempt <username> off`) if capacity pressure requires it.
+
+## Related
+
+The exemption this note adds is no longer the only thing that keeps an instance up, and it is no longer restored only at service start. [Keep-alive instances for accounts with a bound IM bot](../architecture/2026-09-17-keep-alive-instances-for-bot-connected-accounts.md) unions `idle_exempt` with accounts that have a bound IM bot, re-checks the set on the existing 60-second sweep, and makes idle reaping skip it. The `idle_exempt` column, its two write paths, and the settings row are unchanged.

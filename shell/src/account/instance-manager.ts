@@ -1,11 +1,13 @@
 /** Account-owned lifecycle for one supervised dsh instance per member. */
 
-import { superviseUserInstance, type SupervisedInstance } from '../spawn-user.ts'
+import { superviseUserInstance, listBotConnectedUsers, type SupervisedInstance } from '../spawn-user.ts'
 import { launchTokenFromUrl } from '../instance-register.ts'
 import type { InstanceStore } from './instances.ts'
+import type { UserStore } from './users.ts'
 
 export interface InstanceManagerOptions {
   readonly instances: InstanceStore
+  readonly users: UserStore
   readonly portStart: number
   readonly portEnd: number
   /** Idle timeout in seconds after which a member's instance is reclaimed. */
@@ -29,11 +31,44 @@ export class InstanceManager {
 
   constructor(private readonly options: InstanceManagerOptions) {
     this.idleTimer = setInterval(() => {
-      void this.reapIdle()
+      void this.sweep()
     }, IDLE_SWEEP_INTERVAL_SECS * 1000)
     // The account service's HTTP server keeps the process alive; the sweep
     // timer must not, so tests and short-lived boots exit cleanly.
     this.idleTimer.unref()
+  }
+
+  /**
+   * Run one idle-and-keep-alive pass.
+   *
+   * Both halves read one snapshot of the keep-alive set, and reaping skips it.
+   * An account that must stay up but is not `idle_exempt` — a bot-connected
+   * account whose owner never marked it — would otherwise be reclaimed on the
+   * idle timeout and restarted immediately, dropping its bot connection on
+   * every cycle. Reading the set once keeps the two halves from disagreeing
+   * about the same account within a pass.
+   *
+   * Public so the policy is exercisable without waiting on the 60-second timer.
+   */
+  async sweep(): Promise<void> {
+    const keepAlive = await this.keptAliveUsers()
+    if (keepAlive === undefined) return
+    await this.reapIdle(keepAlive)
+    await this.startMissing(keepAlive)
+  }
+
+  /**
+   * The accounts that must stay up, or `undefined` when the set cannot be
+   * read. An unreadable set must not be treated as empty: reaping without it
+   * would reclaim exactly the accounts this pass exists to protect.
+   */
+  private async keptAliveUsers(): Promise<Set<string> | undefined> {
+    try {
+      return await this.accountsToKeepAlive()
+    } catch (error) {
+      console.error('[team-account] could not list kept-alive accounts', error)
+      return undefined
+    }
   }
 
   /**
@@ -43,9 +78,61 @@ export class InstanceManager {
    * whose session lapsed is reclaimed on the next sweep and cold-starts on
    * their next login.
    */
-  private async reapIdle(): Promise<void> {
+  private async reapIdle(keepAlive: ReadonlySet<string>): Promise<void> {
     const idleUsers = await this.options.instances.idleUsers(this.options.idleTimeoutSecs)
-    await Promise.all(idleUsers.map(userId => this.stop(userId)))
+    await Promise.all(idleUsers.filter(userId => !keepAlive.has(userId)).map(userId => this.stop(userId)))
+  }
+
+  /**
+   * Accounts that must have a live instance, as the union of two independent
+   * reasons to stay up.
+   *
+   * `idle_exempt` is the operator's standing instruction that the account is
+   * meant to stay running. A bound IM bot is a second reason the operator
+   * never has to restate: the bot reaches its agent only through this
+   * instance, so an instance that is gone is a bot that silently stopped
+   * answering — and because instances start only on login, nothing would
+   * bring it back. Taking the union means neither reason has to be duplicated
+   * into the other's bookkeeping.
+   * @returns the distinct account ids that must be running.
+   */
+  private async accountsToKeepAlive(): Promise<Set<string>> {
+    const exempt = await this.options.users.listIdleExemptUserIds()
+    return new Set([...exempt, ...listBotConnectedUsers()])
+  }
+
+  /**
+   * Start an instance for every account that must stay up and is not running.
+   *
+   * This is what makes "kept alive" hold continuously rather than only from
+   * the next service start, and it is also what a restart relies on to bring
+   * those accounts back — every instance dies with its parent account service,
+   * so a stop-and-start otherwise leaves the whole set cold until someone
+   * happens to log in.
+   *
+   * A running account is skipped before `ensure` is consulted, so the common
+   * case is one store lookup per account per sweep and no log traffic. A
+   * started one is named in the log: an instance that had to be restarted is
+   * the event worth seeing, and it is otherwise invisible.
+   *
+   * Every account is isolated — one failing to start must not stop the rest.
+   */
+  async keepAlive(): Promise<void> {
+    const keepAlive = await this.keptAliveUsers()
+    if (keepAlive !== undefined) await this.startMissing(keepAlive)
+  }
+
+  /** Start an instance for each of `userIds` that is not already running. */
+  private async startMissing(userIds: ReadonlySet<string>): Promise<void> {
+    for (const userId of userIds) {
+      try {
+        if (await this.options.instances.routeFor(userId) !== undefined) continue
+        await this.ensure(userId)
+        console.log(`[team-account] started instance for ${userId} (kept alive)`)
+      } catch (error) {
+        console.error(`[team-account] failed to keep instance alive for ${userId}`, error)
+      }
+    }
   }
 
   /** Ensure one registered instance exists for a user. */

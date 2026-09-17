@@ -75,4 +75,22 @@ export class UserStore {
       [userId, exempt],
     )
   }
+
+  /**
+   * Every active account exempt from the idle reclaim sweep.
+   *
+   * Exemption means "this instance is meant to stay up", so these are the
+   * accounts whose instances the account service restores at startup: without
+   * that, a service restart would leave an intentionally-kept-alive account
+   * cold until someone logged in, which contradicts what the exemption is for.
+   * Suspended accounts are excluded — their credentials are rejected at login,
+   * so starting an instance for one would only serve an unreachable session.
+   * @returns the user ids, in creation order.
+   */
+  async listIdleExemptUserIds(): Promise<string[]> {
+    const result = await this.db.query(
+      "SELECT user_id FROM dsh_users WHERE idle_exempt AND status = 'active' ORDER BY created_at",
+    )
+    return result.rows.map(row => String((row as Record<string, unknown>).user_id))
+  }
 }

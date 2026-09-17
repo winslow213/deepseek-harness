@@ -28,6 +28,7 @@ export async function main(): Promise<void> {
   const auth = new AuthService(users, sessions)
   const lifecycle = new InstanceManager({
     instances,
+    users,
     portStart: env.portStart,
     portEnd: env.portEnd,
     idleTimeoutSecs: env.idleTimeoutSecs,
@@ -61,6 +62,18 @@ export async function main(): Promise<void> {
   server.listen(env.httpPort, '127.0.0.1', () => {
     console.log(`[team-account] listening on http://127.0.0.1:${String(env.httpPort)}`)
   })
+
+  /**
+   * Bring back accounts that must stay up, and name each one in the log.
+   *
+   * Instances die with this process, so a restart is exactly when the
+   * keep-alive set has to be restored; `InstanceManager.keepAlive` owns which
+   * accounts those are and is reused by the periodic sweep. Running it after
+   * `listen` keeps a slow spawn off the API's startup path, and it also runs
+   * provisioning, so new per-account plugin files and patch blocks reach
+   * accounts nobody has signed into yet.
+   */
+  void lifecycle.keepAlive()
 
   const shutdown = async (code: number): Promise<void> => {
     server.close()

@@ -27,3 +27,7 @@ Status: implemented
 ## Consequences
 
 任何已登录成员现在都能自己让实例常驻，不需要运营者介入，代价是被豁免账号约270MB的基线 RSS 会永久占用而不会在会话之间被回收——因为这个开关是自助式而非运营者管控的，回收扫描本该提供的内存容量余量现在取决于有多少成员会去打开它，而不只是运营者的策略。如果容量吃紧，运营者仍可以直接审计或强制清除该标记（`account-cli set-idle-exempt <username> off`）。
+
+## Related
+
+本 note 加入的豁免已不再是让实例保持在线的唯一条件，也不再只在服务启动时恢复。[已绑定 IM 机器人的账户保活实例](../architecture/2026-09-17-keep-alive-instances-for-bot-connected-accounts.zh.md) 把 `idle_exempt` 与已绑定 IM 机器人的账户取并集，在既有的 60 秒扫描上重新检查该集合，并让空闲回收跳过它。`idle_exempt` 列、它的两个写入路径、以及设置行均未改变。

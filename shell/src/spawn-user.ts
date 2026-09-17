@@ -68,6 +68,83 @@ export function userHome(user: string, env?: NodeJS.ProcessEnv): string {
 }
 
 /**
+ * Whether one IM integration directory has a bot bound to it.
+ *
+ * `@xmanrui/dsh-im` keeps two files per channel under `integrations/<channel>/`:
+ * `config.json` records the bots the member registered, and `workspaces.json`
+ * maps each bot to the workspace it answers for. Either one carrying an entry
+ * means the account has a bot, so both count — `config.json` alone covers a
+ * bot registered in a session that then ended, and `workspaces.json` alone
+ * covers one whose config uses a layout this check does not recognize.
+ *
+ * The bot list is found by looking for any top-level non-empty array of
+ * objects rather than by naming the field (`bots` on feishu, `accounts` on
+ * weixin), because each channel declares its own config type or none at all.
+ * @param dir - the integration directory, e.g. `<home>/integrations/dsh-feishu`.
+ * @returns true when at least one bot is recorded.
+ */
+function integrationHasBot(dir: string): boolean {
+  for (const filename of ['config.json', 'workspaces.json']) {
+    let doc: Record<string, unknown>
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(join(dir, filename), 'utf8'))
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) continue
+      doc = parsed as Record<string, unknown>
+    } catch {
+      continue // Absent or unreadable: this file cannot evidence a bot.
+    }
+    for (const [key, value] of Object.entries(doc)) {
+      if (key === 'version') continue
+      // Mappings are the bound-bot set; arrays are the registered-bot list.
+      if (Array.isArray(value) ? value.length > 0 : isBotMap(value)) return true
+    }
+  }
+  return false
+}
+
+/** Whether a value is a non-empty `botId -> workspace` mapping. */
+function isBotMap(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const entries = Object.entries(value as Record<string, unknown>)
+  return entries.length > 0 && entries.every(([, target]) => typeof target === 'string')
+}
+
+/**
+ * Every account with an IM bot bound to it, by account id.
+ *
+ * An account in this set has a live reason to keep an instance running: the
+ * bot reaches its agent only through that instance, so an instance that is
+ * gone is a bot that silently stops answering. The set is read from disk
+ * rather than from the database because the bot binding is owned by the IM
+ * plugin, which has no row in the account service's schema.
+ * @param env - environment carrying `DSH_USERS_ROOT`.
+ * @returns account ids with at least one bound bot, sorted for stable ordering.
+ */
+export function listBotConnectedUsers(env: NodeJS.ProcessEnv = process.env): string[] {
+  let users: string[]
+  try {
+    users = readdirSync(usersRoot(env), { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+  } catch {
+    return [] // No users root yet.
+  }
+  const connected = users.filter(user => {
+    const integrations = join(userHome(user, env), 'integrations')
+    let channels: string[]
+    try {
+      channels = readdirSync(integrations, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+    } catch {
+      return false // No integrations installed.
+    }
+    return channels.some(channel => integrationHasBot(join(integrations, channel)))
+  })
+  return connected.sort()
+}
+
+/**
  * A user's own workspace directory — the only server path the account's
  * instance may read or write (besides its mounted shadow roots). Lives under
  * DSH_HOME so each account is isolated from every other by construction.
@@ -608,8 +685,25 @@ export function spawnUserInstance(user: string, port: number, supervised = false
     },
   )
 
+  // Bounded: enough to explain a failure, never enough to grow without limit
+  // over a long-lived instance's lifetime.
+  const STDERR_KEEP_BYTES = 8192
   let stderr = ''
-  child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+  child.stderr.on('data', (d: Buffer) => {
+    stderr = (stderr + d.toString()).slice(-STDERR_KEEP_BYTES)
+  })
+  // Surface the child's last words when it exits unexpectedly. Without this the
+  // reason an instance vanished was unknowable: the buffer was only ever
+  // printed on a startup timeout, so a clean-looking exit left no trace.
+  child.on('exit', (code, signal) => {
+    const how = signal === null ? `exited ${String(code)}` : `killed by ${signal}`
+    const detail = stderr.trim() === '' ? ' (no output)' : `\n${stderr.trim()}`
+    // Signal 0 / code 0 is an ordinary stop (logout, explicit stop): routine.
+    const expected = signal === null && code === 0
+    const line = `[spawn-user] ${user} ${how} on port ${String(port)}${detail}`
+    if (expected) console.log(line)
+    else console.error(line)
+  })
 
   const url = new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => {
