@@ -9,8 +9,8 @@
  * @module dsh-team-shell/spawn-user
  */
 
-import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { injectRegionRouter, injectUserWiki, injectKbSearch, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
@@ -45,6 +45,17 @@ export function restartMarkerFor(user: string, env: NodeJS.ProcessEnv = process.
 
 /** Web profile bundles (mirrors the shipped dsh web template). */
 const WEB_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] as const
+
+/**
+ * npm specs the team pins for every account's web profile — installed the
+ * same way `dsh plugin --profile web add <spec>` would, so a mandatory
+ * plugin's `dependencies` entry and `dsh.profile.bundles` row are
+ * indistinguishable from one a member chose themselves.
+ */
+const MANDATORY_BUNDLE_SPECS: Readonly<Record<string, string>> = {
+  '@xmanrui/dsh-im': '4.20.2',
+  '@nanmicoder/dsh-agent-teams': '^0.1.18',
+}
 
 /** Base directory holding every user's DSH_HOME. */
 export function usersRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -88,7 +99,152 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
   ensureRegionRouter(user, env)
   ensureUserWiki(user, env)
   ensureKbSearch(user, env)
+  ensureMandatoryBundles(user, env)
+  ensureImWorkspacePatch(user, env)
+  ensureImWorkspaceDefault(user, env)
   return home
+}
+
+/**
+ * Ensure every account's web profile has the team's mandatory plugins
+ * installed, via the same `dsh plugin --profile web add <spec>` path a
+ * member would use themselves — `pnpm add` in the profile directory, then a
+ * `dsh.profile.bundles` reconcile against the installed state. Skips the
+ * pnpm run entirely once every pinned spec already matches the profile's
+ * `dependencies` entry, which is the common case on every restart after the
+ * first. Runs on every `provisionUserHome` call, so an existing account
+ * catches up on its next restart and a new account gets it from creation.
+ * A failed install is logged and left for the next restart to retry — a
+ * member's login must not block on a registry hiccup.
+ * @param user - the account whose profile is provisioned.
+ * @param env - environment carrying `DSH_USERS_ROOT`.
+ */
+export function ensureMandatoryBundles(user: string, env: NodeJS.ProcessEnv = process.env): void {
+  const home = userHome(user, env)
+  const manifestPath = join(home, 'profiles', 'web', 'package.json')
+  let manifest: { dependencies?: Record<string, string> }
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  } catch {
+    return // provisionUserHome always writes this manifest first; a missing/corrupt file is a different problem.
+  }
+  const deps = manifest.dependencies ?? {}
+  const missing = Object.entries(MANDATORY_BUNDLE_SPECS).filter(([name, version]) => deps[name] !== version)
+  if (missing.length === 0) return
+  const specs = missing.map(([name, version]) => `${name}@${version}`)
+  const result = spawnSync(
+    process.execPath,
+    ['--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'plugin', '--profile', 'web', 'add', ...specs],
+    { env: { ...process.env, [DSH_HOME_ENV]: home }, cwd: REPO_ROOT, stdio: 'pipe' },
+  )
+  if (result.status !== 0) {
+    const stderr = result.stderr?.toString() ?? String(result.error ?? '')
+    process.stderr.write(`dsh-team-shell: mandatory bundle install failed for "${user}": ${stderr}\n`)
+  }
+}
+
+/**
+ * Ensure every IM integration's bot-to-workspace mapping points at the
+ * account's own workspace, never the shared repo root. `@xmanrui/dsh-im`
+ * defaults an unmapped bot's workspace to `process.cwd()`, and every
+ * instance's cwd is the shared {@link REPO_ROOT} — so a bot's first
+ * connection on any channel silently maps it to the whole repository unless
+ * `workspaces.json` already names the account's own workspace. Runs on every
+ * `provisionUserHome` call so a bot connected before this fix existed
+ * self-heals on the account's next restart.
+ * @param user - the account whose integrations are provisioned.
+ * @param env - environment carrying `DSH_USERS_ROOT`.
+ */
+export function ensureImWorkspaceDefault(user: string, env: NodeJS.ProcessEnv = process.env): void {
+  const integrationsDir = join(userHome(user, env), 'integrations')
+  let entries: string[]
+  try {
+    entries = readdirSync(integrationsDir)
+  } catch {
+    return // No integrations installed yet.
+  }
+  const workspace = userWorkspace(user, env)
+  const wrongDefault = REPO_ROOT.replace(/\/$/, '')
+  for (const entry of entries) {
+    const workspacesPath = join(integrationsDir, entry, 'workspaces.json')
+    let doc: { workspaces?: Record<string, string> }
+    try {
+      doc = JSON.parse(readFileSync(workspacesPath, 'utf8'))
+    } catch {
+      continue // No workspaces.json for this integration, or unreadable.
+    }
+    const workspaces = doc.workspaces
+    if (workspaces === undefined) continue
+    let changed = false
+    for (const [botId, mappedPath] of Object.entries(workspaces)) {
+      if (mappedPath === wrongDefault) {
+        workspaces[botId] = workspace
+        changed = true
+      }
+    }
+    if (changed) writeFileSync(workspacesPath, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 })
+  }
+}
+
+/** The id `@xmanrui/dsh-im` inserts itself under; the home patch targets it. */
+const IM_PLUGIN_ID = 'xmanrui-dsh-im'
+
+/** The IM plugin's package name, used to detect that its config row will exist. */
+const IM_PLUGIN_PACKAGE = '@xmanrui/dsh-im'
+
+/**
+ * Every `@xmanrui/dsh-im` channel whose runtime resolves its default workspace
+ * from `config.workspace ?? process.cwd()`. The keys are the plugin's own
+ * channel names (note `wecomApp` is camelCase); telegram, discord, and
+ * imessage are listed because each delegates its runtime to the shared
+ * controller, which reads the same key.
+ */
+const IM_WORKSPACE_CHANNELS = [
+  'feishu', 'weixin', 'dingtalk', 'wecom', 'wecomApp',
+  'qq', 'slack', 'telegram', 'discord', 'whatsapp', 'imessage',
+] as const
+
+/** The id marking the shell-owned IM-workspace block inside the home patch layer. */
+const TEAM_IM_WORKSPACE_PATCH_ID = 'dsh-team-im-workspace'
+
+/**
+ * Upsert the home-level patch pointing every `@xmanrui/dsh-im` channel's
+ * `workspace` at the account's own workspace.
+ *
+ * Without this, each channel defaults an unmapped bot's workspace to
+ * `process.cwd()`, and every instance's cwd is the shared repository root —
+ * so a bot's first connection on any channel silently maps itself to the
+ * whole repo (the failure reported from Feishu). Setting the config fixes it
+ * at the source: a bot registered mid-session gets the right default
+ * immediately, with no file rewrite and no restart.
+ *
+ * `ensureImWorkspaceDefault` still runs alongside this: config decides what a
+ * NEW bot records, while the data rewrite corrects bots that already recorded
+ * the wrong path before this patch existed. Neither alone covers both.
+ *
+ * Only written when the plugin is actually installed — an id-targeted patch
+ * naming an absent row would be misconfiguration, and the plugin is installed
+ * by `ensureMandatoryBundles`, which runs just before this.
+ * @param user - the account whose home patch is provisioned.
+ * @param env - environment carrying `DSH_USERS_ROOT`.
+ */
+export function ensureImWorkspacePatch(user: string, env: NodeJS.ProcessEnv = process.env): void {
+  const home = userHome(user, env)
+  const installed = join(home, 'profiles', 'web', 'node_modules', ...IM_PLUGIN_PACKAGE.split('/'))
+  if (!existsSync(installed)) return
+  const [start, end] = teamMarkers(TEAM_IM_WORKSPACE_PATCH_ID)
+  const body = [
+    '# Team-injected IM workspace default: every @xmanrui/dsh-im channel',
+    "# resolves an unmapped bot's workspace from its own config before falling",
+    '# back to process.cwd() (the shared repo root), so pin it to the account.',
+    `- id: ${IM_PLUGIN_ID}`,
+    '  config:',
+    ...IM_WORKSPACE_CHANNELS.flatMap(channel => [
+      `    ${channel}:`,
+      `      workspace: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
+    ]),
+  ].join('\n')
+  upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_IM_WORKSPACE_PATCH_ID)
 }
 
 /** Environment key naming the hub control port (loopback), default 7100. */
