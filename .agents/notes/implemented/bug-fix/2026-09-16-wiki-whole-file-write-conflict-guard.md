@@ -25,3 +25,7 @@ The [personal wiki](../feature/2026-09-16-team-shell-user-wiki.md)'s L1 (`.dsh-w
 ## Consequences
 
 Two sessions racing a whole-replace write no longer destroy each other's content silently: the second writer gets a failed tool call with the first writer's content attached and can merge and retry in the same turn. `shell/tests/wiki-fs.spec.ts` gained three cases (unconditional overwrite still works without a baseline, a stale baseline throws `WikiWriteConflictError` and leaves the concurrent write untouched, a matching baseline succeeds) and `shell/tests/wiki-tool.spec.ts` gained one (a tool-level conflict becomes `isError: true` with the other session's content embedded, followed by a successful merged retry); the full `wiki-fs`/`wiki-tool`/`spawn-user-wiki` suite (17 cases across those three files) passes, and both `shell/tsconfig.json` and `shell/tsconfig.executor.json` typecheck clean. The narrow read-check-then-write race window remains open by design (see Decision); a future change that needs to close it should start from the lock-file alternative above rather than re-litigating snapshot-compare from scratch.
+
+## Related
+
+This guard is exercised only on the v1 write path. [The op log and weighted merge](../architecture/2026-09-17-personal-wiki-op-log-with-weighted-merge.md) is now the default for L1/L2 and composes concurrent writes rather than refusing the later one; the guard remains reachable by setting the plugin's `wikiV2` config to `false`, which is the documented rollback.

@@ -12,15 +12,24 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as tool from '../src/remote/wiki-tool.ts'
 import { wikiPaths, writeWikiLayer } from '../src/remote/wiki-fs.ts'
+import { PENDING_START, readOps } from '../src/remote/oplog.ts'
 
 const testToolSignal = new AbortController().signal
 
-async function setup(workspaceRoot: string, reminderEveryTurns?: number): Promise<Context> {
+/**
+ * `wikiV2` is left unset unless a test names a path: the tool's shipped
+ * default is then the one under test, so a wrong default cannot pass unnoticed
+ * while every test pins its own.
+ */
+async function setup(
+  workspaceRoot: string,
+  options: { reminderEveryTurns?: number; wikiV2?: boolean } = {},
+): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
-  await ctx.plugin(tool, { workspaceRoot, ...reminderEveryTurns !== undefined ? { reminderEveryTurns } : {} })
+  await ctx.plugin(tool, { workspaceRoot, ...options })
   return ctx
 }
 
@@ -71,15 +80,36 @@ describe('wiki_note tool', () => {
     }
   })
 
-  it('overwrites the identity file whole on each call', async () => {
+  it('overwrites the identity file whole on each call when wikiV2 is off', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-tool-'))
+    try {
+      const ctx = await setup(root, { wikiV2: false })
+      const agent = sessionAgent()
+      await callWikiNote(ctx, { kind: 'identity', content: 'first identity' }, agent)
+      await callWikiNote(ctx, { kind: 'identity', content: 'second identity' }, agent)
+      const content = await readFile(wikiPaths(root).identity, 'utf8')
+      assert.equal(content, 'second identity\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('records a baseline op instead of overwriting when wikiV2 is unset', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-tool-'))
     try {
       const ctx = await setup(root)
       const agent = sessionAgent()
       await callWikiNote(ctx, { kind: 'identity', content: 'first identity' }, agent)
       await callWikiNote(ctx, { kind: 'identity', content: 'second identity' }, agent)
+      // v2 keeps both writes as unmerged ops, so the layer file still holds the
+      // first identity and the second appears only in the pending block until
+      // a merge runs.
       const content = await readFile(wikiPaths(root).identity, 'utf8')
-      assert.equal(content, 'second identity\n')
+      assert.match(content, /first identity/)
+      assert.ok(content.includes(PENDING_START))
+      assert.ok(content.includes('second identity'))
+      const ops = await readOps(root)
+      assert.equal(ops.filter(op => op.layer === 'identity').length, 2)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -123,7 +153,7 @@ describe('wiki_note tool', () => {
   it('refuses an identity overwrite when another session wrote to it since this one last read it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-tool-'))
     try {
-      const ctx = await setup(root)
+      const ctx = await setup(root, { wikiV2: false })
       const agent = sessionAgent()
       const first = await callWikiNote(ctx, { kind: 'identity', content: 'v1' }, agent)
       assert.equal(first.isError, false)
@@ -149,7 +179,7 @@ describe('wiki_note tool', () => {
   it('injects a system-reminder message every N pre-steps and resets the counter', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-wiki-tool-'))
     try {
-      const ctx = await setup(root, 2)
+      const ctx = await setup(root, { reminderEveryTurns: 2 })
       const agent = sessionAgent()
       const signal = new AbortController().signal
       const step = async () => agentEvents(ctx, agent).waterfall(

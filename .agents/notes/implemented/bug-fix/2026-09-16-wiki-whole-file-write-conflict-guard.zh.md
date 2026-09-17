@@ -25,3 +25,7 @@ Status: implemented
 ## Consequences
 
 两个会话抢跑同一次整体替换写入时，不再静默毁掉彼此的内容：后写者会收到一次失败的工具调用，附带先写者的内容，并可以在同一回合内合并重试。`shell/tests/wiki-fs.spec.ts` 新增了三个用例（不传基线时无条件覆盖仍然生效；过期基线会抛出 `WikiWriteConflictError` 且不影响并发写入的内容；匹配的基线能成功写入），`shell/tests/wiki-tool.spec.ts` 新增了一个用例（工具层面的冲突变成 `isError: true` 并嵌入另一会话的内容，随后一次合并重试成功）；`wiki-fs`/`wiki-tool`/`spawn-user-wiki` 全套测试（这三个文件共 17 个用例）全部通过，`shell/tsconfig.json` 和 `shell/tsconfig.executor.json` 类型检查均干净。狭窄的"读取检查→写入"竞态窗口按设计仍然存在（见 Decision）；未来若需要关闭它，应该从上面的锁文件方案出发，而不是从头重新论证快照比对。
+
+## Related
+
+该保护只在 v1 写入路径上生效。[op 日志与加权合并](../architecture/2026-09-17-personal-wiki-op-log-with-weighted-merge.zh.md) 现在是 L1/L2 的默认路径，它组合并发写入而非拒绝后一次；把插件的 `wikiV2` 配置设为 `false` 仍可回到该保护，那是有文档的回滚方式。

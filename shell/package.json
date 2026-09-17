@@ -15,6 +15,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "TSX_TSCONFIG_PATH=tsconfig.executor.json node --import tsx/esm --test tests/*.spec.ts",
+    "test:unit": "node --import tsx/esm --test tests/*.spec.ts",
     "start": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts",
     "spawn-user": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts spawn-user",
     "account": "node --env-file-if-exists=.env --import tsx/esm src/bin.ts account",

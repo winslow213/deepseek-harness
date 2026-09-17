@@ -14,7 +14,8 @@ import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { injectRegionRouter, injectUserWiki, injectKbSearch, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
-import { scaffoldUserWiki } from './remote/wiki-fs.ts'
+import { scaffoldUserWiki, readWikiLayer } from './remote/wiki-fs.ts'
+import { seedBaselineIfMissing } from './remote/oplog.ts'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
 
 /** Repository root; resolves the source-launch dsh CLI. */
@@ -162,6 +163,11 @@ export function ensureUserWiki(user: string, env: NodeJS.ProcessEnv = process.en
   const home = userHome(user, env)
   const workspace = userWorkspace(user, env)
   scaffoldUserWiki(workspace)
+  // Every account, new or pre-existing, gets its baseline op seeded here: the
+  // skeleton text this just scaffolded is itself non-empty content, and the
+  // merge fail-safe cannot distinguish "scaffolded but never written to" from
+  // "op history was lost". Seeding at provisioning keeps both off that path.
+  seedBaselineIfMissing(workspace, layer => readWikiLayer(workspace, layer))
   const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
   const block = injectUserWiki({ runtimeSourceDir, home, workspaceRoot: workspace })
   const [start, end] = teamMarkers(TEAM_USER_WIKI_PATCH_ID)

@@ -29,3 +29,7 @@ team-shell 让每个账号拥有自己隔离的 `dsh` 实例与工作区，但�
 ## Consequences
 
 现在每个账号在第一轮对话之前就有一份预建好的个人 wiki，模型可以调用工具让它保持最新，并有周期性提醒防止长会话中被遗忘。`shell/tests/wiki-fs.spec.ts`（脚手架与读写语义）、`shell/tests/wiki-tool.spec.ts`（工具注册、四种`kind`、必填字段校验、周期性提醒）与 `shell/tests/spawn-user-wiki.spec.ts`（provisioning 接线的端到端验证，含幂等性与对无关 home-patch 内容的保留）共新增 33 个 `node --test` 用例，并入既有 shell 测试套件（共 35 个，全部通过）；`shell/tsconfig.json` 与 `shell/tsconfig.executor.json` 均 typecheck干净，`wiki-tool.ts`/`wiki-fs.ts` 已按 `region-router.ts` 等同伴的方式加入executor/exclude 列表。超出"直接读文件"的检索需求（例如按任务/会话 id 大规模检索 `decisions.md`）本笔记未设计，待日志积累到有必要时再重新考虑。一起生产事故中，同一账号的两个并发会话静默毁掉了彼此的 L1 写入，由此为整体替换层加上了冲突守卫，详见另一篇笔记[整体覆盖写入冲突守卫](../bug-fix/2026-09-16-wiki-whole-file-write-conflict-guard.zh.md)。
+
+## Related
+
+本 note 描述的 L1/L2 写入机制——整体覆写层文件——已被 [op 日志与加权合并](../architecture/2026-09-17-personal-wiki-op-log-with-weighted-merge.zh.md) 取代。四层布局、`wiki_note` 工具的 `kind` 判别式、L1/L2 经 `agent-instructions` 加载、以及周期性提醒均仍然成立；只有写入如何被记录与合并发生了变化。把插件的 `wikiV2` 配置设为 `false` 仍可回到整体覆写路径。

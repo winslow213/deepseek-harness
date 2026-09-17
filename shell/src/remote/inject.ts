@@ -332,7 +332,7 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
 }
 
 /** Runtime modules copied into the home-level wiki plugin directory. */
-export const WIKI_RUNTIME_FILES = ['wiki-tool.ts', 'wiki-fs.ts'] as const
+export const WIKI_RUNTIME_FILES = ['wiki-tool.ts', 'wiki-fs.ts', 'oplog.ts', 'wiki-merge.ts'] as const
 
 /** Home-level plugin directory holding the copied `wiki_note` tool runtime. */
 export function wikiPluginsDirFor(home: string): string {

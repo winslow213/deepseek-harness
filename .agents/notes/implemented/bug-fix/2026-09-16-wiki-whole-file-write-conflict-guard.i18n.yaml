@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-wiki-whole-file-write-conflict-guard.md
-2026-09-16-wiki-whole-file-write-conflict-guard.md: 2150d5098e591ed6cc6796523c7af3f52e55db6b
-2026-09-16-wiki-whole-file-write-conflict-guard.zh.md: 3b70ae273e84da0906e5b412728274006a9d824c
+2026-09-16-wiki-whole-file-write-conflict-guard.md: 32e26469aafb2cf2e2e72fa9b551b11d52f76017
+2026-09-16-wiki-whole-file-write-conflict-guard.zh.md: 1ce9ff51939b94b2659d189337bcd29265f31d34
