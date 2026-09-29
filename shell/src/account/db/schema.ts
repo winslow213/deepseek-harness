@@ -63,4 +63,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS dsh_registrations_open_username
   ON dsh_registrations (username) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS dsh_registrations_token
   ON dsh_registrations (token_hash) WHERE token_hash IS NOT NULL;
+
+-- Member-to-member message archive. New messages travel only through Redis
+-- (see messages.ts); a row exists here once a fetch has drained it, which is
+-- what "consumed" means for this channel. msg_id is the id the Redis entry
+-- carried, so the recipient's drain and the sender's drain converge on one
+-- row. read_at is set when the recipient fetched the message off their inbox
+-- list; delivered_at is reserved for the instance-side agent consumer.
+CREATE TABLE IF NOT EXISTS dsh_messages (
+  seq          BIGSERIAL PRIMARY KEY,
+  msg_id       TEXT NOT NULL UNIQUE,
+  from_user    TEXT NOT NULL,
+  to_user      TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'text',
+  body         TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL,
+  read_at      TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS dsh_messages_to_user ON dsh_messages (to_user, seq DESC);
+CREATE INDEX IF NOT EXISTS dsh_messages_from_user ON dsh_messages (from_user, seq DESC);
 `

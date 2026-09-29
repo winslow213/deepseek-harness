@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-team-account",
-  "description": "Team Shell Sign out row in Web Settings General, rendered only when the served document carries the team-shell marker",
+  "description": "Team Shell General-setting rows (pairing code, keep-instance-running, message center, sign out) in Web Settings General, rendered only when the served document carries the team-shell marker",
   "version": "0.1.2-rc.1",
   "publishConfig": {
     "access": "public"

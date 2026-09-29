@@ -47,9 +47,33 @@ export class UserStore {
     return row === undefined ? undefined : rowToUser(row as Record<string, unknown>)
   }
 
+  /** Resolve an account by agent token (instance bearer authentication). */
+  async findByAgentToken(token: string): Promise<UserRow | undefined> {
+    const result = await this.db.query('SELECT * FROM dsh_users WHERE agent_token = $1', [token])
+    const row = result.rows[0]
+    return row === undefined ? undefined : rowToUser(row as Record<string, unknown>)
+  }
+
   async list(): Promise<UserRow[]> {
     const result = await this.db.query('SELECT * FROM dsh_users ORDER BY created_at')
     return result.rows.map(row => rowToUser(row as Record<string, unknown>))
+  }
+
+  /**
+   * Active accounts for member-facing recipient pickers.
+   * @returns username and display name only, ordered by username.
+   */
+  async listActiveDirectory(): Promise<Array<{ username: string; displayName: string | null }>> {
+    const result = await this.db.query(
+      "SELECT username, display_name FROM dsh_users WHERE status = 'active' ORDER BY username",
+    )
+    return result.rows.map(row => {
+      const r = row as Record<string, unknown>
+      return {
+        username: String(r.username),
+        displayName: r.display_name === null || r.display_name === undefined ? null : String(r.display_name),
+      }
+    })
   }
 
   async setPassword(userId: string, password: string): Promise<void> {

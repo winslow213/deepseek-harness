@@ -1,4 +1,4 @@
-/** `settings.teamAccount` namespace dictionaries (Sign out + Pairing code rows). */
+/** `settings.teamAccount` namespace dictionaries (Sign out, Pairing code, Keep-instance-running, and Message Center rows). */
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
@@ -16,6 +16,8 @@ export const zh = {
   'idleExemptTitle': '保持实例常驻',
   'idleExemptHint': '开启后长时间不活跃也不会被自动回收',
   'idleExemptError': '设置失败，请重试',
+  'messageCenterTitle': '消息中心',
+  'messageCenterHint': '和团队成员互发站内信与任务',
 } satisfies Record<string, string>
 
 /** The settings.teamAccount namespace key union. */
@@ -37,4 +39,6 @@ export const en = {
   'idleExemptTitle': 'Keep instance running',
   'idleExemptHint': 'When on, your instance stays up even if idle for a long time',
   'idleExemptError': 'Could not update the setting, please retry',
+  'messageCenterTitle': 'Message Center',
+  'messageCenterHint': 'Send messages and tasks to your teammates',
 } satisfies Record<TeamAccountLocaleKey, string>

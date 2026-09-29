@@ -11,7 +11,15 @@
  * @module dsh-team-shell/team-pages
  */
 
+import { readFileSync } from 'node:fs'
 import { escapeHtml } from './html.ts'
+
+/**
+ * The Feishu feedback QR card shipped beside the login form, inlined as a
+ * base64 data URI at module load so every page stays one self-contained
+ * document with no external asset fetch.
+ */
+const FEEDBACK_QR_PNG = readFileSync(new URL('./feedback-qr.png', import.meta.url))
 
 /** Shared dark-theme stylesheet: star field, glass card, form controls. */
 const THEME_CSS = `
@@ -71,6 +79,42 @@ const THEME_CSS = `
   .footer { margin: 1.4rem 0 0; font-size: .82rem; color: #93a4cc; }
   .footer a { color: #8ab6ff; text-decoration: none; }
   .footer a:hover { text-decoration: underline; }
+  .feedback { margin: 1.6rem 0 0; padding-top: 1.4rem; border-top: 1px solid rgba(120, 160, 255, .18); }
+  .feedback img {
+    width: 220px; border-radius: 10px; background: #fff; padding: 6px;
+    box-sizing: border-box; box-shadow: 0 0 24px rgba(30, 70, 200, .2);
+  }
+  .feedbackTitle { font-size: .85rem; color: #b8c6e2; margin: .8rem 0 0; }
+  .feedbackHint { font-size: .75rem; color: #93a4cc; margin: .25rem 0 0; }
+  /* message center */
+  .card.inbox { width: 58rem; max-width: 96vw; height: 42rem; max-height: 90vh;
+    text-align: left; display: flex; flex-direction: column; }
+  .card.inbox .brand, .card.inbox .tagline { text-align: center; }
+  .cols { display: flex; gap: 1rem; flex: 1; min-height: 0; margin-top: .6rem; }
+  #side { width: 15rem; flex-shrink: 0; overflow-y: auto; padding-right: .4rem; }
+  .contact { padding: .5rem .6rem; border-radius: 8px; cursor: pointer; }
+  .contact:hover { background: rgba(255,255,255,.05); }
+  .contact.active { background: rgba(47,107,255,.18); }
+  .contact .nm { font-size: .85rem; color: #e8edf7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .contact.fresh .nm::after { content: ' ●'; color: #5b8cff; font-size: .6rem; }
+  .contact .pv { font-size: .72rem; color: #93a4cc; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; margin-top: .1rem; }
+  .main { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .thread { flex: 1; overflow-y: auto; padding: .4rem .2rem; }
+  .thread .hint { color: #93a4cc; font-size: .85rem; text-align: center; margin-top: 2rem; }
+  .msg { max-width: 70%; margin: .35rem 0; padding: .45rem .7rem; border-radius: 10px;
+    font-size: .88rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+  .msg.them { background: rgba(255,255,255,.07); }
+  .msg.me { background: rgba(47,107,255,.28); margin-left: auto; }
+  .msg .mt { display: block; font-size: .68rem; color: #93a4cc; margin-bottom: .15rem; }
+  .msg .tag { display: inline-block; margin-left: .35rem; padding: 0 .3rem;
+    border: 1px solid rgba(140,170,255,.4); border-radius: 4px; color: #8ab6ff; font-size: .62rem; }
+  .composer { display: flex; gap: .6rem; margin-top: .8rem; align-items: flex-end; }
+  .composer textarea { flex: 1; resize: none; box-sizing: border-box; padding: .6rem .8rem;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(140,170,255,.3); border-radius: 8px;
+    color: #eef2fb; font-size: .92rem; font-family: inherit; outline: none; }
+  .composer textarea:focus { border-color: #6f9bff; box-shadow: 0 0 0 3px rgba(111,155,255,.15); }
+  .composer button { width: auto; margin: 0; padding: .65rem 1.4rem; flex-shrink: 0; }
 `
 
 /** Wrap page body content in the shared document shell. */
@@ -96,6 +140,11 @@ export const LOGIN_PAGE = page('天问星 · 登录', `<div class="card">
     <div id="err"></div>
   </form>
   <p class="footer">还没有账号？<a href="/register">申请注册</a></p>
+  <div class="feedback">
+    <img src="data:image/png;base64,${FEEDBACK_QR_PNG.toString('base64')}" alt="天问星使用反馈二维码">
+    <p class="feedbackTitle">使用问题反馈</p>
+    <p class="feedbackHint">扫码加入反馈群，使用中遇到问题随时提</p>
+  </div>
 </div>
 <script>
 const f = document.getElementById('f')
@@ -206,6 +255,181 @@ f.addEventListener('submit', async (e) => {
       + '<p class="footer" style="text-align:center"><a href="/">返回工作台</a></p>'
   } catch { err.textContent = '网络错误' }
 })
+</script>`)
+}
+
+/**
+ * The signed-in member's message center: a contact sidebar ordered by recent
+ * activity, a thread pane, and a composer. One polling script drives it —
+ * contacts and history come from the account service's message API, and every
+ * dynamic value is inserted via textContent so message bodies never render as
+ * HTML. The composer posts the same API; the reply appears once the sender's
+ * own fetch archives the sent copy.
+ * @param username - the signed-in member's account name, shown as the identity.
+ * @returns the inbox page HTML.
+ */
+export function inboxPage(username: string): string {
+  const me = JSON.stringify(username).replace(/</gu, '\\u003c')
+  return page('天问星 · 消息中心', `<div class="card inbox">
+  <h1 class="brand">消息中心</h1>
+  <p class="tagline">消息中心 · ${escapeHtml(username)} · <a href="/">返回工作台</a></p>
+  <div id="err"></div>
+  <div class="cols">
+    <nav id="side" aria-label="联系人"></nav>
+    <section class="main">
+      <div id="thread" class="thread"></div>
+      <div class="composer">
+        <textarea id="body" rows="3" placeholder="输入消息…（Enter 发送，Shift+Enter 换行）"></textarea>
+        <button id="send" type="button">发送</button>
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+var me = ${me}
+var contacts = [], messages = [], sel = null, fresh = new Set()
+function cp(m) { return m.from === me ? m.to : m.from }
+function pad(n) { return (n < 10 ? '0' : '') + n }
+function fmt(ts) {
+  var d = new Date(ts)
+  return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes())
+}
+function label(u) {
+  for (var i = 0; i < contacts.length; i++) {
+    if (contacts[i].username === u) return contacts[i].displayName ? contacts[i].displayName + ' (' + u + ')' : u
+  }
+  return u
+}
+async function api(path, opts) {
+  var r = await fetch(path, opts)
+  if (r.status === 401) { window.location.href = '/'; throw new Error('登录已过期') }
+  return r
+}
+async function loadContacts() {
+  var r = await api('/api/messages/contacts')
+  var d = await r.json()
+  contacts = d.contacts || []
+  renderSide()
+}
+async function refresh() {
+  var r = await api('/api/messages?limit=200')
+  var d = await r.json()
+  var prevTop = 0
+  for (var i = 0; i < messages.length; i++) prevTop = Math.max(prevTop, messages[i].ts)
+  messages = d.messages || []
+  for (var j = 0; j < messages.length; j++) {
+    if (messages[j].ts > prevTop) {
+      var c = cp(messages[j])
+      if (c !== sel) fresh.add(c)
+    }
+  }
+  renderSide()
+  renderThread()
+}
+function threads() {
+  var map = Object.create(null)
+  for (var i = 0; i < messages.length; i++) {
+    var c = cp(messages[i])
+    if (!map[c]) map[c] = []
+    map[c].push(messages[i])
+  }
+  var list = []
+  for (var k in map) list.push({ user: k, last: map[k][map[k].length - 1].ts, msgs: map[k] })
+  list.sort(function (a, b) { return b.last - a.last })
+  return list
+}
+function renderSide() {
+  var side = document.getElementById('side')
+  side.textContent = ''
+  var ths = threads(), seen = Object.create(null)
+  function addItem(u, last) {
+    var d = document.createElement('div')
+    d.className = 'contact' + (u === sel ? ' active' : '') + (fresh.has(u) ? ' fresh' : '')
+    var nm = document.createElement('div')
+    nm.className = 'nm'
+    nm.textContent = u === me ? u + '（我）' : label(u)
+    d.appendChild(nm)
+    if (last) {
+      var pv = document.createElement('div')
+      pv.className = 'pv'
+      pv.textContent = fmt(last.ts) + ' ' + last.body.replace(/\s+/g, ' ').slice(0, 24)
+      d.appendChild(pv)
+    }
+    d.addEventListener('click', function () {
+      sel = u
+      fresh.delete(u)
+      renderSide()
+      renderThread()
+      document.getElementById('body').focus()
+    })
+    seen[u] = true
+    side.appendChild(d)
+  }
+  for (var t = 0; t < ths.length; t++) addItem(ths[t].user, ths[t].msgs[ths[t].msgs.length - 1])
+  for (var c = 0; c < contacts.length; c++) {
+    var u2 = contacts[c].username
+    if (!seen[u2] && u2 !== me) addItem(u2, null)
+  }
+}
+function renderThread() {
+  var thread = document.getElementById('thread')
+  thread.textContent = ''
+  if (sel === null) {
+    var p = document.createElement('p')
+    p.className = 'hint'
+    p.textContent = '从左侧选择一位成员开始对话'
+    thread.appendChild(p)
+    return
+  }
+  var arr = []
+  for (var i = 0; i < messages.length; i++) if (cp(messages[i]) === sel) arr.push(messages[i])
+  for (var j = 0; j < arr.length; j++) {
+    var m = arr[j], div = document.createElement('div')
+    div.className = 'msg ' + (m.from === me ? 'me' : 'them')
+    var mt = document.createElement('span')
+    mt.className = 'mt'
+    mt.textContent = (m.from === me ? '我' : label(m.from)) + ' · ' + fmt(m.ts)
+    if (m.kind === 'agent') {
+      var tag = document.createElement('span')
+      tag.className = 'tag'
+      tag.textContent = 'agent'
+      mt.appendChild(tag)
+    }
+    var bd = document.createElement('div')
+    bd.textContent = m.body
+    div.appendChild(mt)
+    div.appendChild(bd)
+    thread.appendChild(div)
+  }
+  thread.scrollTop = thread.scrollHeight
+}
+async function send() {
+  var el = document.getElementById('body')
+  var body = el.value.trim()
+  if (sel === null || body === '') return
+  var r = await api('/api/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ to: sel, body: body }),
+  })
+  if (!r.ok) {
+    var e = await r.json().catch(function () { return {} })
+    var err = document.getElementById('err')
+    err.textContent = e.error || '发送失败'
+    setTimeout(function () { err.textContent = '' }, 4000)
+    return
+  }
+  el.value = ''
+  await refresh()
+}
+document.getElementById('send').addEventListener('click', function () { send() })
+document.getElementById('body').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+})
+loadContacts().then(refresh).catch(function (e) {
+  document.getElementById('err').textContent = String(e && e.message ? e.message : e)
+})
+setInterval(function () { refresh().catch(function () {}) }, 10000)
 </script>`)
 }
 

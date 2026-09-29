@@ -11,10 +11,18 @@ import type { PairingStore } from './pairings.ts'
 import type { EnvConfig } from './env.ts'
 import { RegistrationError, type RegistrationService } from './registrations.ts'
 import { verifyPassword } from './password.ts'
-import { approvalPage, changePasswordPage, registerPage, resultPage } from '../team-pages.ts'
+import { MessageError, type MessageStore } from './messages.ts'
+import { approvalPage, changePasswordPage, inboxPage, registerPage, resultPage } from '../team-pages.ts'
 
 const COOKIE_NAME = 'dsh_team_session'
 const MAX_BODY_BYTES = 16 * 1024
+
+/**
+ * Body ceiling for the message send endpoint: one message may carry
+ * MAX_BODY_CHARS characters, whose UTF-8 encoding plus the JSON envelope
+ * exceeds the generic request cap.
+ */
+const MAX_MESSAGE_BODY_BYTES = 256 * 1024
 
 /** Shortest accepted password for a member-chosen replacement. */
 const MIN_PASSWORD_LENGTH = 8
@@ -30,6 +38,7 @@ interface HttpServices {
   pairings: PairingStore
   lifecycle: InstanceManager
   registrations: RegistrationService
+  messages: MessageStore
   sessionTtlSecs: number
   /** Email domains the registration form accepts, shown on the page. */
   registrationDomains: readonly string[]
@@ -77,12 +86,12 @@ function sendHtml(res: ServerResponse, status: number, body: string): void {
   res.end(body)
 }
 
-function readRawBody(req: IncomingMessage): Promise<string> {
+function readRawBody(req: IncomingMessage, maxBytes: number = MAX_BODY_BYTES): Promise<string> {
   return new Promise((resolve, reject) => {
     let raw = ''
     req.on('data', (chunk: Buffer) => {
       raw += chunk.toString('utf8')
-      if (raw.length > MAX_BODY_BYTES) {
+      if (raw.length > maxBytes) {
         reject(new Error('body too large'))
         req.destroy()
       }
@@ -92,8 +101,8 @@ function readRawBody(req: IncomingMessage): Promise<string> {
   })
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const raw = await readRawBody(req)
+async function readJsonBody(req: IncomingMessage, maxBytes: number = MAX_BODY_BYTES): Promise<unknown> {
+  const raw = await readRawBody(req, maxBytes)
   if (raw === '') return {}
   try {
     return JSON.parse(raw) as unknown
@@ -457,6 +466,75 @@ async function handleChangePassword(req: IncomingMessage, res: ServerResponse, s
   sendJson(res, 200, { changed: true })
 }
 
+/** The signed-in member's message center page. */
+async function handleInboxPage(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const user = await sessionUser(req, s)
+  if (user === undefined) {
+    res.writeHead(302, { location: '/' })
+    res.end()
+    return
+  }
+  sendHtml(res, 200, inboxPage(user.username))
+}
+
+/**
+ * Resolve the message API's caller from either a browser session cookie or a
+ * member instance's bearer token, so people and agents share one API.
+ * @returns the caller's username and send origin, or undefined when neither
+ * credential resolves to an active account.
+ */
+async function messageCaller(req: IncomingMessage, s: HttpServices): Promise<{ username: string; kind: 'text' | 'agent' } | undefined> {
+  const header = req.headers.authorization
+  if (typeof header === 'string' && header.startsWith('Bearer ')) {
+    const user = await s.users.findByAgentToken(header.slice('Bearer '.length))
+    if (user === undefined || user.status !== 'active') return undefined
+    return { username: user.username, kind: 'agent' }
+  }
+  const session = await sessionUser(req, s)
+  return session === undefined ? undefined : { username: session.username, kind: 'text' }
+}
+
+/** Send one message to another member (browser session or instance bearer). */
+async function handleSendMessage(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const caller = await messageCaller(req, s)
+  if (caller === undefined) { sendJson(res, 401, { error: '请先登录' }); return }
+  let body: unknown
+  try { body = await readJsonBody(req, MAX_MESSAGE_BODY_BYTES) } catch { sendJson(res, 400, { error: 'invalid request body' }); return }
+  const b = body as { to?: unknown; body?: unknown }
+  if (typeof b.to !== 'string' || b.to === '' || typeof b.body !== 'string') {
+    sendJson(res, 400, { error: 'to 和 body 为必填字符串' })
+    return
+  }
+  const recipient = await s.users.findByUsername(b.to)
+  if (recipient === undefined || recipient.status !== 'active') {
+    sendJson(res, 404, { error: '收件人不存在或不可用' })
+    return
+  }
+  try {
+    sendJson(res, 200, { message: await s.messages.send(caller.username, b.to, caller.kind, b.body) })
+  } catch (error) {
+    if (error instanceof MessageError) { sendJson(res, error.status, { error: error.message }); return }
+    throw error
+  }
+}
+
+/** Fetch the caller's recent messages (browser session or instance bearer). */
+async function handleListMessages(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const caller = await messageCaller(req, s)
+  if (caller === undefined) { sendJson(res, 401, { error: '请先登录' }); return }
+  const raw = new URL(req.url ?? '/', 'http://localhost').searchParams.get('limit')
+  const parsed = raw === null || raw === '' ? Number.NaN : Number(raw)
+  const limit = Number.isFinite(parsed) ? Math.min(Math.max(Math.trunc(parsed), 1), 500) : 200
+  sendJson(res, 200, { messages: await s.messages.fetch(caller.username, limit) })
+}
+
+/** Active member list for the recipient picker. */
+async function handleContacts(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
+  const caller = await messageCaller(req, s)
+  if (caller === undefined) { sendJson(res, 401, { error: '请先登录' }); return }
+  sendJson(res, 200, { contacts: await s.users.listActiveDirectory() })
+}
+
 export function createAccountServer(s: HttpServices) {
   return createServer((req, res) => {
     const url = req.url ?? '/'
@@ -492,6 +570,14 @@ export function createAccountServer(s: HttpServices) {
           await handleMintPairing(req, res, s)
         } else if (path === '/api/pairings/claim' && method === 'POST') {
           await handleClaimPairing(req, res, s)
+        } else if (path === '/api/messages' && method === 'POST') {
+          await handleSendMessage(req, res, s)
+        } else if (path === '/api/messages' && method === 'GET') {
+          await handleListMessages(req, res, s)
+        } else if (path === '/api/messages/contacts' && method === 'GET') {
+          await handleContacts(req, res, s)
+        } else if (path === '/inbox' && method === 'GET') {
+          await handleInboxPage(req, res, s)
         } else if (path === '/api/instances' && method === 'POST') {
           await handleUpsertInstance(req, res, s)
         } else if (path.startsWith('/api/instances/') && method === 'DELETE') {

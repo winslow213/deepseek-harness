@@ -448,12 +448,16 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
     // authorized by the operator's approval, not by the applicant holding an
     // account. `/approve` renders the operator's decision page; the token in the
     // link is its only credential. `/password` and `/api/me/password` are the
-    // signed-in self-service password change.
+    // signed-in self-service password change. `/api/messages`,
+    // `/api/messages/contacts`, and `/inbox` are the member message center: the
+    // account service owns the Redis channel, the archive, and the inbox page,
+    // so these paths never route to a member instance.
     if (pathname === '/api/login' || pathname === '/api/me' || pathname === '/api/me/idle-exempt'
       || pathname === '/api/me/password' || pathname === '/api/pairings'
+      || pathname === '/api/messages' || pathname === '/api/messages/contacts'
       || pathname === '/register' || pathname === '/api/register'
       || pathname === '/approve' || pathname === '/api/approvals'
-      || pathname === '/password') {
+      || pathname === '/password' || pathname === '/inbox') {
       proxyAccount(req, res, options.accountUrl)
       return
     }

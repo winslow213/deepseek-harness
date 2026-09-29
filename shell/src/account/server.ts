@@ -11,6 +11,7 @@ import { AuthService } from './auth.ts'
 import { createAccountServer } from './http.ts'
 import { loadEnv } from './env.ts'
 import { RegistrationService } from './registrations.ts'
+import { MessageStore } from './messages.ts'
 import { FeishuNotifyError, loadFeishuConfig, sendOperatorText } from './feishu.ts'
 
 /** Boot the account service (HTTP API + instance lifecycle) and hold it open. */
@@ -52,8 +53,10 @@ export async function main(): Promise<void> {
     },
   })
 
+  const messages = new MessageStore(db, redis)
+
   const server = createAccountServer({
-    auth, sessions, users, instances, pairings, lifecycle, registrations,
+    auth, sessions, users, instances, pairings, lifecycle, registrations, messages,
     sessionTtlSecs: env.sessionTtlSecs,
     registrationDomains: env.registrationDomains,
     defaultPassword: env.defaultPassword,

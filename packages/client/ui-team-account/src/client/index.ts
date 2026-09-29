@@ -1,8 +1,8 @@
 /**
- * Team Shell Sign out row plugin, browser half: one General-settings row that
- * posts to the same-origin `/api/logout` and navigates to `/`. The row
- * registers through the settings slot only as a cell — the entry itself is
- * locale-owned and gated at render time on the team-shell marker, so plain
+ * Team Shell account rows plugin, browser half: the General-settings rows the
+ * team shell adds — Pairing code, Keep instance running, Message Center, and
+ * Sign out. Each registers through the settings slot only as a cell; the entry
+ * is locale-owned and gated at render time on the team-shell marker, so plain
  * single-user dsh documents (no marker) keep the General section unchanged.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -15,11 +15,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { TeamAccountRow } from './TeamAccountRow.tsx'
 import { PairingRow } from './PairingRow.tsx'
 import { IdleExemptRow } from './IdleExemptRow.tsx'
+import { MessageCenterRow } from './MessageCenterRow.tsx'
 import { en, zh, type TeamAccountLocaleKey } from './locales.ts'
 
 export type { TeamAccountRowProps } from './TeamAccountRow.tsx'
 export type { PairingRowProps } from './PairingRow.tsx'
 export type { IdleExemptRowProps } from './IdleExemptRow.tsx'
+export type { MessageCenterRowProps } from './MessageCenterRow.tsx'
 export type { TeamAccountLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -36,8 +38,8 @@ export const NS = 'settings.teamAccount'
 export const inject = ['slots', 'locale']
 
 /**
- * Contribute the Pairing code, Keep-instance-running, and Sign out rows to
- * the General settings section.
+ * Contribute the Pairing code, Keep-instance-running, Message Center, and Sign
+ * out rows to the General settings section.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -56,6 +58,13 @@ export function apply(ctx: ClientContext): void {
     order: 95,
     locale: NS,
   }, IdleExemptRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'team-message-center',
+    order: 98,
+    locale: NS,
+  }, MessageCenterRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
