@@ -100,6 +100,19 @@ async function createSession(kbBaseUrl: string, userId: string, scope: string, s
   return body.session_id
 }
 
+/**
+ * The cached KB session no longer exists server-side (its 24h TTL lapsed while
+ * the dsh process sat idle). Signalled separately from other failures so
+ * `execute` can rebuild the session and retry once, instead of failing every
+ * later call for the remaining lifetime of the process.
+ */
+class SessionExpiredError extends Error {
+  constructor(sessionId: string) {
+    super(`kb_search: KB session expired: ${sessionId}`)
+    this.name = 'SessionExpiredError'
+  }
+}
+
 async function createQueryJob(
   kbBaseUrl: string,
   sessionId: string,
@@ -127,7 +140,11 @@ async function createQueryJob(
     signal,
   })
   if (!response.ok) {
-    throw new Error(`kb_search: could not create a query job (HTTP ${response.status}): ${await response.text()}`)
+    const detail = await response.text()
+    if (response.status === 404 && detail.includes('session does not exist')) {
+      throw new SessionExpiredError(sessionId)
+    }
+    throw new Error(`kb_search: could not create a query job (HTTP ${response.status}): ${detail}`)
   }
   const body = await response.json() as { job_id: string }
   return body.job_id
@@ -173,9 +190,10 @@ export function apply(ctx: Context, config: Config): void {
   const timeoutMs = config.timeoutMs ?? 60000
 
   // Sessions are cheap to create and carry a 24h server-side TTL; caching one
-  // per plugin instance (i.e. per dsh process lifetime) avoids a round trip
-  // on every call without needing any expiry-refresh logic for a lifetime
-  // this short relative to the TTL.
+  // per plugin instance (i.e. per dsh process lifetime) avoids a round trip on
+  // every call. A process can outlive that TTL though, so a cached id may lapse
+  // while the process sits idle — `execute` rebuilds it on the server's
+  // "session does not exist" reply rather than trusting the cached value.
   let cachedSessionId: string | undefined
 
   ctx.tools.register(defineTool({
@@ -227,9 +245,21 @@ export function apply(ctx: Context, config: Config): void {
       exec.signal.addEventListener('abort', onCallerAbort)
       const timer = setTimeout(() => controller.abort(new Error('kb_search: timed out waiting on the KB server')), timeoutMs)
       try {
-        cachedSessionId ??= await createSession(kbBaseUrl, config.userId, scope, controller.signal)
-        const jobId = await createQueryJob(kbBaseUrl, cachedSessionId, scope, args.query, args.categoryIds, args.topK, controller.signal)
-        const result = await awaitJobResult(kbBaseUrl, jobId, controller.signal)
+        const runQuery = async (sessionId: string): Promise<{ answer: string, citations: string[], used_docs: string[] }> => {
+          const jobId = await createQueryJob(kbBaseUrl, sessionId, scope, args.query, args.categoryIds, args.topK, controller.signal)
+          return awaitJobResult(kbBaseUrl, jobId, controller.signal)
+        }
+        let result: { answer: string, citations: string[], used_docs: string[] }
+        try {
+          cachedSessionId ??= await createSession(kbBaseUrl, config.userId, scope, controller.signal)
+          result = await runQuery(cachedSessionId)
+        } catch (error) {
+          if (!(error instanceof SessionExpiredError)) throw error
+          // The cached id lapsed (server-side TTL) while this process was idle
+          // and will never come back, so rebuild once and retry.
+          cachedSessionId = await createSession(kbBaseUrl, config.userId, scope, controller.signal)
+          result = await runQuery(cachedSessionId)
+        }
         return { answer: result.answer, citations: result.citations, usedDocs: result.used_docs }
       } finally {
         clearTimeout(timer)

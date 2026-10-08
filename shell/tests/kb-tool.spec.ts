@@ -50,6 +50,9 @@ class FakeKbServer {
   server: Server
   baseUrl = ''
   sessionRequests = 0
+  sessionCounter = 0
+  /** The only session id the fake accepts, mirroring a live server-side TTL. */
+  validSessionId: string | undefined
   jobState: 'completed' | 'failed' = 'completed'
 
   constructor() {
@@ -74,15 +77,29 @@ class FakeKbServer {
     await new Promise<void>((resolve, reject) => this.server.close((err) => err ? reject(err) : resolve()))
   }
 
+  /** Simulate the KB side's 24h session TTL lapsing for the current id. */
+  expireSession(): void {
+    this.validSessionId = undefined
+  }
+
   private handle(url: string, method: string, body: unknown, res: import('node:http').ServerResponse): void {
     if (method === 'POST' && url === '/api/sessions') {
       this.sessionRequests += 1
+      this.sessionCounter += 1
+      this.validSessionId = `sess-fake-${this.sessionCounter}`
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ session_id: 'sess-fake-1' }))
+      res.end(JSON.stringify({ session_id: this.validSessionId }))
       return
     }
     if (method === 'POST' && url === '/api/jobs/query') {
-      const { query } = body as { query: string }
+      const { query, session_id: sessionId } = body as { query: string, session_id: string }
+      // Mirror the KB server: a session that lapsed server-side is rejected
+      // with a 404 carrying this exact message.
+      if (sessionId !== this.validSessionId) {
+        res.writeHead(404, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ code: 'not_found', message: `session does not exist: ${sessionId}` }))
+        return
+      }
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ job_id: `job-${encodeURIComponent(query)}`, state: 'queued' }))
       return
@@ -156,6 +173,24 @@ describe('kb_search tool', () => {
     await callKbSearch(ctx, { query: 'first' }, sessionAgent())
     await callKbSearch(ctx, { query: 'second' }, sessionAgent())
     assert.equal(fake.sessionRequests, 1)
+  })
+
+  it('rebuilds the cached session and retries once when the server reports it expired', async () => {
+    fake.jobState = 'completed'
+    fake.sessionRequests = 0
+    const ctx = await setup()
+    await callKbSearch(ctx, { query: 'before expiry' }, sessionAgent())
+    assert.equal(fake.sessionRequests, 1)
+
+    // A dsh process can outlive the KB session's 24h TTL; once the cached id
+    // lapses the server rejects it and the tool must rebuild instead of
+    // surfacing the 404 (which otherwise fails every later call until reload).
+    fake.expireSession()
+    const result = await callKbSearch(ctx, { query: 'after expiry' }, sessionAgent())
+
+    assert.equal(result.isError, false)
+    assert.equal(fake.sessionRequests, 2)
+    assert.match(JSON.stringify(result.content), /companding curve/)
   })
 
   it('surfaces a job failure as a tool-call error carrying the KB error message', async () => {
