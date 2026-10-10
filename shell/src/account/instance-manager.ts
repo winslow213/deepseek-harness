@@ -184,6 +184,9 @@ export class InstanceManager {
     const account = await this.options.users.findByUsername(userId)
     const instance = superviseUserInstance(userId, port, {
       agentToken: account?.agent_token,
+      // The account's shared directories are role-scoped, and this is the one
+      // spawn path that already holds the account row.
+      role: account?.role,
       // Re-register every later generation (an install-triggered restart mints
       // a fresh launch token). The first generation is registered by the
       // deterministic await below; a duplicate upsert is idempotent.

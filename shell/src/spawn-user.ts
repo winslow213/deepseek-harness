@@ -14,6 +14,7 @@ import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { injectRegionRouter, injectUserWiki, injectKbSearch, PROFILE_PATCH_FILENAME } from './remote/inject.ts'
+import { parseSharedRoots, resolveSharedRoots, type ResolvedSharedRoots } from './shared-roots.ts'
 import { scaffoldUserWiki, readWikiLayer } from './remote/wiki-fs.ts'
 import { seedBaselineIfMissing } from './remote/oplog.ts'
 import { accountBaseUrl, adminSecret, launchTokenFromUrl, registerInstance } from './instance-register.ts'
@@ -154,14 +155,28 @@ export function userWorkspace(user: string, env?: NodeJS.ProcessEnv): string {
 }
 
 /**
+ * The account facts a spawn needs from the account store. Both are asynchronous
+ * to read and synchronous to use, so the caller resolves them once and passes
+ * them down rather than the provisioning path querying mid-spawn.
+ */
+export interface SpawnAccountFacts {
+  /** The account's own KB agent token; omitted falls back to the shared one. */
+  agentToken?: string
+  /** The account's `dsh_users.role`, selecting its shared directories. */
+  role?: string
+}
+
+/**
  * Provision a user's DSH_HOME so first boot does not auto-init with live reload.
  * @param user - the account whose home is provisioned.
  * @param env - environment carrying `DSH_USERS_ROOT` and the team config values.
- * @param kbAgentToken - the account's own KB agent token, resolved by the
- *   caller that owns the account store; omitted falls back to the shared
- *   `TEAM_KB_AGENT_TOKEN` (or to no token at all).
+ * @param account - the account's own facts, resolved by the caller that owns
+ *   the account store. An omitted token falls back to the shared
+ *   `TEAM_KB_AGENT_TOKEN` (or to no token at all); an omitted role grants no
+ *   shared directory, which is also what a deployment without a
+ *   `TEAM_SHARED_ROOTS` mapping gets.
  */
-export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv, kbAgentToken?: string): string {
+export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv, account: SpawnAccountFacts = {}): string {
   const home = userHome(user, env)
   const profileDir = join(home, 'profiles', 'web')
   mkdirSync(profileDir, { recursive: true })
@@ -180,9 +195,9 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv, kbAgent
   writeTeamLlmPatch(home)
   writeTeamSandboxPatch(home)
   writeTeamDirectoryPickerPatch(home)
-  ensureRegionRouter(user, env)
+  ensureRegionRouter(user, env, account.role)
   ensureUserWiki(user, env)
-  ensureKbSearch(user, env, kbAgentToken)
+  ensureKbSearch(user, env, account.agentToken)
   ensureMandatoryBundles(user, env)
   ensureImWorkspacePatch(user, env)
   ensureImWorkspaceDefault(user, env)
@@ -357,7 +372,7 @@ function hubControlUrl(env: NodeJS.ProcessEnv): string {
  * @param user - the account whose profile is provisioned.
  * @param env - environment carrying `DSH_HUB_CONTROL_PORT` / `DSH_SHADOW_ROOT`.
  */
-export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = process.env): void {
+export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = process.env, role?: string): void {
   const profileDir = join(userHome(user, env), 'profiles', 'web')
   const patch = join(profileDir, PROFILE_PATCH_FILENAME)
   let exists = false
@@ -378,6 +393,7 @@ export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = proces
     user,
     shadowRoot: env[DSH_SHADOW_ROOT_ENV] ?? DEFAULT_SHADOW_ROOT,
     workspaceRoot: workspace,
+    readableRoots: sharedRootsFor(role, env).readable,
     profileDir,
     includeShell: true,
     syncMounts: true,
@@ -544,6 +560,40 @@ const DSH_WORKSPACE_ROOT_ENV = 'DSH_WORKSPACE_ROOT'
 /** Environment key the child reads the shared per-account root from (set at spawn). */
 const DSH_USERS_ROOT_ENV = 'DSH_USERS_ROOT'
 
+/** Environment key the child reads its extra writable roots from (set at spawn). */
+const DSH_RW_ROOTS_ENV = 'DSH_RW_ROOTS'
+
+/** Environment key the child reads its extra readable roots from (set at spawn). */
+const DSH_READ_ALLOWED_ROOTS_ENV = 'DSH_READ_ALLOWED_ROOTS'
+
+/** Environment key the deployment configures the shared-root mapping through. */
+const TEAM_SHARED_ROOTS_ENV = 'TEAM_SHARED_ROOTS'
+
+/** Role an account without an explicit `dsh_users.role` is treated as. */
+const DEFAULT_ROLE = 'member'
+
+/**
+ * The shared roots one account is granted, from the deployment's mapping, the
+ * account's role, and this host's users and shadow roots.
+ *
+ * The shadow root is needed here — not only in the enforcement layer — because
+ * a grant that contains it would be bound over the sandbox's ephemeral temp
+ * mount and expose every account's shadow directory. Only this layer knows
+ * where the shadow root is.
+ * @param role - the account's `dsh_users.role`, or undefined when unknown.
+ * @param env - environment carrying `DSH_USERS_ROOT`, `DSH_SHADOW_ROOT`, and
+ *   the `TEAM_SHARED_ROOTS` mapping.
+ * @returns the account's writable and readable shared roots.
+ */
+export function sharedRootsFor(role: string | undefined, env: NodeJS.ProcessEnv = process.env): ResolvedSharedRoots {
+  const entries = parseSharedRoots(
+    env[TEAM_SHARED_ROOTS_ENV],
+    usersRoot(env),
+    env[DSH_SHADOW_ROOT_ENV] ?? DEFAULT_SHADOW_ROOT,
+  )
+  return resolveSharedRoots(entries, role ?? DEFAULT_ROLE)
+}
+
 /**
  * Upsert the home-level patch confining the account's sandbox to its own
  * workspace: `sandbox-policy` gets `workspaceRoot` pointing at the account's
@@ -558,6 +608,13 @@ const DSH_USERS_ROOT_ENV = 'DSH_USERS_ROOT'
  * account's own home keeps its tooling working while hiding its siblings. Both
  * sides are read from the environment at startup, so nothing about another
  * account's layout is baked into this file.
+ *
+ * The same block carries the deployment's shared directories: `rwRoots` grants
+ * them writable, and `readAllowedRoots` re-exposes them, which the sandbox's
+ * read shield requires because the shared directory lives inside the denied
+ * users root. Both lists are per account — the role decided them — and both
+ * arrive whole through the environment, so neither expression nests quotes
+ * inside the YAML scalar.
  * @param home - the user's DSH_HOME.
  */
 function writeTeamSandboxPatch(home: string): void {
@@ -571,11 +628,15 @@ function writeTeamSandboxPatch(home: string): void {
     "    mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'",
     `    workspaceRoot: !!js process.env.${DSH_WORKSPACE_ROOT_ENV}`,
     '# Read isolation between accounts sharing this host: hide every sibling',
-    "# account's home, then re-expose this account's own.",
-    // Quoted: an unquoted `!!js` value starting with `[` parses as a YAML flow
-    // sequence, and the trailing `.filter(...)` then fails the whole patch.
+    "# account's home, then re-expose this account's own home plus the shared",
+    '# directories its role granted.',
+    // Quoted: an unquoted `!!js [` value parses as a YAML flow sequence, and
+    // the trailing `.filter(...)` then fails the whole patch, which stops the
+    // account from booting rather than merely skipping the shield.
     `    readDeniedRoots: !!js '[process.env.${DSH_USERS_ROOT_ENV}].filter(Boolean)'`,
-    '    readAllowedRoots: !!js \'[process.env.DSH_HOME].filter(Boolean)\'',
+    `    readAllowedRoots: !!js JSON.parse(process.env.${DSH_READ_ALLOWED_ROOTS_ENV} ?? '[]')`,
+    '# Shared directories this account may write, resolved from its role.',
+    `    rwRoots: !!js JSON.parse(process.env.${DSH_RW_ROOTS_ENV} ?? '[]')`,
   ].join('\n')
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_SANDBOX_PATCH_ID)
 }
@@ -621,24 +682,40 @@ function writeTeamDirectoryPickerPatch(home: string): void {
  * @param home - the user's DSH_HOME (set as `DSH_HOME`).
  * @param supervised - when true, set `DSH_SUPERVISED=1` so an in-process
  *   plugin install can request a supervisor restart via the marker.
+ * @param role - the account's `dsh_users.role`, selecting its shared roots.
+ *   Omitted (an unknown account) resolves to no grant, which is also what the
+ *   deployment gets without a `TEAM_SHARED_ROOTS` mapping.
+ * @param source - the parent environment this child inherits from.
  * @returns the child process environment.
  */
-function teamChildEnv(home: string, supervised: boolean): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, [DSH_HOME_ENV]: home }
-  const apiKey = process.env[TEAM_LLM_API_KEY_ENV]
-  const baseUrl = process.env[TEAM_LLM_BASE_URL_ENV]
+export function teamChildEnv(
+  home: string,
+  supervised: boolean,
+  role?: string,
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...source, [DSH_HOME_ENV]: home }
+  const apiKey = source[TEAM_LLM_API_KEY_ENV]
+  const baseUrl = source[TEAM_LLM_BASE_URL_ENV]
   if (apiKey !== undefined && apiKey !== '') env[LLM_KEY_REF] = apiKey
   if (baseUrl !== undefined && baseUrl !== '') env[LLM_BASE_URL_ENV] = baseUrl
   // Plugin install is account-provisioning surface, not a per-deployment opt
   // out: every member can install into their own profile. The operator can
   // still set TEAM_PLUGIN_INSTALL=false to turn it off fleet-wide.
-  env.DSH_PLUGIN_INSTALL = process.env.TEAM_PLUGIN_INSTALL ?? 'true'
+  env.DSH_PLUGIN_INSTALL = source.TEAM_PLUGIN_INSTALL ?? 'true'
   // The account's private workspace is the sandbox confinement root.
   env[DSH_WORKSPACE_ROOT_ENV] = join(home, 'workspace')
   // The shared users root every account home sits under is the read-shield
   // boundary; the parent of this account's home is exactly that, whatever the
   // operator chose to call it.
-  env[DSH_USERS_ROOT_ENV] = process.env[DSH_USERS_ROOT_ENV] ?? dirname(home)
+  env[DSH_USERS_ROOT_ENV] = source[DSH_USERS_ROOT_ENV] ?? dirname(home)
+  // The read shield below hides the users root, so the re-exposure list is the
+  // account's own home plus the shared directories its role granted — the
+  // writable ones included, because a grant the sandbox may write must also
+  // stay readable.
+  const shared = sharedRootsFor(role, source)
+  env[DSH_RW_ROOTS_ENV] = JSON.stringify(shared.writable)
+  env[DSH_READ_ALLOWED_ROOTS_ENV] = JSON.stringify([home, ...shared.readable])
   if (supervised) env[DSH_SUPERVISED_ENV] = '1'
   return env
 }
@@ -692,8 +769,8 @@ const RESTART_DELAY_MS = 500
  *   the shared fallback from the environment.
  * @returns the running instance handle.
  */
-export function spawnUserInstance(user: string, port: number, supervised = false, kbAgentToken?: string): DshInstance {
-  const home = provisionUserHome(user, process.env, kbAgentToken)
+export function spawnUserInstance(user: string, port: number, options: SpawnAccountFacts & { supervised?: boolean } = {}): DshInstance {
+  const home = provisionUserHome(user, process.env, options)
   const entryHost = process.env.DSH_ENTRY_HOST
   const args = [
     '--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'),
@@ -704,7 +781,7 @@ export function spawnUserInstance(user: string, port: number, supervised = false
     process.execPath,
     args,
     {
-      env: teamChildEnv(home, supervised),
+      env: teamChildEnv(home, options.supervised ?? false, options.role),
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -808,10 +885,10 @@ export async function registerOnReady(user: string, port: number, instance: { ur
  *   generation.
  * @returns the supervised handle, whose `url` resolves on the first generation.
  */
-export function superviseUserInstance(user: string, port: number, options: { onReady?: SuperviseOnReady; agentToken?: string } = {}): SupervisedInstance {
+export function superviseUserInstance(user: string, port: number, options: SpawnAccountFacts & { onReady?: SuperviseOnReady } = {}): SupervisedInstance {
   const onReady = options.onReady ?? registerOnReady
   let stopRequested = false
-  let current: DshInstance = spawnUserInstance(user, port, true, options.agentToken)
+  let current: DshInstance = spawnUserInstance(user, port, { supervised: true, ...options })
   let generation = 0
   const url = current.url
   void onReady(user, port, current)
@@ -832,7 +909,7 @@ export function superviseUserInstance(user: string, port: number, options: { onR
       await new Promise((resolve) => { setTimeout(resolve, RESTART_DELAY_MS) })
       if (stopRequested) return
       console.log(`[spawn-user] ${user} requested a restart; spawning generation ${String(generation)}`)
-      current = spawnUserInstance(user, port, true, options.agentToken)
+      current = spawnUserInstance(user, port, { supervised: true, ...options })
       void onReady(user, port, current)
       current.url.then((u) => {
         console.log(`[spawn-user] generation ${String(next)} URL: ${u}`)

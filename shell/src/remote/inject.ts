@@ -201,6 +201,7 @@ export function regionRouterPatchYaml(config: {
   user: string
   shadowRoot?: string
   workspaceRoot?: string
+  readableRoots?: readonly string[]
   routerFileUrl: string
   shellRouterFileUrl?: string
   syncMountFileUrl?: string
@@ -226,6 +227,9 @@ export function regionRouterPatchYaml(config: {
     `        user: ${JSON.stringify(config.user)}`,
     `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
     ...config.workspaceRoot === undefined ? [] : [`        workspaceRoot: ${JSON.stringify(config.workspaceRoot)}`],
+    ...config.readableRoots === undefined || config.readableRoots.length === 0
+      ? []
+      : [`        readableRoots: ${JSON.stringify(config.readableRoots)}`],
     ...config.fsCwd === undefined ? [] : [`        cwd: ${JSON.stringify(config.fsCwd)}`],
   ]
   if (config.includeShell && config.shellRouterFileUrl !== undefined) {
@@ -285,6 +289,8 @@ export interface InjectRegionRouterOptions {
   shadowRoot?: string
   /** The account's private workspace directory (local read/write boundary). */
   workspaceRoot?: string
+  /** Role-scoped shared directories this account may also READ locally. */
+  readableRoots?: readonly string[]
   /** Local working directory for relative local fs/shell operations. */
   fsCwd?: string
   /** Also route ctx.shell through the remote agent (default false). */
@@ -319,6 +325,7 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
     user: options.user,
     shadowRoot: options.shadowRoot,
     workspaceRoot: options.workspaceRoot,
+    readableRoots: options.readableRoots,
     routerFileUrl,
     shellRouterFileUrl: shellFileUrl,
     syncMountFileUrl: syncMountFileUrl,

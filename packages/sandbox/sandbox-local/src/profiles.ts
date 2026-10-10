@@ -5,7 +5,7 @@
  */
 
 import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/landlock-run'
-import { readShield, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { effectiveRwRoots, readShield, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 
 /** Every ancestor directory of `path`, outermost first, excluding `path` itself. */
@@ -22,9 +22,11 @@ function ancestorsOf(path: string): string[] {
  * the last one to touch a path wins, so the shield is emitted BEFORE the mode's
  * own mounts: a workspace that lives inside a denied root must be bound back
  * writable afterwards, or the shield's read-only re-exposure would silently
- * turn the writable workspace read-only. For the same reason every intermediate
- * directory on the way to an allowed subtree needs its own `--dir` — `--tmpfs`
- * leaves a bare mount point where the parents used to be.
+ * turn the writable workspace read-only. The same ordering covers the policy's
+ * extra writable grants, which are bound in that mode section. For the same
+ * reason every intermediate directory on the way to an allowed subtree needs
+ * its own `--dir` — `--tmpfs` leaves a bare mount point where the parents used
+ * to be.
  *
  * @param policy - file-effect and read-boundary policy to express as bwrap mounts.
  * @returns profile arguments before the trailing separator and command argv.
@@ -45,6 +47,15 @@ export function bwrapProfileArgs(policy: SandboxPolicy): string[] {
   if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')
     args.push('--bind', policy.workspaceRoot, policy.workspaceRoot)
+    // The policy's extra grants land after the mode's own mounts: bwrap applies
+    // mounts in argument order, so a grant buried by the shield above has
+    // already been re-exposed read-only and this bind makes it writable, while
+    // one that sits under the ephemeral `/tmp` replaces only its own subtree.
+    // `effectiveRwRoots` discards the grants this ordering would turn into a
+    // wholesale replacement of a mode-owned mount.
+    for (const root of effectiveRwRoots(policy)) {
+      args.push('--bind', root, root)
+    }
   }
   return args
 }
@@ -70,7 +81,9 @@ const LANDLOCK_SYSTEM_READ_ROOTS = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '
  * Landlock expresses allow-lists only, so it cannot subtract a path from a
  * blanket grant. With one, the blanket grant is replaced by the system roots
  * plus the re-exposed subtrees, which is the only spelling that actually hides
- * the denied roots.
+ * the denied roots. Because the replacement is an allow-list, a grant outside
+ * the denied roots loses its read too and must be named back; one inside them
+ * arrives through the re-exposed subtrees.
  *
  * @param policy - file-effect and read-boundary policy to express as Landlock grants.
  * @returns launcher grant arguments before the trailing separator and command argv.
@@ -78,12 +91,16 @@ const LANDLOCK_SYSTEM_READ_ROOTS = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '
 export function landlockProfileArgs(policy: SandboxPolicy): string[] {
   const readWrite = ['/dev/null']
   if (policy.mode === 'workspace-write') {
-    readWrite.push('/tmp', policy.workspaceRoot)
+    readWrite.push('/tmp', policy.workspaceRoot, ...effectiveRwRoots(policy))
   }
   const { denied, allowed } = readShield(policy)
+  // Without a shield the blanket `readOnly: ['/']` already covers a grant. With
+  // one, the blanket grant is gone, so a grant outside the denied roots would
+  // otherwise lose the read that writing it implies; a grant inside them is
+  // already in `allowed`. Both cases are satisfied by naming the grants here.
   const readOnly = denied.length === 0
     ? ['/']
-    : [...new Set([...LANDLOCK_SYSTEM_READ_ROOTS, ...allowed])]
+    : [...new Set([...LANDLOCK_SYSTEM_READ_ROOTS, ...allowed, ...effectiveRwRoots(policy)])]
   return landlockGrantArgs({ readOnly, readWrite })
 }
 

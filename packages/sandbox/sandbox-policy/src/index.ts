@@ -88,6 +88,14 @@ export interface Config {
    * also hide the files the account's own tooling loads.
    */
   readAllowedRoots?: string[]
+  /**
+   * Deployment shared directories this account may WRITE under, on top of
+   * whatever the mode already grants. The team shell resolves them per account
+   * from the configured role mapping, so one deployment serves administrators
+   * and members different directories. Unset grants nothing, which is the
+   * pre-existing behavior.
+   */
+  rwRoots?: string[]
 }
 
 /** Inputs that select the sandbox policy for one capability call. */
@@ -130,6 +138,9 @@ export class SandboxPolicyService extends Service {
     // the mode's write effects".
     readDeniedRoots: z.array(z.string()),
     readAllowedRoots: z.array(z.string()),
+    // Extra writable grants are opt-in too: an absent list means the mode's
+    // own roots are the whole allow-list.
+    rwRoots: z.array(z.string()),
   })
 
   static inject = ['sessionProjections']
@@ -142,6 +153,8 @@ export class SandboxPolicyService extends Service {
   readonly readDeniedRoots: readonly string[]
   /** Canonical subtrees re-exposed inside {@link readDeniedRoots}. */
   readonly readAllowedRoots: readonly string[]
+  /** Canonical extra writable grants, on top of the mode's own roots. */
+  readonly rwRoots: readonly string[]
   constructor(ctx: Context, config: Config) {
     super(ctx, 'sandboxPolicy')
     // schemastery (static Config) already filled `mode`; the cast records that
@@ -151,6 +164,7 @@ export class SandboxPolicyService extends Service {
     this.workspaceRoot = resolveWorkspaceRoot(config.workspaceRoot ?? process.cwd())
     this.readDeniedRoots = (config.readDeniedRoots ?? []).map(canonicalPath)
     this.readAllowedRoots = (config.readAllowedRoots ?? []).map(canonicalPath)
+    this.rwRoots = (config.rwRoots ?? []).map(canonicalPath)
 
     ctx.sessionProjections.register({
       key: 'sandboxMode',
@@ -190,6 +204,7 @@ export class SandboxPolicyService extends Service {
       workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
       ...this.readDeniedRoots.length === 0 ? {} : { readDeniedRoots: this.readDeniedRoots },
       ...this.readAllowedRoots.length === 0 ? {} : { readAllowedRoots: this.readAllowedRoots },
+      ...this.rwRoots.length === 0 ? {} : { rwRoots: this.rwRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
   }

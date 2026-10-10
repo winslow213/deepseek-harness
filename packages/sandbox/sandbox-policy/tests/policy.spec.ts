@@ -15,7 +15,13 @@ import SandboxPolicyService, { SANDBOX_MODES, setSandboxMode } from '@deepseek-a
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 
-async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {}) {
+async function mounted(config: {
+  mode?: 'read-only' | 'workspace-write' | 'danger-full-access'
+  workspaceRoot?: string
+  readDeniedRoots?: string[]
+  readAllowedRoots?: string[]
+  rwRoots?: string[]
+} = {}) {
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SandboxPolicyService, config)
@@ -61,6 +67,42 @@ describe('SandboxPolicyService', () => {
       mode: 'workspace-write',
       workspaceRoot: resolve('/fallback'),
     })
+  })
+
+  it('omits rwRoots entirely when unconfigured, so the resolved policy keeps its pre-existing spelling', async () => {
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
+    expect(Object.hasOwn(ctx.sandboxPolicy.resolve(), 'rwRoots')).toBe(false)
+    expect(ctx.sandboxPolicy.resolve().rwRoots).toBeUndefined()
+  })
+
+  it('carries configured rwRoots through resolve, canonicalized like its read-boundary neighbours', async () => {
+    const real = mkdtempSync(join(tmpdir(), 'dsh-policy-rw-'))
+    try {
+      const alias = join(tmpdir(), 'dsh-policy-rw-alias')
+      symlinkSync(real, alias)
+      const ctx = await mounted({
+        mode: 'workspace-write',
+        workspaceRoot: '/fallback',
+        rwRoots: [alias],
+      })
+      // The symlink resolves to its target, matching how the enforcing layers
+      // compare paths.
+      expect(ctx.sandboxPolicy.resolve().rwRoots).toEqual([realpathSync.native(real)])
+    } finally {
+      rmSync(real, { recursive: true, force: true })
+      rmSync(join(tmpdir(), 'dsh-policy-rw-alias'), { force: true })
+    }
+  })
+
+  it('keeps an unresolvable rwRoot spelling as configured, the conservative fallback its neighbours share', async () => {
+    const ctx = await mounted({
+      mode: 'workspace-write',
+      workspaceRoot: '/fallback',
+      rwRoots: ['/srv/not-created-yet/share'],
+    })
+    // Nothing exists at that path, so there is no identity to resolve; the
+    // grant matches nothing until the deployment creates the directory.
+    expect(ctx.sandboxPolicy.resolve().rwRoots).toEqual(['/srv/not-created-yet/share'])
   })
 
   it('resolves each session mode and cwd together without changing the fallback', async () => {

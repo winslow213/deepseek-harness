@@ -101,6 +101,19 @@ export class UserStore {
   }
 
   /**
+   * Set an account's role. The role selects the account's shared directories
+   * at its next provisioning, so this takes effect on the next instance start.
+   * @param userId - the account's `user_id`.
+   * @param role - the role to record.
+   */
+  async setRole(userId: string, role: 'operator' | 'member'): Promise<void> {
+    await this.db.query(
+      'UPDATE dsh_users SET role = $2, updated_at = now() WHERE user_id = $1',
+      [userId, role],
+    )
+  }
+
+  /**
    * Every active account exempt from the idle reclaim sweep.
    *
    * Exemption means "this instance is meant to stay up", so these are the

@@ -1878,6 +1878,14 @@ export interface Config {
    * also hide the files the account's own tooling loads.
    */
   readAllowedRoots?: string[]
+  /**
+   * Deployment shared directories this account may WRITE under, on top of
+   * whatever the mode already grants. The team shell resolves them per account
+   * from the configured role mapping, so one deployment serves administrators
+   * and members different directories. Unset grants nothing, which is the
+   * pre-existing behavior.
+   */
+  rwRoots?: string[]
 }
 ```
 

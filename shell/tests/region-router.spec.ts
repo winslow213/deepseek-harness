@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import type { Server, ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { stat } from 'node:fs/promises'
 import { Context } from '@deepseek-ai/cordis'
 import { FsError } from '@deepseek-ai/dsh-fs'
@@ -172,6 +174,148 @@ describe('RegionRouterFileSystem mount cache', () => {
         'a shadow-tree write with no live mount must fail loudly, not silently create a local file',
       )
       await assert.rejects(() => stat(unmatchedPath), 'must not have created anything on local disk')
+    } finally {
+      await fiber.dispose()
+    }
+  })
+})
+
+/** A temp tree: `shared` is the grant candidate, `other` the ungranted sibling. */
+function makeTree(): { base: string; workspace: string; shared: string; other: string; dispose: () => void } {
+  const base = mkdtempSync(join(tmpdir(), 'dsh-rr-read-'))
+  const workspace = join(base, 'workspace')
+  const shared = join(base, 'shared')
+  const other = join(base, 'other')
+  for (const dir of [workspace, shared, other]) mkdirSync(dir)
+  writeFileSync(join(shared, 'note.txt'), 'shared\n')
+  writeFileSync(join(other, 'secret.txt'), 'secret\n')
+  return { base, workspace, shared, other, dispose: () => { rmSync(base, { recursive: true, force: true }) } }
+}
+
+describe('RegionRouterFileSystem local read boundary', () => {
+  let hub: ReturnType<typeof startFakeHub>
+  let url: string
+  let tree: ReturnType<typeof makeTree>
+
+  before(async () => {
+    hub = startFakeHub()
+    hub.setRoot('/remote/root')
+    await new Promise<void>((resolve) => hub.server.listen(0, '127.0.0.1', resolve))
+    url = `http://127.0.0.1:${String((hub.server.address() as AddressInfo).port)}`
+    tree = makeTree()
+  })
+  after(async () => {
+    tree.dispose()
+    await new Promise<void>((resolve) => hub.server.close(() => resolve()))
+  })
+
+  /** Mount a router over the shared tree, optionally granting `readableRoots`. */
+  async function mounted(readableRoots?: readonly string[]) {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: tree.workspace })
+    const fiber = await ctx.plugin(RegionRouterFileSystem, {
+      hubUrl: url,
+      shadowRoot: SHADOW_ROOT,
+      user: USER,
+      workspaceRoot: tree.workspace,
+      ...readableRoots === undefined ? {} : { readableRoots },
+    })
+    return { fs: ctx.fs as RegionRouterFileSystem, dispose: () => fiber.dispose() }
+  }
+
+  it('reads inside the workspace without any grant', async () => {
+    const m = await mounted()
+    try {
+      writeFileSync(join(tree.workspace, 'own.txt'), 'own\n')
+      const target = await m.fs.resolve(join(tree.workspace, 'own.txt'))
+      assert.equal(await m.fs.readText(target), 'own\n')
+    } finally {
+      await m.dispose()
+    }
+  })
+
+  it('denies a local path outside the workspace when nothing grants it', async () => {
+    const m = await mounted()
+    try {
+      const target = await m.fs.resolve(join(tree.shared, 'note.txt'))
+      await assert.rejects(
+        () => m.fs.readText(target),
+        (error: unknown) => error instanceof FsError && error.code === 'FS_PERMISSION_DENIED',
+        'the workspace root is the whole boundary until a grant widens it',
+      )
+    } finally {
+      await m.dispose()
+    }
+  })
+
+  it('reads a granted shared root that sits outside the workspace', async () => {
+    const m = await mounted([tree.shared])
+    try {
+      const target = await m.fs.resolve(join(tree.shared, 'note.txt'))
+      assert.equal(await m.fs.readText(target), 'shared\n')
+    } finally {
+      await m.dispose()
+    }
+  })
+
+  it('still denies an ungranted sibling when a grant is present', async () => {
+    const m = await mounted([tree.shared])
+    try {
+      const target = await m.fs.resolve(join(tree.other, 'secret.txt'))
+      await assert.rejects(
+        () => m.fs.readText(target),
+        (error: unknown) => error instanceof FsError && error.code === 'FS_PERMISSION_DENIED',
+        'granting one root must not widen the boundary to its siblings',
+      )
+    } finally {
+      await m.dispose()
+    }
+  })
+
+  it('applies the same grant to the path-based lstat gate', async () => {
+    const granted = await mounted([tree.shared])
+    try {
+      const info = await granted.fs.lstat(join(tree.shared, 'note.txt'))
+      assert.equal(info?.type, 'file')
+      await assert.rejects(
+        () => granted.fs.lstat(join(tree.other, 'secret.txt')),
+        (error: unknown) => error instanceof FsError && error.code === 'FS_PERMISSION_DENIED',
+      )
+    } finally {
+      await granted.dispose()
+    }
+  })
+
+  it('does not treat a sibling with a shared prefix as inside the grant', async () => {
+    const m = await mounted([tree.shared])
+    try {
+      const lookalike = `${tree.shared}-elsewhere`
+      mkdirSync(lookalike)
+      try {
+        const target = await m.fs.resolve(join(lookalike, 'x.txt'))
+        await assert.rejects(
+          () => m.fs.readText(target),
+          (error: unknown) => error instanceof FsError && error.code === 'FS_PERMISSION_DENIED',
+          'containment is compared on path segments, not raw prefixes',
+        )
+      } finally {
+        rmSync(lookalike, { recursive: true, force: true })
+      }
+    } finally {
+      await m.dispose()
+    }
+  })
+
+  it('keeps the read-anywhere bare form when no workspaceRoot is configured', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: tmpdir() })
+    const fiber = await ctx.plugin(RegionRouterFileSystem, { hubUrl: url, shadowRoot: SHADOW_ROOT, user: USER })
+    try {
+      const bare = ctx.fs as RegionRouterFileSystem
+      const target = await bare.resolve(join(tree.other, 'secret.txt'))
+      assert.equal(await bare.readText(target), 'secret\n', 'the bare form still reads anywhere')
     } finally {
       await fiber.dispose()
     }

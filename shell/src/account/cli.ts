@@ -14,6 +14,7 @@ function usage(): never {
       '  reset-agent-token <username>                     rotate a user\'s agent token',
       '  reset-password <username> <password>             set a new password',
       '  set-idle-exempt <username> <on|off>              whitelist/un-whitelist against idle reclaim',
+      '  set-role <username> <operator|member>            set the role that selects shared directories',
     ].join('\n') + '\n',
   )
   process.exit(1)
@@ -87,6 +88,20 @@ export async function main(argv: readonly string[]): Promise<void> {
         }
         await users.setIdleExempt(user.user_id, setting === 'on')
         console.log(`idle_exempt for ${username} set to ${setting === 'on'}`)
+        break
+      }
+      case 'set-role': {
+        const username = args[0]
+        const role = args[1]
+        if (username === undefined || (role !== 'operator' && role !== 'member')) usage()
+        const user = await users.findByUsername(username)
+        if (user === undefined) {
+          console.error(`no such user ${JSON.stringify(username)}`)
+          process.exitCode = 1
+          break
+        }
+        await users.setRole(user.user_id, role)
+        console.log(`role for ${username} set to ${role}; the account's shared directories change at its next instance start`)
         break
       }
       default:

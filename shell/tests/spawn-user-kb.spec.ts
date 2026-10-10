@@ -87,7 +87,7 @@ describe('ensureKbSearch', () => {
     const usersRoot = await mkdtemp(join(tmpdir(), 'dsh-users-'))
     try {
       const env = { ...process.env, DSH_USERS_ROOT: usersRoot, TEAM_KB_AGENT_TOKEN: 'shared-fallback-token' }
-      provisionUserHome('gina', env, 'gina-own-token')
+      provisionUserHome('gina', env, { agentToken: 'gina-own-token' })
 
       const patch = await readFile(join(usersRoot, 'gina', 'cordis.patch.yml'), 'utf8')
       assert.match(patch, /agentToken: "gina-own-token"/)
