@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-team-shell-kb-search-tool.md
-2026-09-16-team-shell-kb-search-tool.md: 85628596d4f5a8a195504d2692ce7b7bdaf4bb53
-2026-09-16-team-shell-kb-search-tool.zh.md: 5e314b5e2b92f1834d81671cbfb31db3b3178813
+2026-09-16-team-shell-kb-search-tool.md: 714183d8130865ad113b3ab65a1a566be3b5ede5
+2026-09-16-team-shell-kb-search-tool.zh.md: 32602f315678177aa13b97c00f668f19e624b656

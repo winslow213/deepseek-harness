@@ -177,7 +177,13 @@ export class InstanceManager {
   private async start(userId: string): Promise<void> {
     const port = await this.allocatePort()
     this.reservedPorts.add(port)
+    // The KB server binds a reader's session to the calling account, so each
+    // home patch carries this account's own agent token. A deployment-wide
+    // token would let any account's agent declare another's user id, which is
+    // the one thing this credential is meant to prove.
+    const account = await this.options.users.findByUsername(userId)
     const instance = superviseUserInstance(userId, port, {
+      agentToken: account?.agent_token,
       // Re-register every later generation (an install-triggered restart mints
       // a fresh launch token). The first generation is registered by the
       // deterministic await below; a duplicate upsert is idempotent.

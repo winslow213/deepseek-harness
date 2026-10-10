@@ -153,8 +153,15 @@ export function userWorkspace(user: string, env?: NodeJS.ProcessEnv): string {
   return join(userHome(user, env), 'workspace')
 }
 
-/** Provision a user's DSH_HOME so first boot does not auto-init with live reload. */
-export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string {
+/**
+ * Provision a user's DSH_HOME so first boot does not auto-init with live reload.
+ * @param user - the account whose home is provisioned.
+ * @param env - environment carrying `DSH_USERS_ROOT` and the team config values.
+ * @param kbAgentToken - the account's own KB agent token, resolved by the
+ *   caller that owns the account store; omitted falls back to the shared
+ *   `TEAM_KB_AGENT_TOKEN` (or to no token at all).
+ */
+export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv, kbAgentToken?: string): string {
   const home = userHome(user, env)
   const profileDir = join(home, 'profiles', 'web')
   mkdirSync(profileDir, { recursive: true })
@@ -175,7 +182,7 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv): string
   writeTeamDirectoryPickerPatch(home)
   ensureRegionRouter(user, env)
   ensureUserWiki(user, env)
-  ensureKbSearch(user, env)
+  ensureKbSearch(user, env, kbAgentToken)
   ensureMandatoryBundles(user, env)
   ensureImWorkspacePatch(user, env)
   ensureImWorkspaceDefault(user, env)
@@ -430,14 +437,20 @@ const TEAM_KB_SEARCH_PATCH_ID = 'dsh-team-kb-search'
  * team's KB agent server. Runs on every `provisionUserHome` call (idempotent:
  * the patch block is upserted), so the tool is in place by the user's first
  * turn.
+ * The KB server binds `POST /api/sessions` to the calling account, so each home
+ * must carry **that account's own** token: a token shared by every account
+ * would let one account's agent declare another's `user_id`, which is exactly
+ * the attribution the account token proves. `TEAM_KB_AGENT_TOKEN` remains a
+ * deployment-wide fallback for callers with no account store to read.
  * @param user - the account whose home is provisioned; also the KB session's `user_id`.
- * @param env - environment carrying `DSH_USERS_ROOT` / `TEAM_KB_BASE_URL`.
+ * @param env - environment carrying `DSH_USERS_ROOT` / `TEAM_KB_BASE_URL` and the fallback token.
+ * @param kbAgentToken - the account's own token, when the caller resolved one.
  */
-export function ensureKbSearch(user: string, env: NodeJS.ProcessEnv = process.env): void {
+export function ensureKbSearch(user: string, env: NodeJS.ProcessEnv = process.env, kbAgentToken?: string): void {
   const home = userHome(user, env)
   const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
   const kbBaseUrl = env[TEAM_KB_BASE_URL_ENV] ?? DEFAULT_TEAM_KB_BASE_URL
-  const agentToken = env[TEAM_KB_AGENT_TOKEN_ENV]
+  const agentToken = kbAgentToken ?? env[TEAM_KB_AGENT_TOKEN_ENV]
   const block = injectKbSearch({ runtimeSourceDir, home, userId: user, kbBaseUrl, agentToken })
   const [start, end] = teamMarkers(TEAM_KB_SEARCH_PATCH_ID)
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${block}\n${end}`, TEAM_KB_SEARCH_PATCH_ID)
@@ -675,10 +688,12 @@ const RESTART_DELAY_MS = 500
  * @param port - loopback port to bind.
  * @param supervised - whether a supervisor loop will relaunch the child
  *   (`DSH_SUPERVISED=1`), enabling the plugin-install self-restart marker.
+ * @param kbAgentToken - the account's own KB agent token, or undefined to use
+ *   the shared fallback from the environment.
  * @returns the running instance handle.
  */
-export function spawnUserInstance(user: string, port: number, supervised = false): DshInstance {
-  const home = provisionUserHome(user)
+export function spawnUserInstance(user: string, port: number, supervised = false, kbAgentToken?: string): DshInstance {
+  const home = provisionUserHome(user, process.env, kbAgentToken)
   const entryHost = process.env.DSH_ENTRY_HOST
   const args = [
     '--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'),
@@ -789,12 +804,14 @@ export async function registerOnReady(user: string, port: number, instance: { ur
  * @param port - loopback port to bind.
  * @param options - registration hook for each generation; defaults to the
  *   account-service HTTP registration used by the standalone `spawn-user` CLI.
+ *   `agentToken` is the account's own KB agent token, re-applied to every
+ *   generation.
  * @returns the supervised handle, whose `url` resolves on the first generation.
  */
-export function superviseUserInstance(user: string, port: number, options: { onReady?: SuperviseOnReady } = {}): SupervisedInstance {
+export function superviseUserInstance(user: string, port: number, options: { onReady?: SuperviseOnReady; agentToken?: string } = {}): SupervisedInstance {
   const onReady = options.onReady ?? registerOnReady
   let stopRequested = false
-  let current: DshInstance = spawnUserInstance(user, port, true)
+  let current: DshInstance = spawnUserInstance(user, port, true, options.agentToken)
   let generation = 0
   const url = current.url
   void onReady(user, port, current)
@@ -815,7 +832,7 @@ export function superviseUserInstance(user: string, port: number, options: { onR
       await new Promise((resolve) => { setTimeout(resolve, RESTART_DELAY_MS) })
       if (stopRequested) return
       console.log(`[spawn-user] ${user} requested a restart; spawning generation ${String(generation)}`)
-      current = spawnUserInstance(user, port, true)
+      current = spawnUserInstance(user, port, true, options.agentToken)
       void onReady(user, port, current)
       current.url.then((u) => {
         console.log(`[spawn-user] generation ${String(next)} URL: ${u}`)

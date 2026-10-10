@@ -18,7 +18,7 @@ Status: implemented
 
 **接入每个账号的方式与 wiki 工具完全一致：一个 home 级插件，在每次 `provisionUserHome` 时 upsert。** `injectKbSearch`（`shell/src/remote/inject.ts`）把 `kb-tool.ts` 拷贝进 `$DSH_HOME/plugins/kb/`，`ensureKbSearch`（`shell/src/spawn-user.ts`）把一个带 id 标记的区块 upsert 进账号 home 级的 `cordis.patch.yml`，配置了账号 id（作为知识库会话的 `user_id`）和知识库服务的 base URL（`TEAM_KB_BASE_URL` 环境变量，默认 `http://127.0.0.1:8080`——同一台主机、回环地址，因为知识库服务和它服务的每个 dsh 实例都跑在同一台部署主机上）。
 
-**这个工具用账号的 agent token 鉴权，因为知识库服务现在要求"读者在读到任何东西之前要做的两个调用"必须带调用方身份。** 知识库服务把内容写入挡在了已鉴权的调用方之后，它的中间件对 agent token 放行读取，外加两个"读者握手"写入（`POST /api/sessions`，以及 `persist_answer=false` 的 `POST /api/jobs/query`）；所有内容写入仍然只认 JWT。因此 `kb-tool.ts` 在会话和查询两个请求上发送 `Authorization: Bearer <token>`，令牌来自配置字段 `agentToken`，由 `ensureKbSearch` 从 `TEAM_KB_AGENT_TOKEN` 环境变量填入。该字段可选，空值整体省略，因此没有配置令牌的部署仍能加载插件，并得到服务端自身的 `401`，而不是插件的配置错误。
+**每个账号的 home patch 带的是该账号自己的知识库 agent token，从账号存储里解析。** 一个全部署共用的令牌会让某个账号的 agent 在建会话时声明别人的 `user_id`，而这正是该凭证存在的意义（证明归属）——知识库服务把 `POST /api/sessions` 绑定到调用账号也是这个原因。因此 `InstanceManager.start` 读取账号自己的 `dsh_users.agent_token`（`UserStore.findByUsername`），经 `provisionUserHome` -> `ensureKbSearch` -> `injectKbSearch` 写进 home patch。这是本步唯一的接口改动：令牌由持有账号存储的调用方解析，因为该查询是异步的而 provisioning 不是。`TEAM_KB_AGENT_TOKEN` 保留为「没有账号存储可读的调用方」（独立的 `spawn-user` CLI）的兜底，且解析到的令牌总是优先。`kb-tool.ts` 在会话和查询两个请求上发送 `Authorization: Bearer`；该字段可选，空值整体省略，因此没有配置令牌的部署仍能加载插件，并得到服务端自身的 `401`，而不是插件的配置错误。
 
 **任务失败会以普通的工具调用错误呈现，而不是静默返回一个空答案。** 知识库服务在文档不支持某个答案时会刻意拒绝编造；`kb-tool.ts` 从终态事件里读出 `error_message` 并抛出，这样模型看到的是一次清晰、可恢复的工具调用失败，而不是一个空的或有误导性的"成功"。
 
@@ -30,10 +30,12 @@ Status: implemented
 
 **循环轮询 `GET /api/jobs/{id}` 直到状态变为终态，再单独取结果。** 被否决：`JobInfo`（轮询响应）只携带 `result_ref`（一个服务端本地文件系统路径），而不是结果内容本身——网络客户端根本无法解析这个路径。SSE 事件端点是唯一能通过网络拿到真正的 `{answer, citations, used_docs}` 载荷的方式，而且它本来就会阻塞到终态，所以它同时取代了轮询循环和单独的"取结果"步骤。
 
+**全部署共用一个 agent token，写进每个 home。** 被否决：分发更省事，但它让这个凭证什么都证明不了——任何账号的 agent 都能以任意他人身份建会话，于是知识库会话的归属和 `ingested_by` 始终只是调用方的一面之词。每人独立令牌的代价只是 spawn 时多一次账号查询，却把「声明」变成了「凭证可证」。
+
 **给每个 dsh 用户单独发一个 KB JWT 供工具使用，而不是复用账号的 agent token。** 被否决：agent token 是 dsh 实例本来就持有的唯一凭证，而给每个账号另发 KB JWT 等于为每个用户再分发一套凭证，还要自带签发与撤销。知识库服务为读者的会话与查询调用所接受的这个令牌，正是账号本来就持有的 agent token。
 
 **在知识库服务项目内部修复 `codex_runner.py` 的 `top_k: null` 崩溃问题。** 推迟，而非否决：`wiki-server` 是本次改动范围之外的独立仓库。`kb-tool.ts` 的规避方式是始终发送一个具体的 `top_k`（默认 8）而不是留空/传 `null`，无论服务端的 bug 之后是否被修复，这都是客户端应有的正确行为。
 
 ## Consequences
 
-现在每个账号的 dsh 实例都有一个 `kb_search` 工具，可以查询团队真正的知识库并返回带引用的答案；已经针对真实运行中的知识库服务做了端到端验证（在部署主机上 `cargo run --release`，真实的 Postgres/Redis，真实的文档），一次真实查询（"NNRt 是什么"）返回了正确且带引用的答案。`shell/tests/kb-tool.spec.ts`（注册、成功路径、带/不带 bearer 头、跨调用的会话缓存、失败呈现、非 `Error` 取消原因的包装）和 `shell/tests/spawn-user-kb.spec.ts`（运行时拷贝、patch 内容、默认/覆盖的知识库 URL、令牌注入/省略、幂等性）为 shell 测试套件新增了 13 个覆盖该工具的通过用例；部署端通过 `TEAM_KB_AGENT_TOKEN` 一次性提供凭证，`ensureKbSearch` 把它写进每个账号的 home patch，所以用的就是账号本来就持有的那个长期 agent token，而不是另发的凭证；而 web profile 只在启动时加载 patch（`patchReload: startup`），因此已经在运行的实例要重启后才会用上新配置；`shell/tsconfig.json` 和 `shell/tsconfig.executor.json` 均 typecheck 干净，`kb-tool.ts` 已按 `wiki-tool.ts` 的方式加入它们的 include/exclude 列表。知识库服务本身现在作为一个 `systemd --user` 服务运行（`team-kb-agent-server.service`，`Restart=always`），崩溃可以自愈；要在整机重启后也能存活，还需要为这个用户执行一次 `loginctl enable-linger`，这需要运维者的 `sudo` 权限，本笔记未自动化这一步。知识库服务自己的默认答案生成后端是否应该切换成 `--provider dsh`，是一个独立的、仍然悬而未决的决定，本笔记不做这个决定。
+现在每个账号的 dsh 实例都有一个 `kb_search` 工具，可以查询团队真正的知识库并返回带引用的答案；已经针对真实运行中的知识库服务做了端到端验证（在部署主机上 `cargo run --release`，真实的 Postgres/Redis，真实的文档），一次真实查询（"NNRt 是什么"）返回了正确且带引用的答案。`shell/tests/kb-tool.spec.ts`（注册、成功路径、带/不带 bearer 头、跨调用的会话缓存、失败呈现、非 `Error` 取消原因的包装）和 `shell/tests/spawn-user-kb.spec.ts`（运行时拷贝、patch 内容、默认/覆盖的知识库 URL、令牌注入/省略、幂等性）为 shell 测试套件新增了 15 个覆盖该工具的通过用例；凭证用的是账号本来就持有的那个长期 agent token，从账号存储解析后写进该账号自己的 home patch；而 web profile 只在启动时加载 patch（`patchReload: startup`），因此已经在运行的实例要重启后才会用上新配置；`shell/tsconfig.json` 和 `shell/tsconfig.executor.json` 均 typecheck 干净，`kb-tool.ts` 已按 `wiki-tool.ts` 的方式加入它们的 include/exclude 列表。知识库服务本身现在作为一个 `systemd --user` 服务运行（`team-kb-agent-server.service`，`Restart=always`），崩溃可以自愈；要在整机重启后也能存活，还需要为这个用户执行一次 `loginctl enable-linger`，这需要运维者的 `sudo` 权限，本笔记未自动化这一步。知识库服务自己的默认答案生成后端是否应该切换成 `--provider dsh`，是一个独立的、仍然悬而未决的决定，本笔记不做这个决定。

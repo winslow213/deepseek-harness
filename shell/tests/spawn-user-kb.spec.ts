@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ensureKbSearch } from '../src/spawn-user.ts'
+import { ensureKbSearch, provisionUserHome } from '../src/spawn-user.ts'
 import { kbSearchPluginsDirFor } from '../src/remote/inject.ts'
 
 describe('ensureKbSearch', () => {
@@ -64,6 +64,34 @@ describe('ensureKbSearch', () => {
       const patch = await readFile(join(usersRoot, 'erin', 'cordis.patch.yml'), 'utf8')
       assert.match(patch, /kbBaseUrl: /)
       assert.doesNotMatch(patch, /agentToken/)
+    } finally {
+      await rm(usersRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers the account token over the shared environment fallback', async () => {
+    const usersRoot = await mkdtemp(join(tmpdir(), 'dsh-users-'))
+    try {
+      const env = { ...process.env, DSH_USERS_ROOT: usersRoot, TEAM_KB_AGENT_TOKEN: 'shared-fallback-token' }
+      ensureKbSearch('frank', env, 'frank-own-token')
+
+      const patch = await readFile(join(usersRoot, 'frank', 'cordis.patch.yml'), 'utf8')
+      assert.match(patch, /agentToken: "frank-own-token"/)
+      assert.doesNotMatch(patch, /shared-fallback-token/)
+    } finally {
+      await rm(usersRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('threads the account token through provisionUserHome', async () => {
+    const usersRoot = await mkdtemp(join(tmpdir(), 'dsh-users-'))
+    try {
+      const env = { ...process.env, DSH_USERS_ROOT: usersRoot, TEAM_KB_AGENT_TOKEN: 'shared-fallback-token' }
+      provisionUserHome('gina', env, 'gina-own-token')
+
+      const patch = await readFile(join(usersRoot, 'gina', 'cordis.patch.yml'), 'utf8')
+      assert.match(patch, /agentToken: "gina-own-token"/)
+      assert.match(patch, /userId: "gina"/)
     } finally {
       await rm(usersRoot, { recursive: true, force: true })
     }
