@@ -484,3 +484,273 @@ cordis 插件，与 `region-router.ts` 等同属"运行时拷贝进 profile"的�
   文件要么被迫解析/截断，要么退化为整份加载（L3/L4 无界增长后代价过高）。
   分文件让 L1/L2 的自动加载可以直接复用 `agent-instructions` 现成的
   `localInstructionFileCandidates` 机制，零新增管线。
+
+## 12. 上游 0.2x 同步对照（2026-10-10）
+
+### 12.1 基线与规模
+
+共同祖先 `c291e7961a`（2026-09-10，0.1.5-rc.2）。上游 `origin/master` =
+`d743267388`（0.2.1-alpha.2）领先 4894 提交；本分支 `feature-0.2x` =
+`5eb922e40c` 领先 131 提交，合计 514 文件 / +47286 −294。
+
+| 路径 | 文件 | 增 | 减 |
+|---|---|---|---|
+| `shell/` | 83 | +18993 | 0 |
+| `packages/` | 246 | +22088 | −166 |
+| `.agents/`（Agent Notes） | 135 | +3484 | 0 |
+| `docs/` | 30 | +1979 | −56 |
+| `apps/` | 8 | +90 | −67 |
+| `scripts/` | 6 | +174 | −5 |
+| `pnpm-lock.yaml` + 两个 tsconfig | 4 | +476 | 0 |
+
+干跑合并得到 92 个冲突文件（`UU` 77 / `UD` 11 / `AU` 2 / `AA` 2）：
+`packages/` 53 · `docs/` 26 · `apps/` 4 · `scripts/` 3 · 根配置 4 ·
+其余 2。涉及冲突的本方非合并提交 39/131。`shell/` 的 83 个文件零冲突，
+因为它在 pnpm workspace 之外。
+
+其中 8 个是 git 改名检测的产物而非独立改动：`agent-presets` 的 6 个文件
+（`src/discovery.ts`、`src/index.ts`、`src/preset.ts`、
+`tests/discovery.spec.ts`、`tests/mount.spec.ts`、
+`presets/standard/agent.cordis.yml`）判为 `UD`（我方改、上游删），
+`agent-preset-registry/src/profile.ts` 与 `tests/profile.spec.ts` 判为
+`AU`。`agent-preset-registry/` 在本分支不存在——git 按内容相似度把我们对
+`agent-presets/src/profile.ts` 的新增重定位过去了。§12.4 放弃
+`agent-presets` 后这批冲突随之消失。
+
+### 12.2 逐包去留
+
+| 桶 | 提交 | 包（我方改动） | 上游对应 | 处置 |
+|---|---|---|---|---|
+| A A2UI | ~40 | `client/ui-a2ui` +2425 · `client/ui-a2ui-render` +3912 · `web/tool-a2ui-store` +2940 · `client/ui-a2ui-store` +1189 · `web/tool-a2ui-surface` +2161 · `web/tool-a2ui-data-bash` +532 · `web/tool-a2ui-data` +473 | 无此方向 | 保留 |
+| B team-shell | ~57 | `shell/` 全树 83 文件 +18993 | 无此方向；合并零冲突 | 保留 |
+| C plugin-install | 16 | `host/plugin-install` +2341 · `client/ui-settings-plugin-install` +1691 | `boot/plugin-manager` 已取代 | 弃包，移植 4 项增量（§12.3） |
+| D 重叠适配 | 13 | `client/{connection,ui-chat,ui-open-in-app}` · `host/{open-in-app,directory-picker-browse}` · `jobs/{jobs,jobs-local}` · `fs/tool-fs-search` · `context/agent-instructions` · `sandbox/{sandbox,sandbox-local,sandbox-policy}` · `core/tools` · `boot/app-boot` · `extensions/{tool-cordis,cordis-client-runner}` | 上游同包亦有改动 | 逐个 rebase |
+| E 放弃 | 3 | `workflow/workflow-worker-thread` · `preset/agent-presets` · `workflow/tool-workflow` | 包已删 / 已改名 | 放弃（§12.4） |
+
+D 桶里 `sandbox/*` 的两个提交（`241f918405` 跨账号读屏蔽、
+`a39d498db5` 把 grep/glob 的 ripgrep 收敛进沙箱）是 team-shell 的安全
+基础，必须保留；上游 `sandbox-local` 没有这两处改动。
+
+### 12.3 plugin-manager：逐函数对照与移植增量
+
+我方 `host/plugin-install` 是单个 `index.ts`（918 行）+ `types.ts`，暴露
+3 个 Remote 方法（`installPlugin` / `uploadDirectory` / `uninstallPlugin`）。
+上游 `boot/plugin-manager` 是 13 个模块，暴露 12 个方法
+（`listVersionExemptions`、`setVersionExemption`、`listPlugins`、
+`listBundles`、`registries`、`inspect`、`setPluginEnabled`、
+`setBundleEnabled`、`installBundle`、`waitForInstall`、`cancelInstall`、
+`removeBundle`），另有模型工具 `plugin_manager`（8 个 action）与客户端
+`client/ui-plugin-manager`。
+
+把我方 22 个内部函数与上游 13 个模块逐一对应后，15 个是上游已有的重复
+实现：
+
+| 我方内部函数 | 上游模块 |
+|---|---|
+| `parseNpmSpec` | `install-spec.ts` |
+| `pnpmDiagnostics` / `throwPnpmFailure` | `failure.ts` + `install-failure.ts` |
+| `ignoredBuildNames` / `gitPrepareKeys` / `placeholderIgnoredBuildNames` / `approveBuildScripts` / `rebuildApprovedBuilds` | `build-approval.ts` |
+| `runPnpm` / `isNpmBundleDependency` | `operations.ts` + `run-tree.ts` |
+| `upsertPluginPatchRow` / `upsertMarkedBlock` / `removeMarkedBlock` | `patch.ts` |
+| `assertPackageResolvable` | `registry.ts` / `install-spec.ts` |
+
+我方独有、需要移植的 4 项增量：
+
+| 增量 | 作用 |
+|---|---|
+| `file-dir` | 从服务器本地目录安装（`finalizeDirectoryInstall`） |
+| `upload-directory` | 浏览器选目录上传（base64；上限 512 文件 / 单文件 1 MiB / 总量 10 MiB） |
+| `npm-register` | 把已装的 npm 插件注册进 profile（带 `configJson`） |
+| 受管自退重启 | `RESTART_MARKER` + `DSH_SUPERVISED`：写标记后自退，`spawn-user` 的重拉循环在同一端口接回 |
+
+第 4 项是部署形态差异：上游 `reload()` 在没有 `boot/hmr` 时报
+`application: 'restart-required'` 并等人工重启，本仓未装 `boot/hmr`，靠壳的
+重拉循环自动化。执行方式为：以上游 `boot/plugin-manager` 为基座，删我方包，
+并入这 4 项增量，客户端采用 `ui-plugin-manager` 并保留目录上传入口。
+
+### 12.4 workflow：放弃节点 profile
+
+上游删除 `workflow/workflow-worker-thread`，改由 `workflow-ptc` +
+`ptc-runtime` 承担；`tool-ralph` 移入 `experimental`。本分支唯一的工作流
+提交 `acafb1fc9f`（22 文件）跨 3 个包，其中 2 个在上游已不存在或已改名：
+
+| 涉及包 | 上游现状 | 处置 |
+|---|---|---|
+| `workflow/workflow-worker-thread`（含 `host.ts` +69、`runtime.ts` +47、`types.ts` +13、tests +182） | 已删除 | 强制放弃 |
+| `workflow/workflow`（引擎类型） | 保留但重写 | 放弃我方改动 |
+| `preset/agent-presets`（`profile.ts` 130 行 + 3 处接线 + 测试） | 改名 `agent-preset`，拆出 `agent-preset-registry` | 放弃 |
+
+该提交同时新增 Agent Note
+`.agents/notes/implemented/feature/2026-08-25-workflow-agent-profile-node-config.md`
+（+ `.zh.md` / `.i18n.yaml`），随提交一并放弃；`master` 上不存在该 note。
+
+该提交给 `agent()` 加的 `persona` / `toolFilter` / `profile` 三个 opt 在上游
+没有对应物（`origin/master` 的 `packages/workflow/` 全目录搜 `profile` 零
+命中），但能力层上游已有：`SubagentStartRequest` 带
+`toolFilter?: ToolRestriction` 与 `persona?: string`，由 preset 的行声明
+（`bundle/web-app/presets/*.patch.yml` 的 `toolFilter:` 字段），provider 在
+子作用域用 `ctx.tools.restrict()` 应用——`schedule/tool-schedule` 的委派行
+即此用法。两者的差别只在声明位置：我方在 `agent()` 调用点声明、由预设
+profile 提供默认，上游在预设行声明。上游覆盖面更广（`tool-subagent` 与
+`tool-subagent-fork` 都覆盖，不限于工作流子 agent），而移植我方形态需要对
+着改名后的 `agent-preset-registry` 重写 `profile.ts`。决定：放弃我方形态，
+采用上游机制。
+
+### 12.5 SSH：两端保留
+
+上游 `packages/ssh/` 是 5 个包（`ssh` → `ctx.ssh`、`fs-ssh` → `ctx.fs`、
+`subprocess-ssh` → `ctx.subprocess`、`sandbox-ssh` → `ctx.sandbox`、
+`ssh-helper-runtime`），源码约 1970 行。我方 `shell/src/remote/` 是 20 文件
+6634 行。
+
+**不采用上游传输层**，因为上游明确不支持 Windows 端点：
+`packages/ssh/ssh/README.md` 的部署前提写明 "Both endpoints require Linux or
+macOS"，已知限制首条是 "No Windows endpoint"。本部署有真实的 Windows
+端点——hub `/api/agents` 实测在线 5 台，其中 `winslow` 的根是
+`D:\workspace\hap_project\OH_Hap`，`agent.ts` 与 `executor.ts` 都有 win32
+分支（`cmd /c`、`windowsHide`、控制台处理）。
+
+上游的另一个前提也不成立：它要求中心经 OpenSSH 别名入站连接对端
+（"The local `ssh` command must support connection multiplexing and
+Unix-socket forwarding"，`BatchMode` + 严格 host key），而 §7.3 的部署形态
+允许对端在 NAT 后，现有实现是 agent 出站拨号（方向 B）。改用上游还需每台
+对端安装 sshd、登记 known_hosts、分发 helper 归档并把其 SHA-256 写进配置
+（`helperHash` 是必填字段），并在 helper 升级时逐台重新分发。
+
+我方与上游**共用消费侧**这一前提成立：4 个 provider 都是共享包的子类——
+`executor.ts extends ShellExecutor`、`fs-provider.ts extends FileSystem`、
+`region-router.ts extends SandboxedFileSystem`、`region-shell.ts extends
+SandboxBashExecutor`，且 `packages/shell/bash-local` 内部不含本机硬编码
+路径（全部经 `ctx.subprocess`）。因此传输层若将来替换，切换点是一个
+provider 行。当前决定：保留 hub 与 agent 两端。
+
+通道加密本轮不加，记为已知缺口：`hub.ts` / `agent.ts` 的传输都是
+`node:net` 且无 TLS，agent 监听 `0.0.0.0:7101`，`hello` 帧携带 agent token
+或配对码，命令输出与文件内容均为明文 NDJSON。
+
+消费侧形态与上游一致并不等于执行世界一致：本部署的 `ctx.subprocess` 仍是
+本机提供方，§13 记录该分歧与收敛所需的目标标识符契约。
+
+## 13. 远程执行：目标标识符契约
+
+本节记录的架构归属
+`../.agents/notes/implemented/architecture/2026-07-28-portable-execution-world-consumers.md`。
+
+该 note 已接受的决策是：`ctx.fs` 与 `ctx.subprocess` **共同定义一个执行
+世界**，共同挂载的提供方必须描述相同的路径命名空间、可执行文件、进程与
+终端会话，上层能力消费这两个接口而不引用具体提供方。本部署目前提供了远程
+`ctx.fs` 与远程 `ctx.shell`，但 `ctx.subprocess` 仍是 `subprocess-local`
+（`packages/bundle/base/cordis.patch.yml` 的 `subprocess` 行），**两个
+seam 描述的不是同一个执行世界**。§13.6 记录的搜索缺口是该分歧的后果，
+不是独立缺陷；本节的目标标识符契约是收敛所需的前置事实。
+
+### 13.1 影子目录是面板句柄，不是镜像
+
+面板的文件浏览经 `packages/api/workspace-files` 的 `list` → `ctx.fs.listDir`
+→ `region-router.listDir`：影子路径查表命中后转发给 hub，返回的是**对端
+真实根**的条目。实测 winslow 的 Windows 挂载根列出 `.dsh-team/`、`.git/`、
+`AGENT_LOG_CLI_PLAN.md`、`applications_call/` 等真实项目条目。
+
+影子目录在磁盘上只需要**存在**（dsh 的 workspace attach/recover 做 realpath
++ stat），它不被当作内容源。`/tmp/dsh-shadow/winslow/pairing@WH-D-010484A`
+下另有 15 个文件，来自第三方插件（如 `@nanmicoder/dsh-agent-teams`）直接用
+`node:fs` 写服务器磁盘——它们绕过了 `ctx.fs`，因此也不随远端变化。
+
+由此得出两条约束：影子目录不可删除、不可重建（它是面板与工作区记录引用的
+句柄）；新增路由必须保持它的路径不变。
+
+### 13.2 三层载体
+
+标识符不新增请求字段——`ShellExecSpec.workdir` 与 `SubprocessSpawnSpec.cwd`
+**已经是**影子路径。标识符分布在三层：
+
+| 层 | 内容 | 状态 |
+|---|---|---|
+| `hello` 帧（agent 自述） | `agentId` · `platform` · `arch` · `roots` · `commands` | 加 `platform` / `arch` |
+| 挂载表（hub 权威，`/api/mounts` pull + `/api/mounts/stream` NDJSON 推送） | 目标描述符 | 组装 `ExecutionTarget` |
+| 请求 | `cwd` / `workdir` = 影子路径 | 不变 |
+
+目标描述符承载标识符、名单与沙箱事实：
+
+```
+interface ExecutionTarget {
+  id: 'local' | agentId        // 稳定身份
+  platform: 'posix' | 'win32'  // 来自 hello，不是推断
+  arch: string
+  shadowPath: string           // 服务器可寻址句柄（面板用的同一个）
+  root: string                 // 目标侧真实根；本地为 ''
+  allow: { commands: readonly string[]; roots: readonly string[] }
+  enforcement: 'full' | 'partial'
+}
+```
+
+`allow` 是**播报**而非授权：今天等于 agent 自述，后续是中心策略与自述的
+交集；强制点始终在 agent，§7.4 的"代理是最后防线"不变。这与上游
+`sandbox-ssh` 的形状一致——它转发 `confine(argv, policy)` 并如实返回
+`enforcement`，本地不假装强制。
+
+`allow.commands` 即 note 决策里"可执行文件查找"的远端命名空间：`ctx.subprocess`
+的 `resolveExecutable()` 命中集合对应 agent 的命令名单，`allow.roots`
+对应它的 `--root` 路径名单。
+
+### 13.3 平台不再推断
+
+| 今天 | 改后 |
+|---|---|
+| `shadow.ts` 的 `translateShadowPath`：`mount.root.includes('\\')` | `target.platform` |
+| `executor.ts` 的 `shellArgvFor`：`/^[A-Za-z]:[\\/]/.test(workdir) \|\| workdir.includes('\\')` | `target.platform` |
+
+第二条有实际缺陷：POSIX 文件名合法含反斜杠，`workdir.includes('\\')` 会把
+这类路径判成 Windows 并选 `cmd /c`。
+
+### 13.4 影子路径分配去掉数组下标
+
+`hub.ts` 的 `shadowPathFor(user, agentId, root, ordinal, shadowRoot)` 以
+`agent.roots` 的**数组下标**区分多个 root（`ordinal === 0` 无后缀，其余
+`/root{n}`）。agent 重连后若 roots 顺序变化，两个 root 的影子路径互换，
+而工作区记录与面板引用的都是影子路径——已存工作区会静默指向另一个 root。
+
+修法只需保证**首个 root 的路径与今天逐字节一致**：
+
+```
+第 1 个 root → {shadowRoot}/{user}/{agentSegment}                      // 不变
+第 N 个 root → {shadowRoot}/{user}/{agentSegment}/root-{root 派生短哈希}
+```
+
+实测影响面：`/tmp/dsh-shadow/` 下 20 个影子目录，多 root 的只有
+`rowen/pairing@sz-d-l-010904b/root1` 一个；全部署的
+`storages/workspace.json` 对该路径零引用。因此本次修改零迁移。
+
+### 13.5 改动清单
+
+| 位置 | 改动 |
+|---|---|
+| `agent.ts` hello | 加 `platform: process.platform`、`arch: process.arch` |
+| `protocol.ts` `HelloFrame` | 加可选 `platform` / `arch`（旧 agent 仍可连） |
+| `hub.ts` `AgentRecord` | 存 `platform` / `arch` |
+| `hub.ts` `mounts()` | 停止丢弃 `commands` / `roots`，组装 `ExecutionTarget` |
+| `shadow.ts` `translateShadowPath` | 返回 `ExecutionTarget` 而非 `{user, remotePath, mount}` |
+| `shadow.ts` `shadowPathFor` | 下标 → root 派生哈希（首 root 不变） |
+| `executor.ts` `shellArgvFor` | 入参由 workdir 改为 target |
+
+面板通路（`workspace-files` → `ctx.fs` → `region-router`）不动。
+
+### 13.6 未采纳的方案
+
+- **重建影子目录**：不采纳。影子目录是句柄（§13.1），重建会作废面板与
+  工作区记录引用的路径；且磁盘内容含第三方插件用 `node:fs` 落下的数据。
+- **在路由层把 `bash -c` 改写成 `cmd /c`**：不采纳。两种 shell 的引号与
+  转义规则不同，改写 argv 会改变命令语义，且违反包边界的显式优先原则。
+  平台选择留在 `ctx.shell` 层——seam 只管执行世界在哪里，不管那个世界说
+  什么语言。该选择以 `target.platform` 为输入（§13.3），不再从路径推断。
+- **在 `ctx.subprocess` 之上另建远程 seam**：不采纳，与 note 的决策冲突
+  （该 note 明确否决"为每个远程提供方分别保留 PTY 与 LSP 包"）。收敛路径
+  是把远程 `ctx.subprocess` 补上，使 `tool-fs-search`、`lsp-stdio`、
+  `subagent-*`、`terminal-bash` 继续作为通用消费方挂在同一执行世界，而不是
+  各自获得远程包；这需要在线协议里补 `'pipe'` 双向流与 PTY 帧。
+- **本轮先补远程 `ctx.subprocess`**：暂缓，非否决。`ctx.subprocess` 是被所有
+  进程型消费者共享的单例 seam，替换它等于全实例生效、无法按 profile 灰度；
+  且现有线协议只有 `exec` / `kill` / `fs:*` 帧。因此本轮 `ctx.subprocess`
+  仍是 `subprocess-local`，**在挂载工作区里 grep/glob 搜索的是影子目录而非
+  对端真实代码**。§13.5 的标识符改造为该收敛预备落点：`platform` 决定 shell
+  与可执行文件命名空间，`allow` 承载命令与路径名单。
