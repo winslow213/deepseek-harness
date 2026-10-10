@@ -74,6 +74,23 @@ interface SandboxExecutionPolicy {
    */
   readAllowedRoots?: readonly string[]
   /**
+   * Extra absolute directories this execution may WRITE under, beyond whatever
+   * the mode already grants — a deployment's shared directories, whose members
+   * exchange files. It grants no read: the mode already makes the host readable,
+   * so an entry here means "may MODIFY", not "may see". Under `read-only` it
+   * grants nothing, and under `danger-full-access` it adds nothing.
+   *
+   * This is an authorization, not an isolation boundary: two tenants granted
+   * one directory can overwrite each other. Directory-level arbitration is the
+   * deployment's (shared group, setgid, umask).
+   *
+   * Each entry is canonicalized and compared as the enforcement layers compare
+   * paths; an entry that is not absolute, that is `/`, or that would replace a
+   * mount the mode itself installs is discarded rather than granted — see
+   * `effectiveRwRoots`, which owns the derivation.
+   */
+  rwRoots?: readonly string[]
+  /**
    * Opaque identity of the calling session (the branded `dsh-session`
    * SessionId). Backends key per-session state off it (e.g. windows-acl gives
    * each live session/workspace pair a random private temp directory and SID,

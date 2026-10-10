@@ -52,14 +52,22 @@ export interface Config extends SandboxedFsConfig {
   user: string
   /**
    * The account's private workspace directory — the only local path this
-   * instance may READ besides its mounted shadow roots. Omitted for the bare
-   * (non-team) region-router form, which keeps the inherited read-anywhere
-   * local semantics.
+   * instance may READ besides its mounted shadow roots and any
+   * {@link readableRoots} grant. Omitted for the bare (non-team) region-router
+   * form, which keeps the inherited read-anywhere local semantics.
    */
   workspaceRoot?: string
+  /**
+   * Additional local roots this instance may READ besides `workspaceRoot` —
+   * the team shell's role-scoped shared directories. Each entry is an explicit
+   * grant, so an absent list keeps the single-root boundary. Ignored when
+   * `workspaceRoot` is omitted, which already reads anywhere.
+   */
+  readableRoots?: readonly string[]
 }
 
-type ResolvedConfig = Required<Pick<Config, 'hubUrl' | 'shadowRoot' | 'user'>> & { workspaceRoot?: string }
+type ResolvedConfig = Required<Pick<Config, 'hubUrl' | 'shadowRoot' | 'user'>>
+  & { workspaceRoot?: string; readableRoots?: readonly string[] }
 
 type ProbeWire = { version: string; type: 'file' | 'directory' | 'symlink' | 'other'; size: number } | null
 type ListEntryWire = { name: string; type: 'file' | 'directory' | 'other'; targetKey: string; version?: string; size?: number }
@@ -103,6 +111,9 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
       shadowRoot: config.shadowRoot.replace(/\/+$/, ''),
       user: config.user,
       ...config.workspaceRoot === undefined ? {} : { workspaceRoot: canonicalPath(config.workspaceRoot.replace(/\/+$/, '')) },
+      ...config.readableRoots === undefined || config.readableRoots.length === 0
+        ? {}
+        : { readableRoots: config.readableRoots.map(root => canonicalPath(root.replace(/\/+$/, ''))) },
     }
     // Fast bootstrap fetch for anything that arrives before the subscription
     // below lands its first message; the subscription is the source of
@@ -180,7 +191,8 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
 
   /**
    * Enforce the account's read boundary on a LOCAL target: a read outside the
-   * private workspace is denied with `FS_PERMISSION_DENIED`. Mounted shadow
+   * private workspace, a mounted shadow path, or an explicitly granted
+   * readable root is denied with `FS_PERMISSION_DENIED`. Mounted shadow
    * targets are remote-served and skip this fence, and so does any other path
    * under the shadow root: an unmatched shadow-tree path (a stale directory
    * left behind by an earlier pairing under a different root, or a parent
@@ -193,9 +205,8 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
    */
   private async assertLocalReadable(target: FsTarget): Promise<void> {
     if (this.shadowTarget(target) !== undefined || this.isShadow(target.displayPath)) return
-    const root = this.region.workspaceRoot
-    if (root === undefined) return
-    if (!isLexicallyUnder(String(target.targetKey), root)) {
+    if (this.region.workspaceRoot === undefined) return
+    if (!this.allowsLocalRead(String(target.targetKey))) {
       throw new FsError(
         `cannot read "${target.displayPath}": access denied outside the account workspace`,
         'FS_PERMISSION_DENIED',
@@ -206,11 +217,22 @@ export class RegionRouterFileSystem extends SandboxedFileSystem {
   /** Enforce the read boundary on a LOCAL absolute path (the `lstat` shape). */
   private async assertLocalPathReadable(abs: string): Promise<void> {
     if (this.isShadow(abs)) return
-    const root = this.region.workspaceRoot
-    if (root === undefined) return
-    if (!isLexicallyUnder(canonicalPath(abs), root)) {
+    if (this.region.workspaceRoot === undefined) return
+    if (!this.allowsLocalRead(canonicalPath(abs))) {
       throw new FsError(`cannot read "${abs}": access denied outside the account workspace`, 'FS_PERMISSION_DENIED')
     }
+  }
+
+  /**
+   * Whether a canonical local path is inside the account's workspace or one of
+   * the granted shared roots. Callers check the shadow-root early return first,
+   * so a shadow path never reaches this test.
+   * @param canonical - the canonical local path to test.
+   * @returns whether the read is allowed.
+   */
+  private allowsLocalRead(canonical: string): boolean {
+    const roots = [this.region.workspaceRoot, ...this.region.readableRoots ?? []]
+    return roots.some(root => root !== undefined && isLexicallyUnder(canonical, root))
   }
 
   override async stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined> {

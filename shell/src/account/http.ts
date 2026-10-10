@@ -200,6 +200,19 @@ async function handleDeleteInstance(req: IncomingMessage, res: ServerResponse, s
   sendJson(res, 200, { removed: true, user_id: userId })
 }
 
+/**
+ * One account's role (operator-side). The spawn path must know it before
+ * provisioning, because the account's shared directories come from its role;
+ * the CLI spawn form has no database access of its own. Deliberately narrow:
+ * neither the password hash nor the agent token ever leaves over this route.
+ */
+async function handleUserRole(req: IncomingMessage, res: ServerResponse, s: HttpServices, userId: string): Promise<void> {
+  if (!authorized(req, s)) { sendJson(res, 403, { error: 'forbidden' }); return }
+  const user = await s.users.findByUsername(userId)
+  if (user === undefined) { sendJson(res, 404, { error: 'no such account' }); return }
+  sendJson(res, 200, { user_id: user.user_id, username: user.username, role: user.role })
+}
+
 async function handleSessionRoute(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
   const cookies = parseCookies(req.headers.cookie)
   const sessionId = cookies.get(COOKIE_NAME)
@@ -582,6 +595,8 @@ export function createAccountServer(s: HttpServices) {
           await handleUpsertInstance(req, res, s)
         } else if (path.startsWith('/api/instances/') && method === 'DELETE') {
           await handleDeleteInstance(req, res, s, decodeURIComponent(path.slice('/api/instances/'.length)))
+        } else if (path.startsWith('/api/accounts/') && method === 'GET') {
+          await handleUserRole(req, res, s, decodeURIComponent(path.slice('/api/accounts/'.length)))
         } else {
           sendJson(res, 404, { error: `no route for ${method} ${path}` })
         }

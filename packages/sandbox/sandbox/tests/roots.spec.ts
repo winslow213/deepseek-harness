@@ -8,13 +8,22 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { canonicalPath, readShield, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { canonicalPath, effectiveRwRoots, readShield, writableRoots } from '@deepseek-ai/dsh-sandbox'
 
 /** Every temp root created by this file, removed after each test. */
 const roots: string[] = []
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
+
+/** A shared users root with one account home inside it, real on disk. */
+function usersRoot(): { root: string; home: string } {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-users-'))
+  roots.push(root)
+  const home = join(root, 'alice')
+  mkdirSync(home)
+  return { root, home }
+}
 
 describe('canonicalPath', () => {
   it('resolves symlinks (an existing path realpaths)', () => {
@@ -45,16 +54,161 @@ describe('writableRoots', () => {
   })
 })
 
-describe('readShield', () => {
-  /** A shared users root with one account home inside it, real on disk. */
-  function usersRoot(): { root: string; home: string } {
-    const root = mkdtempSync(join(tmpdir(), 'dsh-users-'))
-    roots.push(root)
-    const home = join(root, 'alice')
-    mkdirSync(home)
-    return { root, home }
+describe('effectiveRwRoots', () => {
+  /** A real directory to grant, under a caller-provided parent. */
+  function grant(parent = tmpdir()): string {
+    const dir = mkdtempSync(join(parent, 'dsh-grant-'))
+    roots.push(dir)
+    return dir
   }
 
+  it('grants nothing under read-only — the mode withholds every write', () => {
+    expect(effectiveRwRoots({ mode: 'read-only', workspaceRoot: process.cwd(), rwRoots: [grant()] }))
+      .toEqual([])
+  })
+
+  it('grants nothing under danger-full-access, which needs no grant', () => {
+    expect(effectiveRwRoots({ mode: 'danger-full-access', workspaceRoot: process.cwd(), rwRoots: [grant()] }))
+      .toEqual([])
+  })
+
+  it('returns the canonical grant under workspace-write', () => {
+    const dir = grant()
+    expect(effectiveRwRoots({ mode: 'workspace-write', workspaceRoot: process.cwd(), rwRoots: [dir] }))
+      .toEqual([realpathSync.native(dir)])
+  })
+
+  it('grants nothing when the policy carries no extra root (the pre-existing semantics)', () => {
+    expect(effectiveRwRoots({ mode: 'workspace-write', workspaceRoot: process.cwd() })).toEqual([])
+    expect(effectiveRwRoots({ mode: 'workspace-write', workspaceRoot: process.cwd(), rwRoots: [] })).toEqual([])
+  })
+
+  it('deduplicates grants that canonicalize to one path', () => {
+    const dir = grant()
+    expect(effectiveRwRoots({
+      mode: 'workspace-write',
+      workspaceRoot: process.cwd(),
+      rwRoots: [dir, `${dir}/`],
+    })).toEqual([realpathSync.native(dir)])
+  })
+
+  it('drops a relative entry, which has no canonical identity to compare', () => {
+    expect(effectiveRwRoots({
+      mode: 'workspace-write',
+      workspaceRoot: process.cwd(),
+      rwRoots: ['relative/share', './share'],
+    })).toEqual([])
+  })
+
+  it('drops / — that is danger-full-access by another name', () => {
+    expect(effectiveRwRoots({ mode: 'workspace-write', workspaceRoot: process.cwd(), rwRoots: ['/'] }))
+      .toEqual([])
+  })
+
+  it('drops a grant equal to a mode-owned mount, which would replace it', () => {
+    const ws = grant()
+    expect(effectiveRwRoots({
+      mode: 'workspace-write',
+      workspaceRoot: ws,
+      rwRoots: [ws, canonicalPath('/tmp'), canonicalPath(tmpdir())],
+    })).toEqual([])
+  })
+
+  it('drops a grant that is an ancestor of a mode-owned mount, which would re-expose what that mount hides', () => {
+    const parent = grant()
+    const ws = join(parent, 'workspace')
+    mkdirSync(ws)
+    expect(effectiveRwRoots({
+      mode: 'workspace-write',
+      workspaceRoot: ws,
+      rwRoots: [parent],
+    })).toEqual([])
+  })
+
+  it('keeps a grant that merely sits under a mode-owned mount (binding it replaces nothing)', () => {
+    const under = grant(tmpdir())
+    expect(effectiveRwRoots({ mode: 'workspace-write', workspaceRoot: process.cwd(), rwRoots: [under] }))
+      .toEqual([realpathSync.native(under)])
+  })
+
+  it('keeps a sibling whose path shares a prefix with a mode-owned mount', () => {
+    const ws = grant()
+    const sibling = `${ws}-elsewhere`
+    mkdirSync(sibling)
+    roots.push(sibling)
+    expect(effectiveRwRoots({ mode: 'workspace-write', workspaceRoot: ws, rwRoots: [sibling] }))
+      .toEqual([realpathSync.native(sibling)])
+  })
+})
+
+describe('writableRoots with extra grants', () => {
+  it('adds the granted roots to the mode-owned allow-list', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'dsh-ws-'))
+    roots.push(ws)
+    const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
+    roots.push(shared)
+    const writable = writableRoots({ mode: 'workspace-write', workspaceRoot: ws, rwRoots: [shared] })
+    expect(writable).toContain(realpathSync.native(shared))
+    expect(writable).toContain(realpathSync.native(ws))
+    expect(new Set(writable).size).toBe(writable.length)
+  })
+})
+
+describe('readShield with extra grants', () => {
+  it('re-exposes a grant buried inside a denied root, which the shield would otherwise hide', () => {
+    const { root, home } = usersRoot()
+    const shared = join(root, 'shared')
+    mkdirSync(shared)
+    const shield = readShield({
+      mode: 'workspace-write',
+      workspaceRoot: process.cwd(),
+      readDeniedRoots: [root],
+      readAllowedRoots: [home],
+      rwRoots: [shared],
+    })
+    expect(shield.allowed).toContain(realpathSync.native(shared))
+    expect(shield.allowed).toContain(realpathSync.native(home))
+  })
+
+  it('drops a grant outside every denied root, which nothing hides', () => {
+    const { root } = usersRoot()
+    const outside = mkdtempSync(join(tmpdir(), 'dsh-elsewhere-'))
+    roots.push(outside)
+    const shield = readShield({
+      mode: 'workspace-write',
+      workspaceRoot: process.cwd(),
+      readDeniedRoots: [root],
+      rwRoots: [outside],
+    })
+    expect(shield.allowed).toEqual([])
+  })
+
+  it('re-exposes a grant under read-only too — a grant never narrows a read', () => {
+    const { root, home } = usersRoot()
+    const shared = join(root, 'shared')
+    mkdirSync(shared)
+    const shield = readShield({
+      mode: 'read-only',
+      workspaceRoot: process.cwd(),
+      readDeniedRoots: [root],
+      readAllowedRoots: [home],
+      rwRoots: [shared],
+    })
+    expect(shield.allowed).toContain(realpathSync.native(shared))
+  })
+
+  it('names no boundary when the policy declares no denied root, grants included', () => {
+    const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
+    roots.push(shared)
+    expect(readShield({
+      mode: 'workspace-write',
+      workspaceRoot: process.cwd(),
+      rwRoots: [shared],
+    })).toEqual({ denied: [], allowed: [] })
+  })
+})
+
+describe('readShield', () => {
   it('names no boundary when the policy declares no denied root (single-tenant default)', () => {
     expect(readShield({ mode: 'workspace-write', workspaceRoot: process.cwd() }))
       .toEqual({ denied: [], allowed: [] })

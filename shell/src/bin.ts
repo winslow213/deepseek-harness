@@ -10,7 +10,7 @@ import { createHub, type ConsumedPairing, type TeamHub } from './remote/hub.ts'
 import { startAgent } from './remote/agent.ts'
 import { listAgents, listMounts, loopbackControlBase, runExec, runFsRead, createPairing, type ResultFrame } from './remote/client.ts'
 import { injectRemoteProviders } from './remote/inject.ts'
-import { accountBaseUrl, adminSecret, unregisterInstance } from './instance-register.ts'
+import { accountBaseUrl, adminSecret, fetchAccountRole, unregisterInstance } from './instance-register.ts'
 
 const [, , command, ...args] = process.argv
 
@@ -29,9 +29,18 @@ async function main(): Promise<void> {
       // behavior (no auto-restart on a marker).
       const once = args.includes('--once')
       const supervised = !once
-      const instance = supervised ? superviseUserInstance(user, port) : spawnUserInstance(user, port)
       const account = accountBaseUrl()
       const secret = adminSecret()
+      // The account's shared directories come from its role, and this form has
+      // no account store of its own, so look the role up. A failure here is
+      // logged and the spawn proceeds without the grants: this path also
+      // recovers a deployment whose account service is down, and refusing to
+      // start would turn one broken service into two.
+      const role = account === undefined ? undefined : await fetchAccountRole(account, user, secret)
+      const facts = { role }
+      const instance = supervised
+        ? superviseUserInstance(user, port, facts)
+        : spawnUserInstance(user, port, facts)
       // A supervised spawn registers itself (every generation, with the launch
       // token) inside the supervision loop; a one-shot spawn registers here.
       if (account !== undefined && !supervised) {

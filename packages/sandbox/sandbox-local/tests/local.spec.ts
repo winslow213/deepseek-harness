@@ -114,6 +114,57 @@ describe('profile dialects', () => {
     expect(profile).toContain(grant)
     expect(profile.split(grant)).toHaveLength(2)
   })
+
+  it('bwrap workspace-write: binds each granted root after the mode mounts, so a grant buried by the shield ends up writable', () => {
+    const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
+    tempDirs.push(shared)
+    const canonical = realpathSync.native(shared)
+    const args = bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', rwRoots: [shared] })
+    expect(args.slice(-3)).toEqual(['--bind', canonical, canonical])
+    // After both mode mounts, which is what makes last-wins land on the grant.
+    expect(args.indexOf(canonical)).toBeGreaterThan(args.indexOf('/ws'))
+    expect(args.lastIndexOf('--tmpfs')).toBeLessThan(args.indexOf(canonical))
+  })
+
+  it('landlock workspace-write: a grant joins readWrite, and readOnly too when a shield replaced the blanket grant', () => {
+    const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
+    tempDirs.push(shared)
+    const canonical = realpathSync.native(shared)
+    const noShield = landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', rwRoots: [shared] })
+    expect(noShield).toEqual(['--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', '/ws', '--rw', canonical])
+    // Shielded, the active read policy is an allow-list: the blanket `--ro /` is
+    // gone, so a grant outside the denied roots must be named back into BOTH
+    // lists or writing it would imply a path the command cannot read.
+    const shielded = landlockProfileArgs({
+      mode: 'workspace-write',
+      workspaceRoot: '/ws',
+      rwRoots: [shared],
+      readDeniedRoots: ['/denied'],
+    })
+    expect(shielded).not.toContain('/')
+    expect(shielded.filter(value => value === canonical)).toHaveLength(2)
+  })
+
+  it('seatbelt workspace-write: a grant needs no dialect change, because the profile already derives both helpers', () => {
+    const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
+    tempDirs.push(shared)
+    const profile = seatbeltProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', rwRoots: [shared] })[1] as string
+    // One `allow file-write*` form names every writable root; the grant joins it.
+    const canonical = realpathSync.native(shared)
+    expect(profile).toContain(`(subpath "${canonical}")`)
+    expect(profile.split(`(subpath "${canonical}")`)).toHaveLength(2)
+  })
+
+  it('read-only: a grant reaches no dialect (the mode withholds every write)', () => {
+    const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
+    tempDirs.push(shared)
+    const policy: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws', rwRoots: [shared] }
+    expect(bwrapProfileArgs(policy)).toEqual([
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+    ])
+    expect(landlockProfileArgs(policy)).toEqual(['--ro', '/', '--rw', '/dev/null'])
+    expect(seatbeltProfileArgs(policy)).toEqual(['-p', SEATBELT_RO_PROFILE])
+  })
 })
 
 describe('runnerCommand config', () => {

@@ -76,3 +76,35 @@ export async function unregisterInstance(
     return false
   }
 }
+
+/**
+ * One account's role, for a spawn that has no account store of its own.
+ *
+ * The CLI spawn form provisions a home directly, and the account's shared
+ * directories come from its role, so without this lookup an operator-spawned
+ * instance of an administrator account would silently lose those grants.
+ * @param accountUrl - the account service base URL.
+ * @param userId - the account to look up.
+ * @param secret - the shared admin secret, when the service requires one.
+ * @returns the account's role, or undefined when the lookup fails.
+ */
+export async function fetchAccountRole(
+  accountUrl: string,
+  userId: string,
+  secret?: string,
+): Promise<string | undefined> {
+  try {
+    const res = await fetch(`${accountUrl.replace(/\/+$/, '')}/api/accounts/${encodeURIComponent(userId)}`, {
+      headers: secret === undefined ? {} : { 'x-team-admin-secret': secret },
+    })
+    if (!res.ok) {
+      console.error(`[instance-register] account lookup for ${userId} answered ${String(res.status)}`)
+      return undefined
+    }
+    const body = await res.json() as { role?: unknown }
+    return typeof body.role === 'string' ? body.role : undefined
+  } catch (error) {
+    console.error(`[instance-register] account lookup failed: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
