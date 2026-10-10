@@ -401,6 +401,8 @@ export function kbSearchPluginsDirFor(home: string): string {
  * @param options.home - the account's DSH_HOME (holds `plugins/kb` and the home patch).
  * @param options.userId - the account id the KB session is created under.
  * @param options.kbBaseUrl - base URL of the team KB agent server.
+ * @param options.agentToken - agent token the KB server accepts for a reader's
+ *   session/query calls; omitted when the deployment has not configured one.
  * @returns the id-delimited YAML rows to upsert into the home patch.
  */
 export function injectKbSearch(options: {
@@ -408,6 +410,7 @@ export function injectKbSearch(options: {
   home: string
   userId: string
   kbBaseUrl: string
+  agentToken?: string
 }): string {
   const pluginsDir = kbSearchPluginsDirFor(options.home)
   mkdirSync(pluginsDir, { recursive: true })
@@ -425,6 +428,9 @@ export function injectKbSearch(options: {
     '      config:',
     `        userId: ${JSON.stringify(options.userId)}`,
     `        kbBaseUrl: ${JSON.stringify(options.kbBaseUrl)}`,
+    ...options.agentToken === undefined || options.agentToken.trim() === ''
+      ? []
+      : [`        agentToken: ${JSON.stringify(options.agentToken.trim())}`],
   ]
   return lines.join('\n')
 }

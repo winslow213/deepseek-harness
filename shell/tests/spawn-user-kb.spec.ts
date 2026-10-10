@@ -41,6 +41,34 @@ describe('ensureKbSearch', () => {
     }
   })
 
+  it('injects the agent token into the home patch when the environment provides one', async () => {
+    const usersRoot = await mkdtemp(join(tmpdir(), 'dsh-users-'))
+    try {
+      const env = { ...process.env, DSH_USERS_ROOT: usersRoot, TEAM_KB_AGENT_TOKEN: 'test-agent-token' }
+      ensureKbSearch('dave', env)
+
+      const patch = await readFile(join(usersRoot, 'dave', 'cordis.patch.yml'), 'utf8')
+      assert.match(patch, /agentToken: "test-agent-token"/)
+    } finally {
+      await rm(usersRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('omits the agent token from the home patch when the environment provides none', async () => {
+    const usersRoot = await mkdtemp(join(tmpdir(), 'dsh-users-'))
+    try {
+      const env = { ...process.env, DSH_USERS_ROOT: usersRoot }
+      delete env.TEAM_KB_AGENT_TOKEN
+      ensureKbSearch('erin', env)
+
+      const patch = await readFile(join(usersRoot, 'erin', 'cordis.patch.yml'), 'utf8')
+      assert.match(patch, /kbBaseUrl: /)
+      assert.doesNotMatch(patch, /agentToken/)
+    } finally {
+      await rm(usersRoot, { recursive: true, force: true })
+    }
+  })
+
   it('is idempotent: a second call never clobbers unrelated patch blocks', async () => {
     const usersRoot = await mkdtemp(join(tmpdir(), 'dsh-users-'))
     try {

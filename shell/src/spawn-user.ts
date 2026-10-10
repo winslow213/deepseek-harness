@@ -410,6 +410,15 @@ export function ensureUserWiki(user: string, env: NodeJS.ProcessEnv = process.en
 /** Environment key naming the team KB agent server's base URL. */
 const TEAM_KB_BASE_URL_ENV = 'TEAM_KB_BASE_URL'
 
+/**
+ * Environment key holding the agent token the KB server accepts as a read-only
+ * service credential. The KB server gates content writes behind a caller but
+ * treats opening a session and asking a question as a reader's handshake, so a
+ * service token is accepted for those two calls. Without it those calls answer
+ * 401 and the `kb_search` tool cannot reach the knowledge base.
+ */
+const TEAM_KB_AGENT_TOKEN_ENV = 'TEAM_KB_AGENT_TOKEN'
+
 /** Default team KB agent server base URL (same host, loopback). */
 const DEFAULT_TEAM_KB_BASE_URL = 'http://127.0.0.1:8080'
 
@@ -428,7 +437,8 @@ export function ensureKbSearch(user: string, env: NodeJS.ProcessEnv = process.en
   const home = userHome(user, env)
   const runtimeSourceDir = new URL('./remote/', import.meta.url).pathname
   const kbBaseUrl = env[TEAM_KB_BASE_URL_ENV] ?? DEFAULT_TEAM_KB_BASE_URL
-  const block = injectKbSearch({ runtimeSourceDir, home, userId: user, kbBaseUrl })
+  const agentToken = env[TEAM_KB_AGENT_TOKEN_ENV]
+  const block = injectKbSearch({ runtimeSourceDir, home, userId: user, kbBaseUrl, agentToken })
   const [start, end] = teamMarkers(TEAM_KB_SEARCH_PATCH_ID)
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${block}\n${end}`, TEAM_KB_SEARCH_PATCH_ID)
 }

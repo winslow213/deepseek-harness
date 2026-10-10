@@ -25,6 +25,13 @@ export interface Config {
   userId: string
   /** KB catalog scope to search (default `wiki`). */
   scope?: string
+  /**
+   * Agent token the KB server accepts as a read-only service credential. The
+   * KB server gates writes behind a caller, but opening a session and asking a
+   * question are a reader's handshake, so it accepts a service token for those
+   * two calls. Without a token those calls answer 401 and search is unusable.
+   */
+  agentToken?: string
   /** Abort the whole query (session + job + result wait) after this many ms (default 180000). */
   timeoutMs?: number
 }
@@ -34,6 +41,9 @@ export const Config: z<Config> = z.object({
   kbBaseUrl: z.string().required(),
   userId: z.string().required(),
   scope: z.string().default('wiki'),
+  // Optional so a deployment that has not injected a token still loads; search
+  // then fails with the server's 401 rather than a config error.
+  agentToken: z.string(),
   // The KB server's LLM-backed synthesis step alone regularly runs 60-90s on
   // real queries against the production KB (observed: 64s, 63s for ordinary
   // questions); 60000 cut those off just short of completion, so the budget
@@ -86,10 +96,17 @@ function parseSseEvents(raw: string): KbJobEvent[] {
   return events
 }
 
-async function createSession(kbBaseUrl: string, userId: string, scope: string, signal: AbortSignal): Promise<string> {
+/** Bearer header for the KB server, or nothing when no token was injected. */
+function authHeaders(agentToken: string | undefined): Record<string, string> {
+  return agentToken === undefined || agentToken.trim() === ''
+    ? {}
+    : { authorization: `Bearer ${agentToken.trim()}` }
+}
+
+async function createSession(kbBaseUrl: string, userId: string, scope: string, agentToken: string | undefined, signal: AbortSignal): Promise<string> {
   const response = await fetch(`${kbBaseUrl}/api/sessions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders(agentToken) },
     body: JSON.stringify({ user_id: userId, client: 'dsh', requested_scopes: [scope] }),
     signal,
   })
@@ -120,11 +137,12 @@ async function createQueryJob(
   query: string,
   categoryIds: string[] | undefined,
   topK: number | undefined,
+  agentToken: string | undefined,
   signal: AbortSignal,
 ): Promise<string> {
   const response = await fetch(`${kbBaseUrl}/api/jobs/query`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders(agentToken) },
     body: JSON.stringify({
       session_id: sessionId,
       scope,
@@ -246,18 +264,18 @@ export function apply(ctx: Context, config: Config): void {
       const timer = setTimeout(() => controller.abort(new Error('kb_search: timed out waiting on the KB server')), timeoutMs)
       try {
         const runQuery = async (sessionId: string): Promise<{ answer: string, citations: string[], used_docs: string[] }> => {
-          const jobId = await createQueryJob(kbBaseUrl, sessionId, scope, args.query, args.categoryIds, args.topK, controller.signal)
+          const jobId = await createQueryJob(kbBaseUrl, sessionId, scope, args.query, args.categoryIds, args.topK, config.agentToken, controller.signal)
           return awaitJobResult(kbBaseUrl, jobId, controller.signal)
         }
         let result: { answer: string, citations: string[], used_docs: string[] }
         try {
-          cachedSessionId ??= await createSession(kbBaseUrl, config.userId, scope, controller.signal)
+          cachedSessionId ??= await createSession(kbBaseUrl, config.userId, scope, config.agentToken, controller.signal)
           result = await runQuery(cachedSessionId)
         } catch (error) {
           if (!(error instanceof SessionExpiredError)) throw error
           // The cached id lapsed (server-side TTL) while this process was idle
           // and will never come back, so rebuild once and retry.
-          cachedSessionId = await createSession(kbBaseUrl, config.userId, scope, controller.signal)
+          cachedSessionId = await createSession(kbBaseUrl, config.userId, scope, config.agentToken, controller.signal)
           result = await runQuery(cachedSessionId)
         }
         return { answer: result.answer, citations: result.citations, usedDocs: result.used_docs }

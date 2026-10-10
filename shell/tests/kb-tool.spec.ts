@@ -51,6 +51,10 @@ class FakeKbServer {
   baseUrl = ''
   sessionRequests = 0
   sessionCounter = 0
+  /** Authorization header seen on each `POST /api/sessions`, in call order. */
+  sessionAuth: (string | undefined)[] = []
+  /** Authorization header seen on each `POST /api/jobs/query`, in call order. */
+  queryAuth: (string | undefined)[] = []
   /** The only session id the fake accepts, mirroring a live server-side TTL. */
   validSessionId: string | undefined
   jobState: 'completed' | 'failed' = 'completed'
@@ -61,7 +65,7 @@ class FakeKbServer {
       req.on('data', (chunk: Buffer) => chunks.push(chunk))
       req.on('end', () => {
         const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined
-        this.handle(req.url ?? '', req.method ?? 'GET', body, res)
+        this.handle(req.url ?? '', req.method ?? 'GET', body, res, req.headers.authorization)
       })
     })
   }
@@ -82,9 +86,10 @@ class FakeKbServer {
     this.validSessionId = undefined
   }
 
-  private handle(url: string, method: string, body: unknown, res: import('node:http').ServerResponse): void {
+  private handle(url: string, method: string, body: unknown, res: import('node:http').ServerResponse, auth: string | undefined): void {
     if (method === 'POST' && url === '/api/sessions') {
       this.sessionRequests += 1
+      this.sessionAuth.push(auth)
       this.sessionCounter += 1
       this.validSessionId = `sess-fake-${this.sessionCounter}`
       res.writeHead(200, { 'content-type': 'application/json' })
@@ -93,6 +98,7 @@ class FakeKbServer {
     }
     if (method === 'POST' && url === '/api/jobs/query') {
       const { query, session_id: sessionId } = body as { query: string, session_id: string }
+      this.queryAuth.push(auth)
       // Mirror the KB server: a session that lapsed server-side is rejected
       // with a 404 carrying this exact message.
       if (sessionId !== this.validSessionId) {
@@ -139,12 +145,12 @@ describe('kb_search tool', () => {
     await fake.stop()
   })
 
-  async function setup(): Promise<Context> {
+  async function setup(config: { agentToken?: string } = {}): Promise<Context> {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
-    await ctx.plugin(tool, { userId: 'alice', kbBaseUrl: fake.baseUrl })
+    await ctx.plugin(tool, { userId: 'alice', kbBaseUrl: fake.baseUrl, ...config })
     return ctx
   }
 
@@ -164,6 +170,29 @@ describe('kb_search tool', () => {
     const text = JSON.stringify(result.content)
     assert.match(text, /companding curve/)
     assert.match(text, /g711\.md/)
+  })
+
+  it('sends the agent token as a bearer header on the session and query requests', async () => {
+    fake.jobState = 'completed'
+    fake.sessionAuth = []
+    fake.queryAuth = []
+    const ctx = await setup({ agentToken: 'test-agent-token' })
+    const result = await callKbSearch(ctx, { query: 'authorized' }, sessionAgent())
+
+    assert.equal(result.isError, false)
+    assert.deepEqual(fake.sessionAuth, ['Bearer test-agent-token'])
+    assert.deepEqual(fake.queryAuth, ['Bearer test-agent-token'])
+  })
+
+  it('sends no authorization header when no agent token is configured', async () => {
+    fake.jobState = 'completed'
+    fake.sessionAuth = []
+    fake.queryAuth = []
+    const ctx = await setup()
+    await callKbSearch(ctx, { query: 'anonymous' }, sessionAgent())
+
+    assert.deepEqual(fake.sessionAuth, [undefined])
+    assert.deepEqual(fake.queryAuth, [undefined])
   })
 
   it('caches the KB session across repeated calls instead of creating a new one each time', async () => {
