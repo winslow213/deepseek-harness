@@ -527,9 +527,17 @@ cordis 插件，与 `region-router.ts` 等同属"运行时拷贝进 profile"的�
 | D 重叠适配 | 13 | `client/{connection,ui-chat,ui-open-in-app}` · `host/{open-in-app,directory-picker-browse}` · `jobs/{jobs,jobs-local}` · `fs/tool-fs-search` · `context/agent-instructions` · `sandbox/{sandbox,sandbox-local,sandbox-policy}` · `core/tools` · `boot/app-boot` · `extensions/{tool-cordis,cordis-client-runner}` | 上游同包亦有改动 | 逐个 rebase |
 | E 放弃 | 3 | `workflow/workflow-worker-thread` · `preset/agent-presets` · `workflow/tool-workflow` | 包已删 / 已改名 | 放弃（§12.4） |
 
-D 桶里 `sandbox/*` 的两个提交（`241f918405` 跨账号读屏蔽、
-`a39d498db5` 把 grep/glob 的 ripgrep 收敛进沙箱）是 team-shell 的安全
-基础，必须保留；上游 `sandbox-local` 没有这两处改动。
+D 桶里 `sandbox/*` 的提交是 team-shell 的安全基础，必须保留。该列表在
+`154957fa24` 之后需要更正与补充：
+
+- `241f918405`（跨账号读屏蔽）改 `packages/sandbox/{sandbox,sandbox-local}`；
+- **`a39d498db5` 不属于 sandbox**——它改的是 `packages/fs/tool-fs-search/`
+  （把 grep/glob 的 ripgrep 收敛进沙箱）与一份 Agent Note，§12.1 的归属
+  记错了；
+- **`154957fa24`（按角色共享沙箱目录）** 是 §12 写完之后新增的第二个
+  `packages/sandbox/*` 提交，见 §12.6。
+
+上游没有这三处改动中的任何一处，因此都不会被上游版本自动取代。
 
 ### 12.3 plugin-manager：逐函数对照与移植增量
 
@@ -630,6 +638,48 @@ provider 行。当前决定：保留 hub 与 agent 两端。
 
 消费侧形态与上游一致并不等于执行世界一致：本部署的 `ctx.subprocess` 仍是
 本机提供方，§13 记录该分歧与收敛所需的目标标识符契约。
+
+### 12.6 上游同步需保留的本方 sandbox 增量（§12 之后新增）
+
+`154957fa24`（按角色共享沙箱目录）在上游保有的四个源文件里加了增量。上游
+同包亦有改动，所以下次 `git merge master` 冲突时，这些增量**要按语义重做，
+不能整文件取任一版本**。逐文件记下改了什么、以及重做时必须保住的前提：
+
+| 文件 | 本方增量 | 重做时必须保住的前提 |
+|---|---|---|
+| `packages/sandbox/sandbox/src/index.ts` | `SandboxExecutionPolicy` 加 `rwRoots?: readonly string[]` 字段与 JSDoc | 字段只表"可写"，**不表可读**；`read-only` 下不授予任何东西 |
+| `packages/sandbox/sandbox/src/roots.ts` | 新增四个导出的派生函数：`modeOwnedRoots()`、`shadowsModeOwnedMount()`、`grantedExtraRoots()`、`effectiveRwRoots()`；`writableRoots()` 改为并入 `effectiveRwRoots()` 的结果；`readShield()` 的 allowed 侧输入多并入一次 `grantedExtraRoots()` | 丢弃规则（非绝对路径、`/`、mode 自有挂载本身或其祖先）必须仍在**所有方言看到之前**统一执行，而不是各方言各判一次 |
+| `packages/sandbox/sandbox-policy/src/index.ts` | `Config` 加 `rwRoots?: string[]`；类字段 + 构造 `canonicalPath`；`resolve()` 空则**省略该键** | 空列表必须省略键（不是给空数组），否则既有"不含该键"的断言失效 |
+| `packages/sandbox/sandbox-local/src/profiles.ts` | bwrap mode 段追加 `--bind`；landlock `readWrite` 与 `readOnly`（有屏蔽时）各追加 | bwrap 依赖**参数顺序**（last mount wins）：grant 必须在 `--tmpfs` 之后；landlock 的 `readOnly` 在有屏蔽时是严格 allow-list，**两条都要补** |
+
+四个文件的本方改动都**没有上游对应物**，因此不会被上游版本自动取代。
+
+**未改动的方言**（重做时不要误加）：seatbelt、`fs/fs-sandbox`、
+`windows-acl` 自动消费 `writableRoots()`/`readShield()`，本次零改动，
+其 golden 断言不应变化。
+
+**`shell/` 侧零同步成本**：本提交 17 个 `shell/` 文件都在上游永不创建的
+目录里，且未触碰根 `package.json`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`
+或任何 `tsconfig`——§12.1「`shell/` 零冲突」的前提仍然成立。
+
+### 12.7 同步时的文档配对记录与生成物
+
+本提交改了三个只存"已确认一致"状态的侧车文件，上游同步改了对应 `.md` 后
+它们**必然 out of sync**，处置方式与普通冲突文件不同：
+
+- `docs/subsystems/sandbox.i18n.yaml`、`docs/config-catalog.i18n.yaml`、
+  `.agents/notes/.../2026-10-10-role-scoped-shared-sandbox-roots.i18n.yaml`
+  —— 存的是行级哈希配对。**先解两侧 `.md`/`.zh.md` 的内容冲突，再重录**：
+  `npx tsx scripts/verify-translation-pairing.ts --write <unsuffixed.md>`。
+
+- `docs/config-catalog.md` / `.zh.md` 是**生成物**（扫各包 `static Config`
+  生成）：不要手工解冲突，解完源码冲突后跑
+  `npx tsx scripts/gen-config-catalog.ts` 重新生成再比对。
+
+- 本提交**未改** `scripts/type-equiv.manifest.json`；但 `rwRoots` 进了
+  `docs/subsystems/sandbox.md` 的 `SandboxExecutionPolicy` type-equiv 块，
+  该块必须与源声明逐字符一致，配对侧 `.zh.md` 必须**逐字节相同**。上游若改
+  了该接口，先改源码再 `npx tsx scripts/verify-type-equiv.ts`。
 
 ## 13. 远程执行：目标标识符契约
 
