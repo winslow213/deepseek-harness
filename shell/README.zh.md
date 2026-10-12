@@ -164,6 +164,7 @@ node --import tsx/esm src/bin.ts account-cli list-users
 node --import tsx/esm src/bin.ts account-cli reset-agent-token <username>
 node --import tsx/esm src/bin.ts account-cli reset-password <username> <password>
 node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
+node --import tsx/esm src/bin.ts account-cli set-role <username> <operator|member>
 ```
 
 `set-idle-exempt on` 把某用户列入空闲回收白名单（`TEAM_IDLE_TIMEOUT_SECS`，默认30分钟）：
@@ -171,6 +172,25 @@ node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
 活跃都不会被回收，直到再次关闭该开关。已登录成员也可以不经运营者，自己切换同一个字段：
 `GET /api/me` 会回传当前 `idleExempt` 状态，`POST /api/me/idle-exempt`（会话鉴权、经代理转发）
 可以设置它——对应设置页 General 分组下的"保持实例常驻"开关。
+
+### 账号之间的共享目录
+
+`TEAM_SHARED_ROOTS` 把服务器上的目录映射到可用它的角色，使同一部署下的成员可以互换
+文件而不暴露彼此的 home。取值是 `{ path, roles?, write? }` 的 JSON 数组：`path` 支持
+`<usersRoot>` 占位符（即 `DSH_USERS_ROOT`）；没有 `roles` 的条目适用于所有角色；没有
+`write` 的条目授予写权限。账号的 `dsh_users.role` 在 provision 时决定它命中哪些条目，
+因此 `set-role` 在该账号**下次启动实例**时生效。
+
+共享目录必须位于 `DSH_USERS_ROOT` 之内，因为这个根正是沙箱读屏蔽所拒绝的对象：落在它
+之外的目录根本不被拒绝，任何角色的账号都能读到。在根之内，provision 只会重新暴露账号
+自己的 home 与它的角色被授予的目录。`TEAM_SHARED_ROOTS` 未设置、为空或格式错误时不授予
+任何目录，角色未知同样不授予。
+
+每个账号解析出的列表出现在它自己的 `$DSH_HOME/cordis.patch.yml` 中（`rwRoots` 与
+`readAllowedRoots`），运营者可据此读取某个角色实际产出了什么。按账号的覆盖应写进这个
+home 层 patch，而不是 profile 层 patch：provision 在每次实例启动时都会重写
+`profiles/web/cordis.patch.yml`——只对"不再带着它写过的那个块"的文件让手——追加在那里的
+内容会丢失。
 
 ### 自助注册
 

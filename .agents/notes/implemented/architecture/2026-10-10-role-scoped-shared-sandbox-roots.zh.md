@@ -28,7 +28,7 @@ Status: implemented
 - `DSH_READ_ALLOWED_ROOTS` —— 账号自己的 home 加上每个被授予的目录。可写的授予也必须可读，所以这个列表是前者的超集。
 - `TEAM_SHARED_ROOTS` 原样透传，使子进程可以重新解析。
 
-`writeTeamSandboxPatch` 把它们写进账号的 `cordis.patch.yml`，与 `readDeniedRoots` 并列 —— 这正是让被授予的目录能穿过读屏蔽可见的原因。`readDeniedRoots` 与 `readAllowedRoots` 必须保持为单引号 YAML 标量：未加引号的 `!!js [` 值会被解析成流式序列，随后的 `.filter(...)` 会让整份 patch 失败，那是账号无法启动，而不只是屏蔽失效。
+`writeTeamSandboxPatch` 把它们写进账号的 `cordis.patch.yml`，与 `readDeniedRoots` 并列 —— 这正是让被授予的目录能穿过读屏蔽可见的原因。那个文件是 **home 层** patch，而落在哪一层决定了覆盖能否存活：`ensureRegionRouter` 每次 provision 都整文件重写 `profiles/web/cordis.patch.yml`，只对"不再带着它写过的那个块"的文件让手（那样也就没有 region router 了），所以追加在 profile 层的按账号覆盖会在该账号下次启动实例时丢失；home 层则只按块 upsert，从不整文件重写。因此部署若要扩展某个角色的授予——或者要配置任何按账号的插件——都应写 home 层，而不是 profile 层。`readDeniedRoots` 与 `readAllowedRoots` 必须保持为单引号 YAML 标量：未加引号的 `!!js [` 值会被解析成流式序列，随后的 `.filter(...)` 会让整份 patch 失败，那是账号无法启动，而不只是屏蔽失效。
 
 **`rwRoots` 加入 `SandboxExecutionPolicy`**，并由 `effectiveRwRoots()` 在任何方言看到它之前完成过滤。条目在以下情况被丢弃：不是绝对路径、等于 `/`、或是 mode 自有路径（`workspaceRoot`、`/tmp`、`tmpdir()`）本身或其祖先。最后这条不是整洁性问题：bwrap 方言把 `--bind` 追加到承载 `--tmpfs` 的同一段，而 bwrap 以最后匹配的挂载为准，因此绑定一个 mode 自有路径的祖先会静默替换该路径原有的处理，而不是在其之上追加。
 

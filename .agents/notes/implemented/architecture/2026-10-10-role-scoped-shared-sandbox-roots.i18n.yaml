@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-10-role-scoped-shared-sandbox-roots.md
-2026-10-10-role-scoped-shared-sandbox-roots.md: f942263109b4a5089dcc13bc823aad40caa3082e
-2026-10-10-role-scoped-shared-sandbox-roots.zh.md: 188293e84a059629a91f72af7855d3c64a077c3b
+2026-10-10-role-scoped-shared-sandbox-roots.md: 4a55d241322574839af4f76eafe83106785ea32d
+2026-10-10-role-scoped-shared-sandbox-roots.zh.md: 904c90340ca296b4c594069ab552881296caeb1e

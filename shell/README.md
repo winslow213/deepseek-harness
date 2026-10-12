@@ -171,9 +171,18 @@ node --import tsx/esm src/bin.ts account-cli list-users
 node --import tsx/esm src/bin.ts account-cli reset-agent-token <username>
 node --import tsx/esm src/bin.ts account-cli reset-password <username> <password>
 node --import tsx/esm src/bin.ts account-cli set-idle-exempt <username> <on|off>
+node --import tsx/esm src/bin.ts account-cli set-role <username> <operator|member>
 ```
 
 `set-idle-exempt on` whitelists a user against the idle-instance reclaim sweep (`TEAM_IDLE_TIMEOUT_SECS`, default 30 minutes): `InstanceStore.idleUsers` excludes users whose `dsh_users.idle_exempt` flag is set, so their instance stays up regardless of activity until toggled back off. A signed-in member can also flip the same flag on their own account without operator involvement: `GET /api/me` reports the current `idleExempt` state and `POST /api/me/idle-exempt` (session-authenticated, proxied) sets it — surfaced as a "Keep instance running" row in Settings → General.
+
+### Shared directories between accounts
+
+`TEAM_SHARED_ROOTS` maps directories on the server to the roles that may use them, so members of one deployment can exchange files without exposing each other's homes. Its value is a JSON array of `{ path, roles?, write? }`: `path` takes a `<usersRoot>` placeholder for `DSH_USERS_ROOT`, an entry with no `roles` applies to every role, and an entry with no `write` grants write access. An account's `dsh_users.role` selects its entries at provisioning, so `set-role` takes effect on that account's next instance start.
+
+A shared directory has to sit inside `DSH_USERS_ROOT`, because that root is what the sandbox read shield denies: a directory outside it is not denied at all, so every account can read it whatever its role. Inside the root, provisioning re-exposes only the account's own home and the directories its role was granted. `TEAM_SHARED_ROOTS` unset, empty, or malformed grants nothing, and an unknown role gets no grant.
+
+Each account's resolved lists appear in its own `$DSH_HOME/cordis.patch.yml` as `rwRoots` and `readAllowedRoots`, so an operator can read what a role produced. Per-account overrides belong in that home patch rather than the profile patch: provisioning rewrites `profiles/web/cordis.patch.yml` on every instance start — it steps back only from a file that no longer carries the block it wrote — so an override appended there is lost.
 
 ### Self-service registration
 
