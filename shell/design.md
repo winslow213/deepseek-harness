@@ -493,6 +493,13 @@ cordis 插件，与 `region-router.ts` 等同属"运行时拷贝进 profile"的�
 `d743267388`（0.2.1-alpha.2）领先 4894 提交；本分支 `feature-0.2x` =
 `5eb922e40c` 领先 131 提交，合计 514 文件 / +47286 −294。
 
+**同步方向是 master → feature，且必须先快进 master。** master 只镜像上游、
+永不接收本方提交，所以照 `git merge master` 直接合是错的：本地 `master` 停在
+`c291e7961a`（落后 `origin/master` 4894 提交，可 fast-forward），合它等于合
+共同祖先，结果是一个 no-op，而看起来像"同步做过了"。**先 `git fetch`，再把
+`master` 快进到 `origin/master`，然后才从 master 往 feature 合**——§12.8 是按
+序执行清单。
+
 | 路径 | 文件 | 增 | 减 |
 |---|---|---|---|
 | `shell/` | 83 | +18993 | 0 |
@@ -680,6 +687,55 @@ provider 行。当前决定：保留 hub 与 agent 两端。
   `docs/subsystems/sandbox.md` 的 `SandboxExecutionPolicy` type-equiv 块，
   该块必须与源声明逐字符一致，配对侧 `.zh.md` 必须**逐字节相同**。上游若改
   了该接口，先改源码再 `npx tsx scripts/verify-type-equiv.ts`。
+
+### 12.8 同步执行清单（master → feature，按序）
+
+§12.1–12.7 是分析，本节是把它们串成可照做的步骤。**方向固定为 master →
+feature**：master 只镜像 fork 的上游，永不接收本方提交。
+
+1. **取上游并快进 master**。`git fetch origin`；`git checkout master`；
+   `git merge --ff-only origin/master`。**这一步不能省**：本地 master 落后
+   上游 4894 提交，直接合它等于合共同祖先 `c291e7961a`，结果是 no-op 而看
+   起来像"同步已完成"。`--ff-only` 用来保证 master 仍是上游镜像——若它不
+   再是 `origin/master` 的祖先，说明有人往 master 上提交过，此时应停下排查
+   而不是合并。
+
+2. **切回目标 feature 分支**并确认工作区干净。`shell/` 之外不该有未提交
+   改动；`shell/` 全树在上游不存在的目录里，任何一轮都不参与冲突。
+
+3. **合并**：默认 `git merge master`（merge-forward）。rebase 在本仓库是允许
+   的（独立/stack 分支两者皆可），但它会重写本方已推送的 134 个提交，因此
+   除非确有理由，这一轮用 merge。预期冲突规模按 §12.1 的干跑基线衡量：92 个
+   冲突文件（`UU` 77 / `UD` 11 / `AU` 2 / `AA` 2），分布于 `packages/` 53 ·
+   `docs/` 26 · `apps/` 4 · `scripts/` 3 · 根配置 4；**`shell/` 0**。
+
+4. **按桶处置**（§12.2 逐包去留）。冲突数的绝大部分来自要放弃的包，不是
+   逐行语义冲突：先按 §12.2 的 A–E 桶决定保留/弃包/移植，再处理剩下的
+   D 桶（"上游同包亦有改动"）逐个 rebase。§12.4 放弃 `agent-presets` 后，§12.1
+   里 8 个改名检测产物（`UD`/`AU`）会随之消失。
+
+5. **保住本方 sandbox 增量**（§12.6）。四个上游保有的文件必须按语义重做，
+   **不能整文件取任一版本**：丢弃规则在所有方言之前统一执行、空 `rwRoots`
+   省略键、bwrap 的 `--bind` 必须在 `--tmpfs` 之后、landlock 两条列表都要
+   补。seatbelt / `fs/fs-sandbox` / windows-acl 零改动，其 golden 断言不应
+   变化——若它们变了，说明第 5 步做错了。
+
+6. **收尾文档与生成物**（§12.7）。`i18n.yaml` 配对记录先解双语内容再重录
+   （`--write`）；`docs/config-catalog.*` 重新生成而非手工解冲突；
+   type-equiv 块与其中文侧分别保持逐字符、逐字节一致。
+
+7. **跑门禁**。先 `pnpm run typecheck`、`pnpm run lint`，再 `pnpm run test`；
+   文档侧跑 `pnpm run doc-sync`。任一门禁失败先修，不要带着红灯进入下一步。
+
+8. **端到端验证**。本轮同步若改动 `packages/sandbox/*` 或 `shell/` 的运行
+   路径，用真实实例验证角色授权矩阵（member 只 `common`、operator 兼
+   `admin`、对他人 home 全拒），而不是只看单测。§8 记录本轮验证状态。
+
+9. **提交与推送**。合并提交写清"同步到 `origin/master` 的哪个 SHA"；推送
+   用 `--force-with-lease` 仅在确需重写时，否则普通 push。
+
+> 回滚：合并未推送前，`git merge --abort` 或 `git reset --hard <合并前SHA>`；
+> 已推送则用反向提交，不要对已共享的分支做 `--force`。
 
 ## 13. 远程执行：目标标识符契约
 
