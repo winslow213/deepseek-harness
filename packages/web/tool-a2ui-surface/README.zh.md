@@ -66,7 +66,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-该工具有两项职责：让已记录页面与模型认为自己写下的内容一致，并把它追加到持久日志。注册表 schema（每一层对象都 `additionalProperties: false`，枚举严格）在执行前拒绝未知键与未知控件类型；包随后验证 JSON schema 无法表达的值约束——去空白后非空的 `title`、唯一且去空白后的字段名与节点 id、每个 `select` 至少一个选项、有限的节点坐标、无自环、端点存在的边——并在追加前把页面规范化。surface 身份或是模型提供的 `surfaceId`（允许更新时），或是新铸的 `a2ui-…` id。本包还发布不变式伴生插件（`@deepseek-ai/dsh-tool-a2ui-surface/invariant`），在冷加载与实时追加时校验持久 `a2ui/surface` 记录，因为浏览器渲染器信任日志形状，无法渲染的记录必须大声失败。
+该工具有两项职责：让已记录页面与模型认为自己写下的内容一致，并把它追加到持久日志。注册表 schema（每一层对象都 `additionalProperties: false`，枚举严格）在执行前拒绝未知键与未知控件类型；包随后验证 JSON schema 无法表达的值约束——去空白后非空的 `title`、唯一且去空白后的字段名与节点 id、每个 `select` 至少一个选项、有限的节点坐标、无自环、端点存在的边——并在追加前把页面规范化。surface 身份或是模型提供的 `surfaceId`（允许更新时），或是新铸的 `a2ui-…` id。规范化只跑在写入记录的这一条路径上，因此不再发布伴生插件做复检；渲染器画不出的记录在这里就被拒绝，此时模型仍能改正。
 
 ### 源码地图
 
@@ -74,7 +74,6 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、页面规范化、工具注册、会话追加 |
 | [`src/types.ts`](src/types.ts) | 与渲染器共享的浏览器安全页面词表，以及 `a2ui/surface` 的 `SessionEventMap` 合并 |
-| [`src/invariant.ts`](src/invariant.ts) | 包自有不变式伴生插件，校验持久 surface 记录 |
 
 </details>
 

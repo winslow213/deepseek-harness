@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-remote-fs-read-byte-range.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-10-remote-fs-read-byte-range.md
-2026-09-10-remote-fs-read-byte-range.md: a647419dc4d68ff3677a594be94bf71861ce3d48
-2026-09-10-remote-fs-read-byte-range.zh.md: 46792742a0a971302d00692fa27b2c11180f4547
+/agent-note-remote-filesystem-serves-byte-range-reads:
+  en: 1e0bb0df75904786
+  zh: 9cacb6dc68b961a7
+/agent-note-remote-filesystem-serves-byte-range-reads/problem:
+  en: acc72813a4c251b2
+  zh: e5ecce669791da6a
+/agent-note-remote-filesystem-serves-byte-range-reads/decision:
+  en: f8316f6fbbf37374
+  zh: 2c3df0984ba5b558
+/agent-note-remote-filesystem-serves-byte-range-reads/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-remote-filesystem-serves-byte-range-reads/alternatives-considered/why-not-synthesize-a-range-from-a-whole-file-readbytes:
+  en: 6f3c77c05a661333
+  zh: 30b388d8ecde197f
+/agent-note-remote-filesystem-serves-byte-range-reads/alternatives-considered/why-not-leave-it-unimplemented-and-relax-the-subclass-check:
+  en: 04d4c3273a63b115
+  zh: ed5872dd7d74c1e9
+/agent-note-remote-filesystem-serves-byte-range-reads/consequences:
+  en: 1f044d4a849f04ac
+  zh: 33ccc57cc14250ad

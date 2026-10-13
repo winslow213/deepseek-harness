@@ -52,14 +52,14 @@ describe('IdleExemptRow', () => {
 
     mount('en')
     expect(screen.getByText(en.idleExemptTitle)).toBeTruthy()
-    await waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('/api/me') })
+    await waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('api/me') })
     await waitFor(() => { expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true') })
   })
 
   it('posts the flipped value to /api/me/idle-exempt when toggled', async () => {
     setTeamShellMeta(true)
     const fetchMock = vi.fn((url: string) => {
-      if (url === '/api/me') {
+      if (url === 'api/me') {
         return Promise.resolve({
           ok: true,
           json: async () => ({ authenticated: true, user: { idleExempt: false } }),
@@ -75,7 +75,7 @@ describe('IdleExemptRow', () => {
     screen.getByRole('switch').click()
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/me/idle-exempt', {
+      expect(fetchMock).toHaveBeenCalledWith('api/me/idle-exempt', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ exempt: true }),

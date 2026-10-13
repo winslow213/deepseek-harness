@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-06-merge-account-service-into-shell.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/simplification/2026-09-06-merge-account-service-into-shell.md
-2026-09-06-merge-account-service-into-shell.md: 7b1984e8e131871509a52c0918ab33b625d9d8db
-2026-09-06-merge-account-service-into-shell.zh.md: 0f9fe0afd8c5614d19a706eb642cc26c7f9c545e
+/agent-note-merge-the-account-service-into-the-team-shell:
+  en: 60558ec5e5182f2c
+  zh: b98311f080cb3e6e
+/agent-note-merge-the-account-service-into-the-team-shell/problem:
+  en: 7a52f027b055c8d6
+  zh: d9fb1e699a8f1eb5
+/agent-note-merge-the-account-service-into-the-team-shell/decision:
+  en: 14bd9a7da33188ea
+  zh: 25523c13784a122e
+/agent-note-merge-the-account-service-into-the-team-shell/alternatives-considered:
+  en: a402d4f49c227c57
+  zh: ca75b3d3f65e4443
+/agent-note-merge-the-account-service-into-the-team-shell/consequences:
+  en: 08f8940a023bfc3e
+  zh: 570763ed25befcfb

@@ -194,7 +194,7 @@ export class A2uiRunController extends TypertRemoteService {
       append: (type, data) => { agent.session.append(type, data) },
     }
     try {
-      const handle = this.ctx.a2uiRun.start({
+      const handle = await this.ctx.a2uiRun.start({
         command: request.command,
         fields: request.fields,
         ...request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs },
@@ -221,7 +221,7 @@ export class A2uiRunController extends TypertRemoteService {
   @Remote('read')
   async read(request: A2uiRunReadRequest): Promise<A2uiRunReadValue> {
     try {
-      const value = this.ctx.a2uiRun.read(request.runId)
+      const value = await Promise.resolve(this.ctx.a2uiRun.read(request.runId))
       return { runId: request.runId, ...value }
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('a2uiRun: unknown run')) {
@@ -239,7 +239,7 @@ export class A2uiRunController extends TypertRemoteService {
   @Remote('stop')
   async stop(request: A2uiRunStopRequest): Promise<A2uiRunStopValue> {
     try {
-      const requested = this.ctx.a2uiRun.stop(request.runId)
+      const requested = await Promise.resolve(this.ctx.a2uiRun.stop(request.runId))
       return { runId: request.runId, requested }
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('a2uiRun: unknown run')) {
@@ -250,7 +250,7 @@ export class A2uiRunController extends TypertRemoteService {
   }
 
   /**
-   * Run one `script`-action program on the controlled code runtime.
+   * Run one `script`-action program on the controlled PTC runtime.
    * @param request - the program, its binding grants, and the collected values.
    * @returns the completion value, logs, and failure detail.
    */
@@ -259,7 +259,7 @@ export class A2uiRunController extends TypertRemoteService {
     try {
       return await this.ctx.a2uiRunScript.run(request.program, request.binds, request.fields)
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith('a2uiRunScript: no code runtime')) {
+      if (error instanceof Error && error.message.startsWith('a2uiRunScript: no PTC runtime')) {
         throw new RemoteError('a2ui-run-script/runtime-unavailable', error.message, {})
       }
       throw error

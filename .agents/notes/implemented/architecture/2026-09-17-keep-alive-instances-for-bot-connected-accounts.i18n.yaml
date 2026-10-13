@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-keep-alive-instances-for-bot-connected-accounts.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-17-keep-alive-instances-for-bot-connected-accounts.md
-2026-09-17-keep-alive-instances-for-bot-connected-accounts.md: 41e79b0055b7d90a2d65b803eb5a6c06a0279110
-2026-09-17-keep-alive-instances-for-bot-connected-accounts.zh.md: 31fb1a09285514b90bad2089edb936d1bb74099e
+/agent-note-keep-alive-instances-for-accounts-with-a-bound-im-bot:
+  en: cfec9d067235906f
+  zh: 68e71cea5bd2ae8a
+/agent-note-keep-alive-instances-for-accounts-with-a-bound-im-bot/problem:
+  en: 4f505ce0fa9a5091
+  zh: 6dcb79c2dbbbfc74
+/agent-note-keep-alive-instances-for-accounts-with-a-bound-im-bot/decision:
+  en: 1363999e3ac8a9fe
+  zh: ded74ea645122c95
+/agent-note-keep-alive-instances-for-accounts-with-a-bound-im-bot/alternatives-considered:
+  en: 06d859a957b59a46
+  zh: c7ca136a36dd1935
+/agent-note-keep-alive-instances-for-accounts-with-a-bound-im-bot/consequences:
+  en: a25724c9d6de20e8
+  zh: 8dc1adc8e432a207

@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-region-router-shadow-write-offline-guard.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-region-router-shadow-write-offline-guard.md
-2026-09-16-region-router-shadow-write-offline-guard.md: fa9fb9a8b708699f4bae60c55a7c5436d5cbebe4
-2026-09-16-region-router-shadow-write-offline-guard.zh.md: ec0bae86baaadb3c5d14be531db103447653f5dd
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk:
+  en: 1e2263b0d8aa18f1
+  zh: 68040b8b253bb1b5
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk/problem:
+  en: 9d81d148b83a2602
+  zh: 754531e5275eb7e4
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk/decision:
+  en: a29e0aa3e4023e8c
+  zh: 1d6e3d876f3cad2e
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: 4237c596c10e1ee9
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk/alternatives-considered/why-not-make-writes-fail-soft-like-reads-e-g-queue-or-buffer-until-the-agent-reconnects:
+  en: 83db8aa9010d1ec4
+  zh: 9c79e5f37868c698
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk/alternatives-considered/why-not-delete-the-local-disk-residue-produced-by-this-bug-automatically-as-part-of-the-fix:
+  en: 35357c3417679299
+  zh: 1d07757316cf786d
+/agent-note-shadow-tree-writes-with-no-live-mount-silently-landed-on-local-disk/consequences:
+  en: 82e8b63bcd026919
+  zh: 6da64cc2d41ca3b4

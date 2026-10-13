@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-remote-shell-output-reader.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-10-remote-shell-output-reader.md
-2026-09-10-remote-shell-output-reader.md: 45164ea3530b8daf35c69473f85c0b9698c124b8
-2026-09-10-remote-shell-output-reader.zh.md: 299b4ce522d00421ee543fadef4d8a34ce74b3de
+/agent-note-remote-shell-process-exposes-independent-output-readers:
+  en: 562ff12f6149f691
+  zh: 1bd4c724044ce3cf
+/agent-note-remote-shell-process-exposes-independent-output-readers/problem:
+  en: bed1dcbf091068f3
+  zh: 0c4d896b8699ecba
+/agent-note-remote-shell-process-exposes-independent-output-readers/decision:
+  en: 889fd75d18942ce3
+  zh: d86efc852193ba9b
+/agent-note-remote-shell-process-exposes-independent-output-readers/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-remote-shell-process-exposes-independent-output-readers/alternatives-considered/why-not-route-the-live-result-panel-through-readoutput:
+  en: 95a1b3b50c6c2357
+  zh: ad88a98542ca16a9
+/agent-note-remote-shell-process-exposes-independent-output-readers/alternatives-considered/why-not-disable-the-live-result-panel-for-mounted-commands:
+  en: 1503f57b2b9d503e
+  zh: 91f50d53f618265f
+/agent-note-remote-shell-process-exposes-independent-output-readers/consequences:
+  en: ef259764766da1c8
+  zh: 73d04a881ca56c1c

@@ -152,7 +152,7 @@ describe('a2ui_attach_output tool', () => {
       callId: ToolCallId('call-2'),
       name: 'a2ui_attach_output',
       arguments: { surfaceId: 'surf-1', jobId: 'job-1' },
-    } as never)
+    })
     expect(result.isError).toBe(true)
     expect(attach).not.toHaveBeenCalled()
   })

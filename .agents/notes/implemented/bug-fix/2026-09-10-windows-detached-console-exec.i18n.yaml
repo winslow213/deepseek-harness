@@ -1,6 +1,28 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-windows-detached-console-exec.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-10-windows-detached-console-exec.md
-2026-09-10-windows-detached-console-exec.md: e680d9e6f931e60c74f08a6ddd6c6d9d54e9507a
-2026-09-10-windows-detached-console-exec.zh.md: e2af03cf2a8fd313fc9565a745448769b7cf69fc
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent:
+  en: 3febab2f6a131bd3
+  zh: a219b7a68decff26
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/problem:
+  en: a475656b20e6c2ff
+  zh: d18c16afa6343b45
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/decision:
+  en: 088a7b9f3b746446
+  zh: 6583ff219e61ed14
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/alternatives-considered/why-not-keep-detached-true-and-only-fix-quoting:
+  en: 7bc861878b6ea759
+  zh: a9a365e439128c5a
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/alternatives-considered/why-not-run-externals-directly-instead-of-through-cmd:
+  en: ba85647bf84920e4
+  zh: f6fef1e02a372fe1
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/alternatives-considered/why-not-windowshide-plus-detached-true-together:
+  en: 7176e73e533a5615
+  zh: a3b5afbd69d94a70
+/agent-note-run-windows-exec-with-a-proper-console-in-the-remote-agent/consequences:
+  en: fce60ed6fa10331f
+  zh: 42ea29a070c0c018

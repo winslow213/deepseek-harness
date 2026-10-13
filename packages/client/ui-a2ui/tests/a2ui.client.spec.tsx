@@ -20,7 +20,7 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { A2uiAction, A2uiCanvasPage, A2uiFormPage, A2uiSurfaceData } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
 import {
   A2uiCanvasPanel, A2uiFormPanel, a2uiBendForPoint, a2uiEdgeGeometry,
@@ -1228,7 +1228,6 @@ describe('plugin lifecycle', () => {
     await ctx.plugin(SlotRegistry).await()
     new UiConversation(ctx, { binding: () => undefined } as never)
     ctx.provide('sessions', { list: { getSnapshot: () => ({ current: undefined, rows: [] }), subscribe: () => () => {} } } as never)
-    ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
     await runtimeSlotRoot(ctx)
     ctx.provide('locale', new LocaleRuntime(ctx))
     new TestRemote(ctx, {

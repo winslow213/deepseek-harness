@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-14-plugin-uninstall-remote.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-plugin-uninstall-remote.md
-2026-09-14-plugin-uninstall-remote.md: 4c6332b7a4cdb9a06b3e499a32879a709ba7cc02
-2026-09-14-plugin-uninstall-remote.zh.md: 3fd8bcd91f21774de841cf08dc99c46d82666543
+/agent-note-the-operator-gated-plugin-install-remote-gains-an-uninstall-path:
+  en: 16e8afa36facfb19
+  zh: f1af1aa4b2f89ff3
+/agent-note-the-operator-gated-plugin-install-remote-gains-an-uninstall-path/problem:
+  en: ad5887f638a00464
+  zh: ff2ddb05aae16ebf
+/agent-note-the-operator-gated-plugin-install-remote-gains-an-uninstall-path/decision:
+  en: 4845d442d845247d
+  zh: 1241b798e538abdf
+/agent-note-the-operator-gated-plugin-install-remote-gains-an-uninstall-path/alternatives-considered:
+  en: 5019842ddf670bb6
+  zh: cc4a328b24f7a1f6
+/agent-note-the-operator-gated-plugin-install-remote-gains-an-uninstall-path/consequences:
+  en: 3c3dd14965fcdc27
+  zh: dfe299a96f4f0e49

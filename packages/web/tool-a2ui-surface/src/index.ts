@@ -282,10 +282,14 @@ function toA2uiSteps(rawSteps: readonly A2uiStep[], actionId: string): A2uiStep[
         throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: a \`refresh\` step must carry a non-empty \`source\``)
       }
       steps.push({ kind: 'refresh', source })
-    } else if (step.kind === 'stop') {
-      steps.push({ kind: 'stop' })
     } else {
-      throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: unknown step kind ${JSON.stringify((step as { kind?: unknown }).kind)}`)
+      // `stop` is the only remaining declared kind; a model that sent anything
+      // else must be rejected rather than silently treated as a stop step.
+      const unknownKind = (step as { kind?: unknown }).kind
+      if (unknownKind !== 'stop') {
+        throw new Error(`invalid a2ui action ${JSON.stringify(actionId)}: unknown step kind ${JSON.stringify(unknownKind)}`)
+      }
+      steps.push({ kind: 'stop' })
     }
   }
   return steps

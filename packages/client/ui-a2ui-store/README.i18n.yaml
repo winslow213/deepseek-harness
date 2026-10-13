@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-a2ui-store/README.md
-README.md: d55f7b8ed3ca6b7a46a83dba8664d4ba59f7fce5
-README.zh.md: f33bb3f6d26bc35afa899811396fe136c13b9a73
+/:
+  en: 78ffaf603c183d07
+  zh: 7db7095ad745e5d0
+/deepseek-ai-dsh-client-ui-a2ui-store:
+  en: c205e4b80588354a
+  zh: 661429d0e39b3279
+/deepseek-ai-dsh-client-ui-a2ui-store/summary:
+  en: cb140efb27d52a0b
+  zh: 570b0274f7c2a968
+/deepseek-ai-dsh-client-ui-a2ui-store/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-client-ui-a2ui-store/use-this-package:
+  en: 29c09f97e4168a9a
+  zh: e065720f3775bb98
+/deepseek-ai-dsh-client-ui-a2ui-store/use-this-package/assembly:
+  en: f3e38c81727ce7f2
+  zh: 3b41458be0916958
+/deepseek-ai-dsh-client-ui-a2ui-store/use-this-package/re-opening-a-saved-tool:
+  en: dc65adb72f9439b5
+  zh: f9d94b5cfc40118b
+/deepseek-ai-dsh-client-ui-a2ui-store/understand-the-implementation:
+  en: 592ddeb7ec657e9d
+  zh: b2c658bdef3294c1
+/deepseek-ai-dsh-client-ui-a2ui-store/further-exploration:
+  en: 85aba40f18ccf411
+  zh: aea1306bef4ecbb4
+/deepseek-ai-dsh-client-ui-a2ui-store/model-experience:
+  en: 9d6274d9197b5b78
+  zh: a991b70fc58d9a0f
+/deepseek-ai-dsh-client-ui-a2ui-store/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: de54f3467ef3b9be
+/deepseek-ai-dsh-client-ui-a2ui-store/known-limitations-and-deferred-work:
+  en: 38b4585f27dd0064
+  zh: 6c3b1418cfccf174
+/deepseek-ai-dsh-client-ui-a2ui-store/known-limitations-and-deferred-work/dev-note:
+  en: 96b2fa7ec16c4979
+  zh: 25a64ca7fe72f9c4

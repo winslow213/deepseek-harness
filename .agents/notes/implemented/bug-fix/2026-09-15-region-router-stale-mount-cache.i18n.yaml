@@ -1,6 +1,28 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-region-router-stale-mount-cache.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-region-router-stale-mount-cache.md
-2026-09-15-region-router-stale-mount-cache.md: 8357f920f20404adce851b0a7e1b513b954ad29f
-2026-09-15-region-router-stale-mount-cache.zh.md: a105ea739ac9f090b0f9b87b937a8cea332bca0e
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel:
+  en: f2921976f17cf9a6
+  zh: 75b623c8d5442827
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/problem:
+  en: 2908978163c39c6a
+  zh: 15cd6e89e99b5c95
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/decision:
+  en: 1b4077f300e51156
+  zh: 6f4815e286b4114c
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/alternatives-considered/why-not-a-background-poll-the-previous-version-of-this-fix:
+  en: 464b342f4d78d0d7
+  zh: ea5cb7f575e830c5
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/alternatives-considered/why-not-have-the-hub-push-an-invalidation-through-instancemanager-kill-and-cold-start:
+  en: b9501b4d60c6703a
+  zh: b5c26271de2d2b93
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/alternatives-considered/why-not-refetch-on-every-shadow-path-access:
+  en: 00b5de06bf51b4d9
+  zh: f79fa9befd32fc39
+/agent-note-region-router-mount-cache-subscribes-to-the-hub-s-push-channel/consequences:
+  en: ca1c614dadb0fc45
+  zh: c36f34afde598ac7

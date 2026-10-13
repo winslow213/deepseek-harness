@@ -225,11 +225,11 @@ describe('A2uiRunController', () => {
     await expect(controller.stop({ runId: 'run-1' })).rejects.toMatchObject({ code: 'a2ui-run/not-found' })
   })
 
-  it('maps a missing code runtime to the runtime-unavailable error', async () => {
+  it('maps a missing PTC runtime to the runtime-unavailable error', async () => {
     const { agent } = agentStub()
     const ctx = freshContext(agent)
     ctx.provide('a2uiRunScript', {
-      run: vi.fn(async () => { throw new Error('a2uiRunScript: no code runtime') }),
+      run: vi.fn(async () => { throw new Error('a2uiRunScript: no PTC runtime') }),
     } as unknown as A2uiRunScript)
     const controller = new A2uiRunController(ctx)
     await expect(controller.runScript({ program: 'x', binds: [], fields: {} })).rejects.toMatchObject({

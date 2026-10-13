@@ -19,8 +19,7 @@ import type { Config as BashLocalConfig } from '@deepseek-ai/dsh-bash-local'
 import type {
   ShellExecRequest,
   ShellExecSpec,
-  ShellProcess,
-  ShellRunResult,
+  ShellExecution,
 } from '@deepseek-ai/dsh-shell'
 import { RemoteShellCore } from './executor.ts'
 import { translateShadowPath } from './shadow.ts'
@@ -47,9 +46,9 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
   private readonly remoteBase: {
     hubUrl: string
     user: string
-    timeoutMs: number | undefined
-    maxTimeoutMs: number | undefined
-    maxOutputBytes: number | undefined
+    timeoutMs: number
+    maxTimeoutMs: number
+    maxOutputBytes: number
   }
   private readonly shadowRoot: string
   private readonly user: string
@@ -65,9 +64,11 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
     this.remoteBase = {
       hubUrl: config.hubUrl,
       user: config.user,
-      timeoutMs: config.timeoutMs,
-      maxTimeoutMs: config.maxTimeoutMs,
-      maxOutputBytes: config.maxOutputBytes,
+      // The inherited bash config exposes live budgets; each remote core
+      // resolves its own copies once, at construction.
+      timeoutMs: config.timeoutMs.get(),
+      maxTimeoutMs: config.maxTimeoutMs.get(),
+      maxOutputBytes: config.maxOutputBytes.get(),
     }
     void this.refreshMounts()
   }
@@ -139,17 +140,11 @@ export class RegionRouterShellExecutor extends SandboxBashExecutor {
     return super.resolve(request)
   }
 
-  override async run(spec: ShellExecSpec): Promise<ShellRunResult> {
+  override async execute(spec: ShellExecSpec): Promise<ShellExecution> {
     await this.refreshFor(spec.workdir)
     const remote = this.remoteSpec(spec)
-    if (remote === undefined) return super.run(spec)
-    return this.coreFor(remote.agentId).run(remote.spec)
-  }
-
-  override start(spec: ShellExecSpec): ShellProcess {
-    const remote = this.remoteSpec(spec)
-    if (remote === undefined) return super.start(spec)
-    return this.coreFor(remote.agentId).start(remote.spec)
+    if (remote === undefined) return super.execute(spec)
+    return this.coreFor(remote.agentId).execute(remote.spec)
   }
 }
 

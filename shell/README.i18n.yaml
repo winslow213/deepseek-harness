@@ -1,6 +1,55 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write shell/README.md
-README.md: 6347346ad6f498c9418f9e67b4b5aa7d49081bb0
-README.zh.md: 4f96394046d43420ab1667582501679544e544a4
+/dsh-team-shell:
+  en: 50bc565e834deebc
+  zh: 06e9c106d6e1d0de
+/dsh-team-shell/quick-start:
+  en: f821d526f145deef
+  zh: ee16fa4a8e49b1c3
+/dsh-team-shell/personal-wiki-per-user-memory:
+  en: b66da80e29a21261
+  zh: b4262e7511854969
+/dsh-team-shell/remote-execution-bridge:
+  en: 9e3ef30b2876cf7b
+  zh: 71ddff0254d30016
+/dsh-team-shell/remote-execution-bridge/start-the-hub:
+  en: 8fe36c428bb33e07
+  zh: 3fd189c968c30d76
+/dsh-team-shell/remote-execution-bridge/run-an-agent-on-the-code-host:
+  en: f21adbd0916eaaa5
+  zh: ef63f43ab2400314
+/dsh-team-shell/remote-execution-bridge/windows-code-hosts:
+  en: ff6616a5009e05f6
+  zh: afd27ad527c3cb69
+/dsh-team-shell/remote-execution-bridge/probe-from-the-server-side:
+  en: 35d2dc452cfb9819
+  zh: 58a12ff69f397b7a
+/dsh-team-shell/remote-execution-bridge/pair-a-code-host-with-a-one-time-code:
+  en: 9837e41d721bb783
+  zh: 6c928d4b29b6427d
+/dsh-team-shell/remote-execution-bridge/point-a-per-user-instance-at-its-agent:
+  en: c41143d4451fc379
+  zh: 9c250c090f023b0f
+/dsh-team-shell/remote-execution-bridge/serve-local-and-mounted-paths-together-region-router:
+  en: 6121c6feee8f3131
+  zh: 32cd5352ba932c79
+/dsh-team-shell/reverse-proxy-aggregation:
+  en: 9fafe3ae066d9fc8
+  zh: 00d8a13859c565ca
+/dsh-team-shell/account-service:
+  en: 0e55b9d79d94a8c5
+  zh: 1447c20420544573
+/dsh-team-shell/account-service/shared-directories-between-accounts:
+  en: 3871e2e585c9715c
+  zh: 1e0b03583badffc7
+/dsh-team-shell/account-service/self-service-registration:
+  en: 61b07cf69f6da087
+  zh: c4e19236d152195c
+/dsh-team-shell/development:
+  en: bdc7d1dbcf6afc1f
+  zh: b8b4dc9ace4f846c
+/dsh-team-shell/design-record:
+  en: 3e631a791ccffe75
+  zh: 6f40e1c3ecf935b6

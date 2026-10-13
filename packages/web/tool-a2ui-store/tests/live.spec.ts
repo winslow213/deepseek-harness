@@ -12,23 +12,46 @@ import type { A2uiUpdateData } from '../src/types.ts'
 function agentStub(): { agent: Agent; updates: A2uiUpdateData[] } {
   const updates: A2uiUpdateData[] = []
   const append = (type: string, data: A2uiUpdateData): void => { if (type === 'a2ui/update') updates.push(data) }
-  const agent = { id: SessionId('s1'), session: { append } } as unknown as Agent
+  const agent = { id: SessionId('s1'), session: { id: SessionId('s1'), append } } as unknown as Agent
   return { agent, updates }
+}
+
+/**
+ * A `ctx.jobs` stub over a live status and a queue of pending deltas. `readAt`
+ * serves the next queued delta at the caller's own offset and reports the
+ * resume offset, so the stream's exclusive cursor is exercised exactly as the
+ * real ring reader drives it.
+ * @param status - reads the job's current lifecycle state.
+ * @param deltas - queued deltas; each `readAt` consumes one.
+ * @returns the `get`/`readAt` pair a live stream needs.
+ */
+function stubJobs(status: () => string, deltas: string[] = []): {
+  get: ReturnType<typeof vi.fn>
+  readAt: ReturnType<typeof vi.fn>
+} {
+  return {
+    get: vi.fn(() => ({ status: status() })),
+    readAt: vi.fn((_id: JobId, from: number) => {
+      const text = deltas.shift() ?? ''
+      const next = from + text.length
+      return { chunks: text === '' ? [] : [{ at: from, text }], next, lossy: false }
+    }),
+  }
 }
 
 describe('ShellA2uiLive', () => {
   it('throws when no jobs service is mounted', () => {
     const live = new ShellA2uiLive(new Context())
     const { agent } = agentStub()
-    expect(() => live.attach('surf', 'bash-1' as JobId, agent)).toThrow(/no jobs service is mounted/)
+    expect(() => { live.attach('surf', 'bash-1' as JobId, agent) }).toThrow(/no jobs service is mounted/)
   })
 
-  it('refuses an unknown or foreign job before opening a reader', () => {
+  it('refuses an unknown or foreign job before reading output', () => {
     const ctx = new Context()
-    ctx.provide('jobs', { get: vi.fn(() => { throw new Error('unknown job') }), openOutputReader: vi.fn() } as never)
+    ctx.provide('jobs', { get: vi.fn(() => { throw new Error('unknown job') }), readAt: vi.fn() } as never)
     const live = new ShellA2uiLive(ctx)
     const { agent } = agentStub()
-    expect(() => live.attach('surf', 'bash-99' as JobId, agent)).toThrow(/unknown job/)
+    expect(() => { live.attach('surf', 'bash-99' as JobId, agent) }).toThrow(/unknown job/)
   })
 
   it('emits started, deltas, and finished over the independent reader', () => {
@@ -38,10 +61,7 @@ describe('ShellA2uiLive', () => {
       const deltas: string[] = []
       let status = 'running'
       const ctx = new Context()
-      ctx.provide('jobs', {
-        get: vi.fn(() => ({ status })),
-        openOutputReader: vi.fn(() => ({ read: () => deltas.shift() ?? '' })),
-      } as never)
+      ctx.provide('jobs', stubJobs(() => status, deltas) as never)
       const live = new ShellA2uiLive(ctx)
 
       live.attach('surf', 'bash-1' as JobId, agent)
@@ -65,10 +85,7 @@ describe('ShellA2uiLive', () => {
       const { agent, updates } = agentStub()
       const status = 'killed'
       const ctx = new Context()
-      ctx.provide('jobs', {
-        get: vi.fn(() => ({ status })),
-        openOutputReader: vi.fn(() => ({ read: () => '' })),
-      } as never)
+      ctx.provide('jobs', stubJobs(() => status) as never)
       const live = new ShellA2uiLive(ctx)
       live.attach('surf', 'bash-1' as JobId, agent)
       vi.advanceTimersByTime(250)
@@ -84,10 +101,7 @@ describe('ShellA2uiLive', () => {
       const { agent, updates } = agentStub()
       const status = 'failed'
       const ctx = new Context()
-      ctx.provide('jobs', {
-        get: vi.fn(() => ({ status })),
-        openOutputReader: vi.fn(() => ({ read: () => '' })),
-      } as never)
+      ctx.provide('jobs', stubJobs(() => status) as never)
       const live = new ShellA2uiLive(ctx)
       live.attach('surf', 'bash-1' as JobId, agent)
       vi.advanceTimersByTime(250)
@@ -104,7 +118,7 @@ describe('ShellA2uiLive', () => {
       const ctx = new Context()
       ctx.provide('jobs', {
         get: vi.fn(() => ({ status: 'running' })),
-        openOutputReader: vi.fn(() => ({ read: () => { throw new Error('gone') } })),
+        readAt: vi.fn(() => { throw new Error('gone') }),
       } as never)
       const live = new ShellA2uiLive(ctx)
       live.attach('surf', 'bash-1' as JobId, agent)
@@ -119,12 +133,14 @@ describe('ShellA2uiLive', () => {
     vi.useFakeTimers()
     try {
       const { agent, updates } = agentStub()
-      const jobs = { get: vi.fn(() => ({ status: 'running' })), openOutputReader: vi.fn(() => ({ read: () => '' })) }
+      const jobs = stubJobs(() => 'running')
       const get = vi.fn().mockReturnValueOnce(jobs).mockReturnValue(undefined)
       const live = new ShellA2uiLive({ get } as unknown as Context)
       live.attach('surf', 'bash-1' as JobId, agent)
       vi.advanceTimersByTime(250)
-      expect(updates[1]).toEqual({ surfaceId: 'surf', phase: 'aborted', seq: 1, totalBytes: 0 })
+      // The poll never reached the ring, so no read completed and no sequence
+      // was consumed: the abort is the stream's first emitted event.
+      expect(updates[1]).toEqual({ surfaceId: 'surf', phase: 'aborted', seq: 0, totalBytes: 0 })
     } finally {
       vi.useRealTimers()
     }
@@ -137,10 +153,7 @@ describe('ShellA2uiLive', () => {
       const deltas: string[] = []
       let status = 'running'
       const ctx = new Context()
-      ctx.provide('jobs', {
-        get: vi.fn(() => ({ status })),
-        openOutputReader: vi.fn(() => ({ read: () => deltas.shift() ?? '' })),
-      } as never)
+      ctx.provide('jobs', stubJobs(() => status, deltas) as never)
       const live = new ShellA2uiLive(ctx)
       expect(live.read('surf')).toBeUndefined()
 
@@ -168,10 +181,7 @@ describe('ShellA2uiLive', () => {
       const { agent, updates } = agentStub()
       let status = 'running'
       const ctx = new Context()
-      ctx.provide('jobs', {
-        get: vi.fn(() => ({ status })),
-        openOutputReader: vi.fn(() => ({ read: () => '' })),
-      } as never)
+      ctx.provide('jobs', stubJobs(() => status) as never)
       const live = new ShellA2uiLive(ctx)
       live.attach('surf', 'bash-1' as JobId, agent)
       live.attach('surf', 'bash-2' as JobId, agent)

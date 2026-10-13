@@ -6,7 +6,7 @@ English | [中文](2026-09-14-plugin-uninstall-remote.zh.md)
 
 ## Problem
 
-[The `pluginInstall` Remote](../architecture/2026-09-05-operator-gated-plugin-install-remote.md) and its [Web Settings tab](2026-09-05-web-settings-plugin-install-tab.md) let an operator install a plugin into the running profile, but nothing removes one: once a `file-dir`, `upload-directory`, or `npm-register` install writes its `plugins/<id>` copy and patch row, undoing it means hand-editing `cordis.patch.yml` and deleting the copy directly on the host filesystem. An operator who installed the wrong plugin, or wants to retire one, has no in-product path back out.
+[The `pluginInstall` Remote](../architecture/2026-09-05-operator-gated-plugin-install-remote.md) and its [Web Settings tab](../../archived/feature/2026-09-05-web-settings-plugin-install-tab.md) let an operator install a plugin into the running profile, but nothing removes one: once a `file-dir`, `upload-directory`, or `npm-register` install writes its `plugins/<id>` copy and patch row, undoing it means hand-editing `cordis.patch.yml` and deleting the copy directly on the host filesystem. An operator who installed the wrong plugin, or wants to retire one, has no in-product path back out.
 
 ## Decision
 
@@ -29,3 +29,5 @@ English | [中文](2026-09-14-plugin-uninstall-remote.zh.md)
 ## Consequences
 
 An operator can now remove a `file-dir`, `upload-directory`, or `npm-register` install from the Settings tab without leaving the browser, with the same restart-required semantics as install. `npm-bundle` installs were removable only by hand (`pnpm remove` in the profile directory) at first — [a later note](2026-09-14-plugin-uninstall-npm-bundle.md) lifts that exclusion by keying npm-bundle removal off the profile manifest's dependency list instead of a per-plugin id. The host package's test suite grew by 8 cases covering removal for each of the three supported forms, preservation of unrelated patch rows, the two failure codes, and the supervised-restart request; the client package's jsdom spec grew by 4 cases covering the disabled-until-filled button, a successful removal, the restart countdown, and the Remote failure mapping. No session event or model-facing surface changed, so no snapshot owns this path.
+
+**Current ownership.** Removal ships as `uninstallPlugin` on `@deepseek-ai/dsh-plugin-manager`, keeping the byte-preserving row removal and the `plugins/<id>` directory deletion this note describes. The `pluginInstall` namespace it extended and the client tab that called it are gone.

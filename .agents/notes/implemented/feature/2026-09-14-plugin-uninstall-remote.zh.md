@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-[`pluginInstall` Remote](../architecture/2026-09-05-operator-gated-plugin-install-remote.zh.md) 及其 [Web 设置标签页](2026-09-05-web-settings-plugin-install-tab.zh.md) 让运算符能把插件安装进运行中的 profile，但没有任何东西能移除它：一旦 `file-dir`、`upload-directory` 或 `npm-register` 安装写下其 `plugins/<id>` 拷贝与 patch 行，撤销它就意味着手动编辑 `cordis.patch.yml` 并直接在宿主文件系统上删除拷贝目录。装错插件或想退役某插件的运算符没有产品内的退路。
+[`pluginInstall` Remote](../architecture/2026-09-05-operator-gated-plugin-install-remote.zh.md) 及其 [Web 设置标签页](../../archived/feature/2026-09-05-web-settings-plugin-install-tab.md) 让运算符能把插件安装进运行中的 profile，但没有任何东西能移除它：一旦 `file-dir`、`upload-directory` 或 `npm-register` 安装写下其 `plugins/<id>` 拷贝与 patch 行，撤销它就意味着手动编辑 `cordis.patch.yml` 并直接在宿主文件系统上删除拷贝目录。装错插件或想退役某插件的运算符没有产品内的退路。
 
 ## Decision
 
@@ -29,3 +29,5 @@ Status: implemented
 ## Consequences
 
 运算符现在无需离开浏览器即可从设置标签页移除 `file-dir`、`upload-directory` 或 `npm-register` 安装，语义上与安装一样需要重启。`npm-bundle` 安装最初只能手动移除（在 profile 目录运行 `pnpm remove`）——[后续笔记](2026-09-14-plugin-uninstall-npm-bundle.zh.md)通过改为以 profile 清单的依赖列表而非逐插件 id 来定位 npm-bundle 移除，解除了这一排除。宿主包的测试套件新增 8 个用例，覆盖三种受支持形式各自的移除、无关 patch 行的保留、两个失败码，以及受监督重启请求；客户端包的 jsdom 规格新增 4 个用例，覆盖填写前禁用的按钮、成功移除、重启倒计时与 Remote 失败映射。没有会话事件或面向模型的表面发生变化，因此没有快照拥有这条路径。
+
+**当前归属。** 移除功能现在以 `@deepseek-ai/dsh-plugin-manager` 上的 `uninstallPlugin` 发布，保留本笔记描述的逐字节保留 patch 行与删除 `plugins/<id>` 目录的行为。它所扩展的 `pluginInstall` 命名空间以及调用它的客户端标签页已不存在。

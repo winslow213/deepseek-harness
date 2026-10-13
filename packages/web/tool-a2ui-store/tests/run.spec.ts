@@ -61,7 +61,7 @@ function stubHarness(cwd?: string): {
       lastResolved = request
       return request
     },
-    start: () => proc,
+    execute: async () => proc,
   }
   const { session, updates } = stubSession(cwd)
   return {
@@ -76,10 +76,10 @@ function stubHarness(cwd?: string): {
 }
 
 describe('ShellA2uiRun', () => {
-  it('starts a resolved command, reads consuming chunks, and stops the process', () => {
+  it('starts a resolved command, reads consuming chunks, and stops the process', async () => {
     const harness = stubHarness()
     const run = new ShellA2uiRun(harness.ctx as unknown as Context)
-    const handle = run.start({ command: 'echo {x}', fields: { x: 'hello' }, session: harness.session, surfaceId: 's1' })
+    const handle = await run.start({ command: 'echo {x}', fields: { x: 'hello' }, session: harness.session, surfaceId: 's1' })
     expect(handle.command).toBe("echo 'hello'")
     expect(handle.seq).toBe(0)
     expect(harness.updates).toEqual([{ surfaceId: 's1', phase: 'started', seq: 0, totalBytes: 0 }])
@@ -103,10 +103,10 @@ describe('ShellA2uiRun', () => {
     expect(() => run.get('nope')).toThrow(/unknown run/)
   })
 
-  it('runs the command in the session workspace and settles with a finished event', () => {
+  it('runs the command in the session workspace and settles with a finished event', async () => {
     const harness = stubHarness('/mnt/workspace')
     const run = new ShellA2uiRun(harness.ctx as unknown as Context)
-    const handle = run.start({ command: 'pwd', fields: {}, session: harness.session, surfaceId: 's2' })
+    const handle = await run.start({ command: 'pwd', fields: {}, session: harness.session, surfaceId: 's2' })
     expect(harness.resolved()).toMatchObject({ command: 'pwd', workdir: '/mnt/workspace' })
 
     harness.setStatus('completed')
@@ -120,10 +120,10 @@ describe('ShellA2uiRun', () => {
     expect(harness.updates.filter(update => update.phase === 'finished')).toHaveLength(1)
   })
 
-  it('passes the run bound through and settles an externally killed process as aborted', () => {
+  it('passes the run bound through and settles an externally killed process as aborted', async () => {
     const harness = stubHarness()
     const run = new ShellA2uiRun(harness.ctx as unknown as Context)
-    const handle = run.start({ command: 'tail -f', fields: {}, timeoutMs: 1000, session: harness.session, surfaceId: 's4' })
+    const handle = await run.start({ command: 'tail -f', fields: {}, timeoutMs: 1000, session: harness.session, surfaceId: 's4' })
     expect(harness.resolved()).toMatchObject({ command: 'tail -f', timeoutMs: 1000 })
 
     // A signal kill detected on read (no stop call) settles as aborted.
@@ -133,10 +133,10 @@ describe('ShellA2uiRun', () => {
     expect(harness.updates[1]).toEqual({ surfaceId: 's4', phase: 'aborted', seq: 1, totalBytes: 0 })
   })
 
-  it('throws a clear error when no shell executor is mounted', () => {
+  it('throws a clear error when no shell executor is mounted', async () => {
     const run = new ShellA2uiRun({ get: () => undefined } as unknown as Context)
     const { session } = stubSession()
-    expect(() => run.start({ command: 'echo hi', fields: {}, session, surfaceId: 's3' }))
-      .toThrow(/no shell service is mounted/)
+    await expect(run.start({ command: 'echo hi', fields: {}, session, surfaceId: 's3' }))
+      .rejects.toThrow(/no shell service is mounted/)
   })
 })

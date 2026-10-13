@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-region-router-shadow-probe-permission.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-region-router-shadow-probe-permission.md
-2026-09-16-region-router-shadow-probe-permission.md: 04578b337fa6f92e74dfc40a35755ea305acbd66
-2026-09-16-region-router-shadow-probe-permission.zh.md: 1647d62b73d3758c01c9fa8a5036feaefc25f254
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe:
+  en: 2d41b2f2822d7810
+  zh: 99356cbf415f7b89
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe/problem:
+  en: 0b01874d8b669830
+  zh: b164a81a50182101
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe/decision:
+  en: 18202af25844b68b
+  zh: b66793feac642525
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe/alternatives-considered/why-not-narrow-the-skip-to-only-the-exact-shadow-path-of-a-currently-live-mount:
+  en: 1250b1f0cff9814d
+  zh: 8750581762a9539d
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe/alternatives-considered/why-not-have-callers-avoid-probing-above-the-mounted-root-instead:
+  en: d51e7cd089c4fd5a
+  zh: 1959c00b06315710
+/agent-note-assertlocalreadable-treats-any-shadow-tree-path-as-an-ordinary-local-probe/consequences:
+  en: 605d05b284e41fc7
+  zh: 663bff3740730c40

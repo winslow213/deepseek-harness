@@ -11,6 +11,7 @@
     "src/types.ts"
   ],
   "references": [
+    { "path": "../../client/product-analytics/tsconfig.client.json" },
     {
       "path": "../../../vendor/cordis"
     },
@@ -39,22 +40,25 @@
       "path": "../../goal/goal"
     },
     {
+      "path": "../../schedule/schedule"
+    },
+    {
       "path": "../../feedback/message-feedback"
     },
     {
       "path": "../../host/plugin-inventory"
     },
     {
-      "path": "../../host/plugin-install"
+      "path": "../../interaction/commands"
     },
     {
-      "path": "../../interaction/commands"
+      "path": "../../interaction/permission-presets"
     },
     {
       "path": "../../llm/llm"
     },
     {
-      "path": "../../preset/agent-presets"
+      "path": "../../preset/agent-preset-registry"
     },
     {
       "path": "../../settings/settings"
@@ -67,6 +71,9 @@
     },
     {
       "path": "../../interaction/user-questions"
+    },
+    {
+      "path": "../job-controller/tsconfig.client.json"
     },
     {
       "path": "../session-controller/tsconfig.client.json"
@@ -87,10 +94,28 @@
       "path": "../../web/tool-a2ui-surface"
     },
     {
+      "path": "../../web/tool-a2ui-data"
+    },
+    {
       "path": "../../web/tool-a2ui-store"
     },
     {
       "path": "../../feedback/command-feedback"
+    },
+    {
+      "path": "../terminal-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../boot/plugin-manager"
+    },
+    {
+      "path": "../../document/office-to-pdf"
+    },
+    {
+      "path": "../account-controller"
+    },
+    {
+      "path": "../../credentials/deepseek-account"
     }
   ]
 }

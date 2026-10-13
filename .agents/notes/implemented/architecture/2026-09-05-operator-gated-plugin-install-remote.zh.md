@@ -24,7 +24,7 @@
 
 ## 考虑过的替代方案
 
-**复用 CLI 的安装代码而不是新建包。** 否决。CLI 是 `apps/` 入口，它的安装路径把 pnpm 转发、警告流和错误样式与命令解析混在一起；宿主服务需要同一套持久化写入，但要放在 Remote 契约后面，Phase A 让 CLI 继续当已发布权威，而服务复用共享的 boot 件（`initProfile`、`reconcileProfileBundles`、`PROFILE_PATCH_FILENAME`）——正是提交 `11a30687a5` 提取出来让两个调用方都保持诚实的那部分。
+**复用 CLI 的安装代码而不是新建包。** 否决。CLI 是 `apps/` 入口，它的安装路径把 pnpm 转发、警告流和错误样式与命令解析混在一起；宿主服务需要同一套持久化写入，但要放在 Remote 契约后面，Phase A 让 CLI 继续当已发布权威，而服务复用共享的 boot 件（`initProfile`、`reconcileProfileBundles`、`PROFILE_PATCH_FILENAME`）——由[profile 插件组合包 Agent Note](2026-08-05-profile-plugin-bundles.zh.md)记录，好让两个调用方都保持诚实。
 
 **只在组合层门控，或只在构造器里门控。** 单独一层都有洞：只组合层让嵌入方可以在无保护下挂载包；只构造器仍然在每次默认部署里加载并解析命名空间。两层一起让默认部署可证明不含这段代码，任何显式挂载可证明是有意的。
 
@@ -37,3 +37,5 @@
 ## 后果
 
 web-app 组合包获得操作者门控的安装行并新增对新包的依赖，api remotes 客户端 `$mount` 该命名空间，config 与 module-graph 目录列出新行。默认部署不会组合其中任何东西：`DSH_PLUGIN_INSTALL` 未设置时组合阶段就禁用该行，包从不加载。操作者启用后，GUI 可以用 CLI 产生的同一套持久化写入把源码目录和 npm bundle 都装进运行中的 profile，每次拒绝都点出问题所在（缺 `pnpm`、非路径安全 id、没有组合 include 条目）。服务没有任何模型侧表面，也不注册会话事件，所以没有快照拥有它的输出；15 个用例的 spec 用真实 Loader 组合驱动临时 profile 夹具，pnpm 路径用 `spawnSync` 模拟。调用这个命名空间的 GUI 设置标签页是设计文档的 Phase 4，刻意不在本次变更里。后续的 [卸载 Remote 方法](../feature/2026-09-14-plugin-uninstall-remote.zh.md) 按 id 撤销 `file-dir`、`upload-directory` 与 `npm-register` 安装。
+
+**当前归属。** 安装实现以 `@deepseek-ai/dsh-plugin-manager` 发布：`plugin-row.ts` 拥有这里描述的 id 分隔行协议，`plugin-directory.ts` 拥有 `file-dir`、`upload-directory` 与 `npm-register` 三种形式。`DSH_PLUGIN_INSTALL` 组合开关、`pluginInstall` 命名空间以及调用它的客户端标签页已不存在。安装表面现在通过 `plugin_manager` 工具触达，该工具在创造模式下启用，且每次调用都需要 `danger-full-access` 或一次批准，因此默认的非创造模式部署仍然不会激活它。上文的两层论证——组合决定包是否存在，第二道检查断言调用方确实打算暴露它——延续为预设默认值加上每次调用的沙箱策略。

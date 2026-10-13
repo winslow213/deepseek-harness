@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-07-team-shell-per-user-workspace-confinement.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-07-team-shell-per-user-workspace-confinement.md
-2026-09-07-team-shell-per-user-workspace-confinement.md: 556b9026f4d081d972858f83b9a98d69a37c2c4f
-2026-09-07-team-shell-per-user-workspace-confinement.zh.md: d78ec668ebd3343c25afaa90b4195a3fd022c7dc
+/agent-note-per-user-workspace-confinement-in-the-team-shell:
+  en: 37f40090006be0f4
+  zh: 8930fd84ec17ef2b
+/agent-note-per-user-workspace-confinement-in-the-team-shell/problem:
+  en: ede0d8fce509bb6b
+  zh: ba448397f4b4d7b9
+/agent-note-per-user-workspace-confinement-in-the-team-shell/decision:
+  en: d26674e0f6bfc95c
+  zh: f9d84b0dc4dc6fbc
+/agent-note-per-user-workspace-confinement-in-the-team-shell/alternatives-considered:
+  en: 1dddf14d609f06d9
+  zh: 2b9fdf603a27491c
+/agent-note-per-user-workspace-confinement-in-the-team-shell/consequences:
+  en: 0f1e1b79022b2a93
+  zh: e3689734f2d06337

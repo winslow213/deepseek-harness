@@ -31,6 +31,17 @@ import {
 const MERGE_OPEN = '<wiki-profile>'
 const MERGE_CLOSE = '</wiki-profile>'
 
+/** Source tag for the wiki-merge completion request message. */
+export interface WikiMergeSource {
+  readonly kind: 'wiki-merge'
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'wiki-merge': WikiMergeSource
+  }
+}
+
 /** Which provider/model a merge call should use, resolved from the live session. */
 interface MergeTarget {
   readonly provider: string
@@ -95,7 +106,7 @@ export function createLlmCompletion(
       model: target.model,
       messages: [createUserMessage({
         content: [{ type: 'text' as const, text: prompt }],
-        source: { kind: 'plugin' as const, plugin: 'dsh-team-shell/wiki-merge' },
+        source: { kind: 'wiki-merge' as const },
       })],
       maxTokens: 4096,
       sessionId: agent.session.id,

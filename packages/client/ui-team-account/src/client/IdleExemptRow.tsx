@@ -40,7 +40,7 @@ export function IdleExemptRow({ t }: IdleExemptRowProps) {
     if (!marker) return
     void (async () => {
       try {
-        const res = await fetch('/api/me')
+        const res = await fetch('api/me')
         if (!res.ok) {
           setState(s => ({ ...s, error: true }))
           return
@@ -59,7 +59,7 @@ export function IdleExemptRow({ t }: IdleExemptRowProps) {
   const toggle = async (next: boolean): Promise<void> => {
     setState(s => ({ ...s, busy: true, error: false }))
     try {
-      const res = await fetch('/api/me/idle-exempt', {
+      const res = await fetch('api/me/idle-exempt', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ exempt: next }),

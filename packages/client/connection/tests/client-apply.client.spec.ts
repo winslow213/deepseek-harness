@@ -1,6 +1,6 @@
 /**
- * Connection plugin browser-half apply: ctx.connection handle mounting, mode
- * selection off the page URL, and single-consumer connection-loop ownership.
+ * Connection plugin browser-half apply: ctx.connection handle mounting,
+ * explicit carrier selection, and single-consumer connection-loop ownership.
  */
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,7 @@ import {
 } from '../src/client/index.ts'
 
 type Win = {
-  location?: { hostname: string; search: string; origin?: string }
+  location?: { hostname: string; origin?: string }
   __DSH_TRANSPORT__?: ClientTransportHooks
   __DSH_TRUSTED_HOSTS__?: readonly string[]
 }
@@ -126,43 +126,36 @@ describe('connection client apply', () => {
   })
 
   it('mounts ctx.connection and identifies a loopback page', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     expect(handle.isLoopback).toBe(true)
   })
 
-  it('selects the fixture RPC transport under ?fixture', async () => {
-    ;(globalThis as Win).location = { hostname: '127.0.0.1', search: '?fixture' }
-    const handle = await mount()
-    await expect(handle.rpc.call('/api', 'settings/describe', { args: {} }))
-      .resolves.toMatchObject({ ok: true })
-  })
-
   it('reports non-loopback page authority through the connection handle', async () => {
-    ;(globalThis as Win).location = { hostname: '192.0.2.20', search: '' }
+    ;(globalThis as Win).location = { hostname: '192.0.2.20' }
     expect((await mount()).isLoopback).toBe(false)
   })
 
   it('treats a trusted non-loopback page authority as privileged', async () => {
-    ;(globalThis as Win).location = { hostname: '10.33.2.56', search: '' }
+    ;(globalThis as Win).location = { hostname: '10.33.2.56' }
     ;(globalThis as Win).__DSH_TRUSTED_HOSTS__ = ['10.33.2.56']
     expect((await mount()).isLoopback).toBe(true)
   })
 
   it('keeps an untrusted non-loopback page non-privileged even with other trusted hosts', async () => {
-    ;(globalThis as Win).location = { hostname: '192.0.2.20', search: '' }
+    ;(globalThis as Win).location = { hostname: '192.0.2.20' }
     ;(globalThis as Win).__DSH_TRUSTED_HOSTS__ = ['10.33.2.56']
     expect((await mount()).isLoopback).toBe(false)
   })
 
   it('keeps a loopback page privileged with no trusted hosts injected', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     delete (globalThis as Win).__DSH_TRUSTED_HOSTS__
     expect((await mount()).isLoopback).toBe(true)
   })
 
   it('requires one generation source and ignores a stale source disposer', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     const first = new GenerationProbe()
     const second = new GenerationProbe()
@@ -185,7 +178,7 @@ describe('connection client apply', () => {
   })
 
   it('start() hands out one loop, rejects a second consumer, and stop() aborts the generation', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     installGeneration(handle)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -212,7 +205,7 @@ describe('connection client apply', () => {
   })
 
   it('does not notify state subscribers when a pre-ready loop stops', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     handle.registerGenerationSource(signal => new Promise<void>((resolve) => {
       signal.addEventListener('abort', () => { resolve() }, { once: true })
@@ -229,7 +222,7 @@ describe('connection client apply', () => {
   })
 
   it('allows a replacement owner and ignores the previous owner handle', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     const generation = installGeneration(handle)
 
@@ -252,7 +245,7 @@ describe('connection client apply', () => {
   })
 
   it('lets the connection service force only its current owner to reconnect', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     installGeneration(handle)
     const requested = vi.fn()
@@ -279,7 +272,7 @@ describe('connection client apply', () => {
 
   it('ignores a non-browser window shim without navigator state', async () => {
     vi.stubGlobal('window', new EventTarget())
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     installGeneration(handle)
     const loop = handle.start({})
@@ -296,7 +289,7 @@ describe('connection client apply', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const browser = new BrowserNetworkProbe()
     vi.stubGlobal('window', browser)
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     let calls = 0
     const source: ConnectionGenerationSource = (signal, ready) => new Promise<void>((resolve) => {
@@ -340,7 +333,7 @@ describe('connection client apply', () => {
   })
 
   it('does not announce a generation synchronously stopped by a generation subscriber', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     installGeneration(handle)
     const owner: { loop?: ReturnType<ConnectionHandle['start']> } = {}
@@ -364,7 +357,7 @@ describe('connection client apply', () => {
   })
 
   it('retracts the generation while connecting and publishes the next generation', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     const generation = installGeneration(handle)
     const generations: Array<string | undefined> = []
@@ -397,7 +390,7 @@ describe('connection client apply', () => {
   })
 
   it('publishes connection state directly on the service and isolates subscribers', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     const generation = installGeneration(handle)
     const snapshots: Array<ConnectionState | undefined> = []
@@ -435,7 +428,7 @@ describe('connection client apply', () => {
   })
 
   it('does not announce disconnection after a generation subscriber stops the loop', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     const generation = installGeneration(handle)
     const owner: { loop?: ReturnType<ConnectionHandle['start']> } = {}
@@ -468,7 +461,7 @@ describe('connection client apply', () => {
   })
 
   it('carries RPC calls without requiring secure-context randomUUID', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '' }
+    ;(globalThis as Win).location = { hostname: 'localhost' }
     vi.stubGlobal('crypto', {
       getRandomValues(bytes: Uint8Array) {
         return bytes.fill(0)
@@ -496,7 +489,7 @@ describe('connection client apply', () => {
       vi.unstubAllGlobals()
     }
     expect(seen).toHaveLength(1)
-    expect(seen[0]?.url).toBe('http://dsh.internal/api/goals/create')
+    expect(seen[0]?.url).toBe('api/goals/create')
     expect(seen[0]?.body).toMatchObject({
       type: 'client-request',
       rpcId: '00000000-0000-4000-8000-000000000000',
@@ -506,7 +499,7 @@ describe('connection client apply', () => {
   })
 
   it('uses an already decoded rpc carrier from the transport hooks instead of the HTTP caller', async () => {
-    ;(globalThis as Win).location = { hostname: 'preview.example', search: '' }
+    ;(globalThis as Win).location = { hostname: 'preview.example' }
     const rpc: ClientConnectionRpc = {
       call: vi.fn(async (_channel: string, endpoint: string, payload: unknown) => ({ ok: true as const, value: { endpoint, payload } })),
       open: vi.fn((_channel: string, endpoint: string) => (async function *(): AsyncGenerator { yield endpoint })()),
@@ -520,11 +513,12 @@ describe('connection client apply', () => {
   })
 
   it('exposes a worker-local Gateway stream through connection.rpc.open', async () => {
-    ;(globalThis as Win).location = { hostname: 'preview.example', search: '' }
+    ;(globalThis as Win).location = { hostname: 'preview.example' }
     const openStream = vi.fn<NonNullable<ClientTransportHooks['openStream']>>(
-      (endpoint, payload, signal) => (async function *(): AsyncGenerator {
+      (endpoint, payload, signal, uplink) => (async function *(): AsyncGenerator {
         signal.throwIfAborted()
         yield { endpoint, payload }
+        if (uplink !== undefined) yield* uplink
       })(),
     )
     ;(globalThis as Win).__DSH_TRANSPORT__ = {
@@ -548,7 +542,14 @@ describe('connection client apply', () => {
       'session/follow',
       { args: { sessionId: 'session-1' } },
       abort.signal,
+      undefined,
     )
+
+    const uplink = (async function *(): AsyncGenerator<string> { yield 'typed' })()
+    const echoed = []
+    for await (const value of open('/api', 'job/attach', { args: {} }, abort.signal, uplink)) echoed.push(value)
+    expect(echoed).toEqual([{ endpoint: 'job/attach', payload: { args: {} } }, 'typed'])
+    expect(openStream).toHaveBeenLastCalledWith('job/attach', { args: {} }, abort.signal, uplink)
     expect(handle.isLoopback).toBe(true)
     expect(() => open('/rpc', 'session/follow', {}, abort.signal))
       .toThrow('worker-local streams require the /api channel')
@@ -558,7 +559,7 @@ describe('connection client apply', () => {
 
   it('validates generic RPC transport failures, correlation, and targets', async () => {
     ;(globalThis as Win).location = {
-      hostname: 'harness.example', search: '', origin: 'https://harness.example',
+      hostname: 'harness.example', origin: 'https://harness.example',
     }
     const handle = await mount()
     const original = globalThis.fetch
@@ -568,11 +569,11 @@ describe('connection client apply', () => {
       await expect(handle.rpc.call('/api', 'goals/create', {}, abort.signal))
         .rejects.toThrow('HTTP 503')
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        new URL('https://harness.example/api/goals/create'),
+        'api/goals/create',
         expect.objectContaining({ signal: abort.signal }),
       )
 
-      ;(globalThis as Win).location = { hostname: 'localhost', search: '', origin: 'null' }
+      ;(globalThis as Win).location = { hostname: 'localhost', origin: 'null' }
       globalThis.fetch = vi.fn().mockResolvedValue(Response.json({
         type: 'server-response',
         rpcId: 'different-rpc',
@@ -580,7 +581,7 @@ describe('connection client apply', () => {
       }))
       await expect(handle.rpc.call('/api', 'goals/create', {})).rejects.toThrow('rpcId mismatch')
       const fetch = vi.mocked(globalThis.fetch)
-      expect(fetch.mock.calls[0]?.[0]).toEqual(new URL('http://dsh.internal/api/goals/create'))
+      expect(fetch.mock.calls[0]?.[0]).toEqual('api/goals/create')
       expect(fetch.mock.calls[0]?.[1]).not.toHaveProperty('signal')
 
       const respond = (result: unknown): void => {
@@ -644,37 +645,4 @@ describe('connection client apply', () => {
     }
   })
 
-  it('carries Goal Remotes over the client-only fixture state', async () => {
-    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
-    const handle = await mount()
-    const created = await handle.rpc.call('/api', 'goals/create', {
-      args: { agentId: 'fx-alpha', request: { objective: 'fixture remote' } },
-    })
-    expect(created).toMatchObject({ ok: true, value: { ref: { revision: 1 } } })
-    if (!created.ok) throw new Error('fixture Goal create failed')
-    const ref = (created.value as { ref: { id: string; revision: number } }).ref
-    const edited = await handle.rpc.call('/api', 'goals/edit', {
-      args: { agentId: 'fx-alpha', ref, request: { objective: 'edited fixture remote' } },
-    })
-    expect(edited).toMatchObject({ ok: true, value: { objective: 'edited fixture remote', revision: 2 } })
-    const editedRef = { id: ref.id, revision: 2 }
-    const paused = await handle.rpc.call('/api', 'goals/pause', {
-      args: { agentId: 'fx-alpha', ref: editedRef },
-    })
-    expect(paused).toMatchObject({ ok: true, value: { phase: 'paused', activation: 'disarmed', revision: 3 } })
-    const resumed = await handle.rpc.call('/api', 'goals/resume', {
-      args: { agentId: 'fx-alpha', ref: { id: ref.id, revision: 3 } },
-    })
-    expect(resumed).toMatchObject({ ok: true, value: { phase: 'active', activation: 'armed', revision: 4 } })
-    const completed = await handle.rpc.call('/api', 'goals/complete', {
-      args: { agentId: 'fx-alpha', ref: { id: ref.id, revision: 4 } },
-    })
-    expect(completed).toMatchObject({ ok: true, value: { phase: 'complete', activation: 'disarmed', revision: 5 } })
-    await expect(handle.rpc.call('/api', 'goals/clear', {
-      args: { agentId: 'fx-alpha', ref: { id: ref.id, revision: 5 } },
-    })).resolves.toEqual({ ok: true, value: { id: ref.id, revision: 6 } })
-    await expect(handle.rpc.call('/other', 'goals/create', {})).rejects.toThrow(/channel.*unavailable/)
-    await expect(handle.rpc.call('/api', 'unknown/read', { args: { agentId: 'fx-alpha' } }))
-      .rejects.toThrow(/endpoint.*unavailable/)
-  })
 })

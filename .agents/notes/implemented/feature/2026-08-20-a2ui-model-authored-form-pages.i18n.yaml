@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-08-20-a2ui-model-authored-form-pages.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-a2ui-model-authored-form-pages.md
-2026-08-20-a2ui-model-authored-form-pages.md: 4e96e7c9dda1af1d92145748ec412d672891c18a
-2026-08-20-a2ui-model-authored-form-pages.zh.md: 2dc1114b28655bdea6460600bc703b1702be6720
+/agent-note-model-authored-a2ui-form-pages:
+  en: 031bc496c3308970
+  zh: 5e53250e73992f65
+/agent-note-model-authored-a2ui-form-pages/problem:
+  en: c8fc6b329a2342d9
+  zh: 0386930756f68073
+/agent-note-model-authored-a2ui-form-pages/decision:
+  en: 84b353568e52a8b0
+  zh: 9e80347521a7c317
+/agent-note-model-authored-a2ui-form-pages/verification:
+  en: 4331020688597e22
+  zh: 5af203b63cfc7826
+/agent-note-model-authored-a2ui-form-pages/alternatives-considered:
+  en: 14f4383e37c61d4c
+  zh: 74bde215df19a6b1
+/agent-note-model-authored-a2ui-form-pages/consequences:
+  en: f57b1cc4dfa0581c
+  zh: ff275d8f3e370d28

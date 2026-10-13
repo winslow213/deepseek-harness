@@ -1,125 +1,127 @@
-/**
- * Profile plugin management shared by the `dsh plugin` CLI forwarder and the
- * host plugin-install remote: bundle detection and layer reconciliation after
- * a dependency change.
- *
- * Both callers operate on one profile directory after `pnpm` has materialized
- * the requested dependency change, so the reconcile logic here is the single
- * owner of how `dsh.profile.bundles` tracks installed dependencies. Keeping it
- * in app-boot (not in the CLI) is what lets the in-instance host remote reuse
- * the same semantics instead of re-deriving them.
- * @module @deepseek-ai/dsh-app-boot/profile-plugins
- */
+/** Installed profile dependencies and their bundle activation after package-manager operations. */
 
-import { readProfileManifest, resolveBundleDir, writeProfileManifest } from './profile.ts'
-import type { ProfileManifest } from './profile.ts'
+import { join } from 'node:path'
+import { readProfileManifest, resolveBundleDir, writeProfileManifest, type ProfileManifest } from './profile.ts'
 
-/**
- * Whether a resolved dependency exports a profile patch, i.e. is a bundle.
- * Unresolvable packages are not bundles (the caller has already reported the
- * pnpm error separately); a bundle-less dependency stays a plain library.
- * @param binName - the diagnostic prefix used on resolution failures.
- * @param packageName - the dependency's package name.
- * @param installAnchor - the dsh installation anchor used for in-box bundles.
- * @param profileDir - the profile directory (resolution anchor for installed packages).
- * @returns true when the package manifest declares `dsh.bundle`.
- */
-export function dependencyIsBundle(
-  binName: string,
-  packageName: string,
-  installAnchor: string,
-  profileDir: string,
-): boolean {
-  let dir: string
+/** Profile directory and installation used by the shared bundle resolver. */
+export interface ProfilePluginLocation {
+  /** Diagnostic prefix for profile manifest failures. */
+  readonly binName: string
+  /** Profile package directory managed by pnpm. */
+  readonly profileDir: string
+  /** Absolute package.json path of the owning dsh installation. */
+  readonly installAnchor: string
+}
+
+/** One dependency under its package-manager key, including npm aliases. */
+export interface ProfilePluginDependency {
+  /** Dependency key used in package.json and the bundle list. */
+  readonly name: string
+  /** Installed version, or the dependency spec when installed metadata is unavailable. */
+  readonly version: string
+  /** Whether the package selected by the bundle resolver declares a patch. */
+  readonly bundle: boolean
+  /** Whether the dependency appears in the profile's active bundle list. */
+  readonly enabled: boolean
+}
+
+/** Profile manifest and dependencies in manifest order. */
+export interface ProfilePluginInventory {
+  readonly manifest: ProfileManifest
+  readonly dependencies: readonly ProfilePluginDependency[]
+}
+
+/** Result of reconciling bundle activation after a successful package operation. */
+export interface ProfilePluginReconciliation {
+  readonly plugins: ProfilePluginInventory
+  /** Newly added ordinary dependencies, for optional caller-owned diagnostics. */
+  readonly addedPlainDependencies: readonly string[]
+}
+
+/** Unavailable installed metadata must not prevent listing or removing dependencies. */
+function optionalManifest(binName: string, packageDir: string): ProfileManifest | undefined {
+  try { return readProfileManifest(binName, packageDir) } catch { return undefined }
+}
+
+/** Resolve activation metadata with the same installation precedence as profile loading. */
+function bundleManifest(location: ProfilePluginLocation, name: string): ProfileManifest | undefined {
+  let packageDir: string
   try {
-    dir = resolveBundleDir(binName, packageName, installAnchor, profileDir)
+    packageDir = resolveBundleDir(location.binName, name, location.installAnchor, location.profileDir)
   } catch {
-    return false // pnpm reported success yet the package is unresolvable — treat as plain
+    // An unresolved dependency remains visible as an ordinary package.
+    return undefined
   }
-  const manifest = readProfileManifest(binName, dir)
-  return manifest.dsh?.bundle?.patch !== undefined
+  return optionalManifest(location.binName, packageDir)
 }
 
 /**
- * The outcome of a bundle reconcile: what changed on `dsh.profile.bundles`
- * and whether the manifest was rewritten at all.
+ * Read installed versions and bundle declarations without requiring loadable plugin code.
+ * Missing or unreadable installed metadata leaves the dependency visible for repair or removal.
+ * @param location - profile and installation resolution inputs.
+ * @returns dependency records in package.json order and the profile manifest.
  */
-export interface ReconcileProfileBundlesResult {
-  /** Whether the manifest changed (bundles added or removed). */
-  readonly changed: boolean
-  /** Names appended to `dsh.profile.bundles`, in dependency order. */
-  readonly added: readonly string[]
-  /** Names removed from `dsh.profile.bundles`. */
-  readonly removed: readonly string[]
-}
-
-/**
- * What the reconciler needs to identify the profile, its pre-pnpm manifest,
- * and how to report diagnostics.
- */
-export interface ReconcileProfileBundlesOptions {
-  /** Diagnostic prefix used on manifest and resolution errors. */
-  binName: string
-  /** The dsh installation anchor (first resolution anchor for in-box bundles). */
-  installAnchor: string
-  /** The profile directory whose manifest reconciles. */
-  profileDir: string
-  /** The profile manifest read before pnpm ran; drives the new-dependency diff. */
-  before: ProfileManifest
-  /** Sink for the one-time orientation warning about a bundle-less new dependency. */
-  warn: (message: string) => void
-}
-
-/**
- * Reconcile `dsh.profile.bundles` against the installed state: pnpm has
- * already written the real installed names (so a git/path/tarball/alias spec
- * reconciles by its true package name) and materialized the packages. A
- * dependency that resolves to a `dsh.bundle`-declaring package joins the layer
- * stack (appended in dependency order); a dependency-listed name that no
- * longer does — removed, or the installed version dropped the declaration —
- * leaves it. In-box bundles from the profile template are not dependencies
- * and are never touched. Warns once per newly-added bundle-less dependency (a
- * plain library is fine; the warning is orientation).
- *
- * Reads the current manifest from disk (the `after` state), so callers must
- * have persisted the dependency change first.
- * @param options - binName, resolution anchors, the before-manifest, and the warning sink.
- * @returns whether the layer list changed and what it gained or lost.
- */
-export function reconcileProfileBundles(options: ReconcileProfileBundlesOptions): ReconcileProfileBundlesResult {
-  const { binName, installAnchor, profileDir, before, warn } = options
-  const after = readProfileManifest(binName, profileDir)
-  const beforeDeps = new Set(Object.keys(before.dependencies ?? {}))
-  const dependencies = Object.keys(after.dependencies ?? {})
-  const plugins = [...after.dsh?.profile?.bundles ?? []]
-  const added: string[] = []
-  const removed: string[] = []
-  for (const packageName of dependencies) {
-    const isBundle = dependencyIsBundle(binName, packageName, installAnchor, profileDir)
-    if (isBundle && !plugins.includes(packageName)) {
-      plugins.push(packageName)
-      added.push(packageName)
-    } else if (!isBundle && !beforeDeps.has(packageName)) {
-      warn(
-        `${packageName} declares no dsh.bundle — installed as a plain dependency, not a profile layer `
-        + '(a later update that gains one activates it automatically)',
-      )
+export function readProfilePlugins(location: ProfilePluginLocation): ProfilePluginInventory {
+  const manifest = readProfileManifest(location.binName, location.profileDir)
+  const bundles = manifest.dsh?.profile?.bundles ?? []
+  const dependencies = Object.entries(manifest.dependencies ?? {}).map(([name, spec]) => {
+    const installed = optionalManifest(location.binName, join(location.profileDir, 'node_modules', name))
+    return {
+      name,
+      version: typeof installed?.version === 'string' ? installed.version : spec,
+      bundle: bundleManifest(location, name)?.dsh?.bundle?.patch !== undefined,
+      enabled: bundles.includes(name),
     }
+  })
+  return { manifest, dependencies }
+}
+
+/**
+ * Write a bundle list while preserving the supplied profile's other metadata.
+ * @param profileDir - directory whose package.json is updated.
+ * @param manifest - current profile manifest, read after the package operation when applicable.
+ * @param bundles - ordered active bundle names, including any template entries.
+ * @returns the written manifest.
+ */
+export function writeProfileBundles(
+  profileDir: string, manifest: ProfileManifest, bundles: readonly string[],
+): ProfileManifest {
+  const updated = { ...manifest, dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: [...bundles] } } }
+  writeProfileManifest(profileDir, updated)
+  return updated
+}
+
+/**
+ * Reconcile installed bundle declarations after a successful package-manager operation.
+ * Dependency-managed entries disappear when removed or when their package loses its declaration;
+ * template entries retain their order and duplicates. New bundle dependencies activate automatically.
+ * @param options - location, inventory captured before pnpm, and whether explicitly disabled bundles remain disabled.
+ * @returns updated inventory and newly added ordinary dependencies for caller-owned warnings.
+ */
+export function reconcileProfilePlugins(options: ProfilePluginLocation & {
+  readonly before: ProfilePluginInventory
+  readonly preserveDisabled: boolean
+}): ProfilePluginReconciliation {
+  const after = readProfilePlugins(options)
+  const beforeNames = new Set(options.before.dependencies.map(dependency => dependency.name))
+  const afterNames = new Set(after.dependencies.map(dependency => dependency.name))
+  const bundleNames = new Set(after.dependencies.filter(dependency => dependency.bundle).map(dependency => dependency.name))
+  const disabled = new Set(options.preserveDisabled
+    ? options.before.dependencies.filter(dependency => dependency.bundle && !dependency.enabled).map(dependency => dependency.name)
+    : [])
+  const previous = after.manifest.dsh?.profile?.bundles ?? []
+  const bundles = previous.filter(name => !(beforeNames.has(name) || afterNames.has(name)) || bundleNames.has(name))
+  for (const dependency of after.dependencies) {
+    if (dependency.bundle && !disabled.has(dependency.name) && !bundles.includes(dependency.name)) bundles.push(dependency.name)
   }
-  const dependencySet = new Set(dependencies)
-  for (const packageName of [...plugins]) {
-    // Only dependency-managed entries are subject to removal; template
-    // bundles (dsh-base and friends) are not dependencies.
-    const wasDependency = beforeDeps.has(packageName) || dependencySet.has(packageName)
-    const stillBundle = dependencySet.has(packageName) && dependencyIsBundle(binName, packageName, installAnchor, profileDir)
-    if (wasDependency && !stillBundle) {
-      plugins.splice(plugins.indexOf(packageName), 1)
-      removed.push(packageName)
-    }
+  const changed = bundles.length !== previous.length || bundles.some((name, index) => name !== previous[index])
+  const manifest = changed ? writeProfileBundles(options.profileDir, after.manifest, bundles) : after.manifest
+  return {
+    plugins: {
+      manifest,
+      dependencies: after.dependencies.map(dependency => ({ ...dependency, enabled: bundles.includes(dependency.name) })),
+    },
+    addedPlainDependencies: after.dependencies.filter(dependency => !dependency.bundle && !beforeNames.has(dependency.name))
+      .map(dependency => dependency.name),
   }
-  const changed = added.length > 0 || removed.length > 0
-  if (!changed) return { changed: false, added, removed }
-  after.dsh = { ...after.dsh, profile: { ...after.dsh?.profile, bundles: plugins } }
-  writeProfileManifest(profileDir, after)
-  return { changed: true, added, removed }
 }

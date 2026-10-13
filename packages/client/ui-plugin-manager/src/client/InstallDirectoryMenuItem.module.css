@@ -1,0 +1,14 @@
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.description {
+  overflow: hidden;
+  color: var(--dsh-text-muted, #6b7280);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

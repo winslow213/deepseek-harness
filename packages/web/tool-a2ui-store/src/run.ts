@@ -71,10 +71,10 @@ export interface A2uiRun {
    * it in the composed shell service with the session's workspace as workdir,
    * and append the run's `a2ui/update` `started` event to the session.
    * @param request - the command, its correlation and session, and optional bound.
-   * @returns the live run handle.
+   * @returns the live run handle, resolved once the process is prepared.
    * @throws when the shell service is absent or the template is invalid.
    */
-  start(request: A2uiRunStart): A2uiRunHandle
+  start(request: A2uiRunStart): Promise<A2uiRunHandle>
   /**
    * The handle for one run id.
    * @param runId - the opaque run identity minted by the capability.
@@ -141,7 +141,7 @@ export class ShellA2uiRun implements A2uiRun {
   /** @param ctx - registrant context that may acquire the shell service. */
   constructor(private readonly ctx: Context) {}
 
-  start(request: A2uiRunStart): A2uiRunHandle {
+  async start(request: A2uiRunStart): Promise<A2uiRunHandle> {
     const shell = this.ctx.get('shell')
     if (shell === undefined) {
       throw new Error('a2uiRun: no shell service is mounted; a `command` action cannot run')
@@ -157,7 +157,9 @@ export class ShellA2uiRun implements A2uiRun {
       // a runaway tail still spills to a file rather than growing memory.
       stdoutMaxBytes: 64 * 1024 * 1024,
     })
-    const proc = shell.start(spec)
+    // The resolved deadline kills the run; the page's own stop() is the other
+    // way out, and read() reports either as a settle.
+    const proc: ShellProcess = await shell.execute(spec)
     const runId = `a2ui-run-${randomBytes(6).toString('hex')}`
     const handle: A2uiRunHandle = {
       runId, proc, command: filled, seq: 0, totalBytes: 0,

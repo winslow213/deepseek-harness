@@ -51,7 +51,7 @@ function buildTranslate(locale: 'en' | 'zh'): A2uiTranslate {
 /** The restricted expression evaluator the local actions run through. */
 const evaluateExpression: A2uiExpressionEvaluator = (expression, values) => {
   try {
-    return evaluateA2uiExpression(expression, values as Parameters<typeof evaluateA2uiExpression>[1])
+    return evaluateA2uiExpression(expression, values)
   } catch {
     return null
   }
@@ -229,6 +229,10 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
       const data = event.data as A2uiOpenerMessage | null
       if (data === null) return
       switch (data.type) {
+        case 'a2ui/init':
+          // The popup renders the page it was opened with; this message only
+          // re-announces that page, so there is nothing to apply here.
+          break
         case 'a2ui/ack':
           dispatch({ type: 'ack' })
           break
@@ -254,7 +258,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
           dispatch({ type: 'live-done' })
           break
         case 'a2ui/scriptResult': {
-          const text = data.value === undefined ? '(no value)' : JSON.stringify(data.value)
+          const text = data.value === undefined ? t('run.noValue') : JSON.stringify(data.value)
           dispatch({ type: 'script-result', text })
           const optionField = optionActionsRef.current?.get(data.actionId)
           if (optionField !== undefined && data.value !== undefined) {
@@ -292,7 +296,7 @@ function A2uiPopupHost({ surfaceId, page, t, opener }: {
     }
     window.addEventListener('message', onMessage)
     return () => { window.removeEventListener('message', onMessage) }
-  }, [opener])
+  }, [opener, t])
 
   const panel = page.kind === 'canvas'
     ? <A2uiCanvasPanel page={page} surfaceId={surfaceId} t={t} busy={busy} onSubmit={onSubmit}

@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-sandbox-read-shielding-between-accounts.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-16-sandbox-read-shielding-between-accounts.md
-2026-09-16-sandbox-read-shielding-between-accounts.md: 2cda42c7d983b633d40a0e79af0412fb7c02a889
-2026-09-16-sandbox-read-shielding-between-accounts.zh.md: fd07367213d93f23db1ef08ddd81928c678158da
+/agent-note-read-shielding-between-accounts-sharing-one-host:
+  en: b857dd7afb28f581
+  zh: 486fcfeea4c35d27
+/agent-note-read-shielding-between-accounts-sharing-one-host/problem:
+  en: bc22ba8494a93cbe
+  zh: 07627f3b575f74d3
+/agent-note-read-shielding-between-accounts-sharing-one-host/decision:
+  en: a7fe8ebdff321bbb
+  zh: 7525e99d537df2ad
+/agent-note-read-shielding-between-accounts-sharing-one-host/alternatives-considered:
+  en: 5f1828855dce816d
+  zh: 3f11a1419a85b245
+/agent-note-read-shielding-between-accounts-sharing-one-host/consequences:
+  en: eaf3fdd3b25e7064
+  zh: 40e2bdbc8ef34740

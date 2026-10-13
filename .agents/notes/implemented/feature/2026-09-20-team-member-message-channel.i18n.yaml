@@ -1,6 +1,31 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-20-team-member-message-channel.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-20-team-member-message-channel.md
-2026-09-20-team-member-message-channel.md: 73d9b5aac5876a8a69e74571968d950bcf10932d
-2026-09-20-team-member-message-channel.zh.md: 95b4f538d6ca3110694c60fafcb23ef641a6edf8
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive:
+  en: c933cb5301a19409
+  zh: 470126b80399404d
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/problem:
+  en: 762e46da4ab448dc
+  zh: 1b9b3c30adb892ed
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/decision:
+  en: f34f34519628c4d4
+  zh: 378b9ca3decb1651
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/http-surface:
+  en: 855e50fae8f0a130
+  zh: eedad020f9f5c594
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/browser-surface:
+  en: 5aee1a7d9e654317
+  zh: f3b35d085c3de7bd
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/alternatives-considered:
+  en: 0d008223302f3616
+  zh: 7d2ba2e96a3adebd
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/consequences:
+  en: ebbd9d90c3ccf94c
+  zh: 2347773f4e7a1ee0
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/testing:
+  en: 988e250115530bf3
+  zh: a561d53d55460693
+/agent-note-member-to-member-message-channel-over-a-redis-transport-with-a-postgres-archive/related:
+  en: 27f84487c1c475b7
+  zh: f7297942e59252f6

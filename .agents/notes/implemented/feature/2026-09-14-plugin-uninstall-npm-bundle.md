@@ -25,3 +25,5 @@ English | [中文](2026-09-14-plugin-uninstall-npm-bundle.zh.md)
 ## Consequences
 
 An operator can now uninstall any plugin installed through the Web UI, including npm-bundle, from the same Settings tab section without leaving the browser or touching the host filesystem. The host package's test suite grew by 4 new cases covering npm-bundle removal, the in-box-bundle-name non-match, a `pnpm remove` failure, and the supervised-restart request on that path. The Remote's and both packages' READMEs, and the Settings tab's uninstall copy, all dropped the "npm-bundle is not covered" language this note's predecessor recorded — see [the excluded-scope decision it reverses](2026-09-14-plugin-uninstall-remote.md) for why the exclusion existed and what changed.
+
+**Current ownership.** npm-bundle removal ships as `uninstallPlugin` on `@deepseek-ai/dsh-plugin-manager`, keeping the dependency-keyed routing this note describes: an exact key in the profile manifest routes to bundle removal, and the patch-row path handles the other three forms.

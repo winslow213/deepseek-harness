@@ -177,7 +177,10 @@ export function resolveRgPath(): Promise<string> {
       ? join(executable.dir, `${executable.name}-rg.exe`)
       : `${process.execPath}-rg`
     if ('pkg' in process && existsSync(executableSidecar)) return executableSidecar
-    return (await import('@vscode/ripgrep')).rgPath
+    const dependency = (await import('@vscode/ripgrep')).rgPath
+    return process.versions.electron === undefined
+      ? dependency
+      : dependency.replace(/\.asar(?=[\\/])/u, '.asar.unpacked')
   })
   return rgPathPromise
 }
@@ -205,19 +208,19 @@ export function resolveRgPath(): Promise<string> {
  * @param argv - the ripgrep argv to confine.
  * @returns the argv to spawn.
  */
-function confineSearch(ctx: Context, exec: ToolExecution, argv: string[]): string[] {
+async function confineSearch(ctx: Context, exec: ToolExecution, argv: string[]): Promise<string[]> {
   const sandbox = ctx.get('sandbox')
   const policyService = ctx.get('sandboxPolicy')
   if (sandbox === undefined || policyService === undefined) return argv
   const policy = policyService.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })
   if (policy.mode === 'danger-full-access') return argv
-  return [...sandbox.confine(argv, { ...policy, mode: policy.mode }).argv]
+  return [...(await sandbox.confine(argv, { ...policy, mode: policy.mode })).argv]
 }
 
 /**
  * Run the packaged ripgrep binary with a plain argv vector and return its
  * complete raw stdout. The working directory is the calling agent's session
- * cwd (`exec.agent.session.header.cwd`) when available, else
+ * current directory when available, else
  * `process.cwd()`. `exec.signal` is forwarded so the cooperative tool timeout
  * (`@deepseek-ai/dsh-tool-call-timeout-policy`) and caller cancellation terminate the
  * process tree.
@@ -245,7 +248,7 @@ function confineSearch(ctx: Context, exec: ToolExecution, argv: string[]): strin
  * creation time becomes `SEARCH_ABORTED` instead.
  *
  * @param ctx - the plugin context; execution uses its `subprocess` service.
- * @param exec - the tool-execution context; supplies the session cwd and the abort signal.
+ * @param exec - the tool-execution context; supplies the owning Agent and the abort signal.
  * @param toolName - `glob` or `grep`, used in error messages.
  * @param argv - the ripgrep arguments (every model value an unquoted argv element; no shell layer exists).
  * @param rawOutputMaxBytes - cap on the complete raw stdout the tool will parse.
@@ -265,12 +268,13 @@ export async function runRipgrep(
   if (exec.signal.aborted) {
     throw new SearchError(`${toolName} was aborted before completion (tool timeout or caller cancellation)`, 'SEARCH_ABORTED')
   }
-  const cwd = exec.agent?.session.header.cwd
-  const workdir = cwd ?? process.cwd()
+  const workdir = exec.agent === undefined
+    ? process.cwd()
+    : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
   let handle: SubprocessHandle
   try {
     handle = ctx.subprocess.spawn({
-      argv: confineSearch(ctx, exec, [await resolveRgPath(), '--no-config', ...argv]),
+      argv: await confineSearch(ctx, exec, [await resolveRgPath(), '--no-config', ...argv]),
       cwd: workdir,
       stdio: {
         stdin: 'ignore',

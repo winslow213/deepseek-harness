@@ -82,7 +82,7 @@ describe('TeamAccountRow', () => {
     mount('en')
     fireEvent.click(screen.getByRole('button', { name: /Sign out/ }))
 
-    await waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('/api/logout', { method: 'POST' }) })
+    await waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('api/logout', { method: 'POST' }) })
     await act(async () => {})
     expect(hrefs).toEqual(['/'])
   })

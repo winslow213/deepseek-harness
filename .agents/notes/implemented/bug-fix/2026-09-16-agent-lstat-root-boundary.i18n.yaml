@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-agent-lstat-root-boundary.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-agent-lstat-root-boundary.md
-2026-09-16-agent-lstat-root-boundary.md: 46347028668fcbe14759f947ccbf2cb632fc423e
-2026-09-16-agent-lstat-root-boundary.zh.md: da99f1b4d91ed9b4fa0eabac3ebbe8966680083d
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check:
+  en: c678b7ac37e17c89
+  zh: 1b9281d22e28634e
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check/problem:
+  en: 8ab1883818cc0a7d
+  zh: 9c5c75f5e1277ebd
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check/decision:
+  en: fe9c23a6ed40a06a
+  zh: ffd7b862b1e8a022
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: 4237c596c10e1ee9
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check/alternatives-considered/why-not-special-case-abspath-root-directly-instead-of-catching-the-specific-error-message:
+  en: f91b695a1e430e5f
+  zh: 02a5f4be860f26e1
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check/alternatives-considered/why-not-always-resolve-abspath-directly-for-lstat-and-drop-the-parent-based-check-entirely:
+  en: eba33578784807c6
+  zh: 16ac6703092fb3a7
+/agent-note-lstat-on-a-mounted-root-always-failed-its-own-boundary-check/consequences:
+  en: bdc405ed30cf4b80
+  zh: 504982d80e0d74e1

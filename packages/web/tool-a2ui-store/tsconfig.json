@@ -40,7 +40,7 @@
       "path": "../../shell/shell"
     },
     {
-      "path": "../../code-runtime/code-runtime"
+      "path": "../../ptc-runtime/ptc-runtime"
     }
   ]
 }

@@ -84,7 +84,7 @@ export function invokeAction(
         type: 'a2ui/run',
         surfaceId,
         action,
-        values: values as Record<string, unknown>,
+        values,
       }
       return { kind: 'command', message }
     }
@@ -93,18 +93,18 @@ export function invokeAction(
         type: 'a2ui/runScript',
         surfaceId,
         action,
-        values: values as Record<string, unknown>,
+        values,
       }
       return { kind: 'script', message }
     }
     case 'model': {
-      const message: A2uiPopupMessage = { type: 'a2ui/action', surfaceId, action, values: values as Record<string, unknown> }
+      const message: A2uiPopupMessage = { type: 'a2ui/action', surfaceId, action, values }
       return { kind: 'model', message }
     }
     default: {
       const _exhaustive: never = execution
       void _exhaustive
-      const message: A2uiPopupMessage = { type: 'a2ui/action', surfaceId, action, values: values as Record<string, unknown> }
+      const message: A2uiPopupMessage = { type: 'a2ui/action', surfaceId, action, values }
       return { kind: 'model', message }
     }
   }

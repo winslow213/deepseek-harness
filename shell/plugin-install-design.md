@@ -1,6 +1,17 @@
 # WebUI Plugin Install — design (draft for review)
 
-Status: proposed. Working notes, not committed docs.
+Status: superseded. The `@deepseek-ai/dsh-host-plugin-install` service, the
+`@deepseek-ai/dsh-client-ui-settings-plugin-install` tab, the `pluginInstall`
+Remote namespace, and the `DSH_PLUGIN_INSTALL` composition switch no longer
+exist. `@deepseek-ai/dsh-plugin-manager` now owns install, removal, and
+enable/disable for every profile, reached through the `plugin_manager` tool —
+enabled by the `cordis` agent preset (Creator mode) and gated per call by the
+sandbox approval policy — and through the Web **Plugins** page. The
+marker-delimited row protocol this document specifies survived that move into
+`packages/boot/plugin-manager/src/plugin-row.ts`, so the rationale in
+"Open architecture decisions" still explains shipped behavior. Nothing else
+here should be used as current design. See the Agent Note
+`2026-09-05-operator-gated-plugin-install-remote` for what carried over.
 
 ## Goal
 
@@ -150,7 +161,7 @@ the full doc/catalog gate surface. File plan:
 
 ## Progress
 
-- [x] 2026-09-04 commit `11a30687a5` — extracted bundle reconcile to
+- [x] 2026-09-04 — extracted bundle reconcile to
   `@deepseek-ai/dsh-app-boot` (`profile-plugins.ts`):
   `dependencyIsBundle` + `reconcileProfileBundles` (+ result type). CLI keeps
   pnpm forwarder + warning stream. app-boot 143 tests pass, built-bin plugin

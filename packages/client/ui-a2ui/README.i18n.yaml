@@ -1,6 +1,58 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-a2ui/README.md
-README.md: 3c64947132f2dc59c7d06b540971d566add58456
-README.zh.md: 15989968560350df70d50734536faa6778168d7e
+/:
+  en: 8c532c9190e7cf26
+  zh: 089c18bd4988e423
+/deepseek-ai-dsh-client-ui-a2ui:
+  en: 4756a28632438347
+  zh: d8479bdd500d846f
+/deepseek-ai-dsh-client-ui-a2ui/summary:
+  en: 1d1e14ec94292e2c
+  zh: e7c1d27fa66aef18
+/deepseek-ai-dsh-client-ui-a2ui/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-client-ui-a2ui/use-this-package:
+  en: 51db5e38064eaadd
+  zh: 1764a3b6c3941408
+/deepseek-ai-dsh-client-ui-a2ui/use-this-package/assembly:
+  en: 76066d947ac0be3d
+  zh: fe2176358a2834c7
+/deepseek-ai-dsh-client-ui-a2ui/use-this-package/filling-in-a-form:
+  en: 1e119a8581a7623c
+  zh: 2cae8941216d6531
+/deepseek-ai-dsh-client-ui-a2ui/use-this-package/arranging-a-canvas:
+  en: 82fee75a90372696
+  zh: 2cf2b96defbb9ea8
+/deepseek-ai-dsh-client-ui-a2ui/use-this-package/submitting:
+  en: 95f0a64a5363c8cd
+  zh: d85e424ab3caf8d2
+/deepseek-ai-dsh-client-ui-a2ui/understand-the-implementation:
+  en: 7a255e92ab3608fd
+  zh: 0ca4262bccf7ac5c
+/deepseek-ai-dsh-client-ui-a2ui/understand-the-implementation/the-projection:
+  en: ad56e750731e3f43
+  zh: 112709a96eb1d5c5
+/deepseek-ai-dsh-client-ui-a2ui/understand-the-implementation/the-renderer:
+  en: 136ebc615750732c
+  zh: 80add1b79ffc37dc
+/deepseek-ai-dsh-client-ui-a2ui/understand-the-implementation/source-map:
+  en: 20258f26f2495bb1
+  zh: 21e29cc19dae4fd5
+/deepseek-ai-dsh-client-ui-a2ui/further-exploration:
+  en: dec4ca1f54dbc8e4
+  zh: 499e96dd1e032ecc
+/deepseek-ai-dsh-client-ui-a2ui/model-experience:
+  en: 605d386c0a1c8b3c
+  zh: f493f28dcc34cd9e
+/deepseek-ai-dsh-client-ui-a2ui/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: de54f3467ef3b9be
+/deepseek-ai-dsh-client-ui-a2ui/known-limitations-and-deferred-work:
+  en: 18ff1a82367300db
+  zh: d4b9182e572803a5
+/deepseek-ai-dsh-client-ui-a2ui/known-limitations-and-deferred-work/dev-note:
+  en: b3b6c1bb50154798
+  zh: 2bea95ac6a76fcfd

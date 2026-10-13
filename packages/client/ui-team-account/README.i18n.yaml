@@ -1,6 +1,49 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-team-account/README.md
-README.md: b9a04c4e86774b0b96ee087a3cc491d9edd67323
-README.zh.md: 95333e894d8086c6c53e408fe7e221eca0a053af
+/:
+  en: 38e5e6b3f0b38006
+  zh: 0aa6a86e948e4980
+/deepseek-ai-dsh-client-ui-team-account:
+  en: 6fc29510944b4f1c
+  zh: 75baec9e568504f5
+/deepseek-ai-dsh-client-ui-team-account/summary:
+  en: ca87b02675bea0c1
+  zh: f123a28b8573643e
+/deepseek-ai-dsh-client-ui-team-account/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: ffab54373e9e61f0
+/deepseek-ai-dsh-client-ui-team-account/use-this-package:
+  en: a3558f0f832bbe82
+  zh: 06711d211a687e34
+/deepseek-ai-dsh-client-ui-team-account/use-this-package/the-sign-out-row:
+  en: 4a0663fb1889dfcd
+  zh: 7705ab284de57190
+/deepseek-ai-dsh-client-ui-team-account/use-this-package/the-pairing-code-row:
+  en: 7ab32954eb37759e
+  zh: dbfe4fc8b2a080f8
+/deepseek-ai-dsh-client-ui-team-account/use-this-package/the-message-center-row:
+  en: fac7e57a7051f1b2
+  zh: 14cf8a9782d7ddc8
+/deepseek-ai-dsh-client-ui-team-account/use-this-package/when-they-appear:
+  en: 15ead66f6149e71a
+  zh: 6b8d9c26fc24f9bf
+/deepseek-ai-dsh-client-ui-team-account/understand-the-implementation:
+  en: 92778afc20f96e4d
+  zh: 4d2111c5d612061c
+/deepseek-ai-dsh-client-ui-team-account/further-exploration:
+  en: 7cb40fc6b6e90cc6
+  zh: 18227d23955f70a0
+/deepseek-ai-dsh-client-ui-team-account/model-experience:
+  en: d0cea3e141f53e4b
+  zh: 0f4c9a44900a6b5b
+/deepseek-ai-dsh-client-ui-team-account/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: ef49bdb050372955
+/deepseek-ai-dsh-client-ui-team-account/known-limitations-and-deferred-work:
+  en: 0b886eeb152b704e
+  zh: f2f17249406cf1c7
+/deepseek-ai-dsh-client-ui-team-account/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: cdd2a143b725accd

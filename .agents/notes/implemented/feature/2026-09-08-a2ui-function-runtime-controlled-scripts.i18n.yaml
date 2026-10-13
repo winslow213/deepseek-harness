@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-08-a2ui-function-runtime-controlled-scripts.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-08-a2ui-function-runtime-controlled-scripts.md
-2026-09-08-a2ui-function-runtime-controlled-scripts.md: b524feb6bcd7cae1158009bd186ab76fd6949b3b
-2026-09-08-a2ui-function-runtime-controlled-scripts.zh.md: cc0b07c7ec7ddd69e92a9622b29a07584386954e
+/agent-note-a2ui-unified-function-runtime-and-controlled-scripts:
+  en: 95931b880d63f8c4
+  zh: bdec2047b73a610d
+/agent-note-a2ui-unified-function-runtime-and-controlled-scripts/problem:
+  en: 0d29391901e78984
+  zh: 862bc8726413e7d0
+/agent-note-a2ui-unified-function-runtime-and-controlled-scripts/decision:
+  en: b82e756449e49e02
+  zh: cd863ff2fd576252
+/agent-note-a2ui-unified-function-runtime-and-controlled-scripts/alternatives-considered:
+  en: aee8417bbf89a5aa
+  zh: a76fe0e92b009683
+/agent-note-a2ui-unified-function-runtime-and-controlled-scripts/consequences:
+  en: 1acb5d877ba0a835
+  zh: 55959beca50da8fb

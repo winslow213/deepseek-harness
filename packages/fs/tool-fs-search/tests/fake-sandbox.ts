@@ -11,10 +11,9 @@
  * @module dsh-tool-fs-search/tests/fake-sandbox
  */
 
-import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { ConfinedArgv, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProvider, type ConfinedArgv, type SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import SessionProjection from '@deepseek-ai/dsh-session-projection'
 
@@ -46,18 +45,12 @@ export function sessionAgent(cwd?: string): { session: Session } {
 let sessionCounter = 0
 
 /** A pass-through sandbox provider that records the policies it was handed. */
-export class FakeSandbox extends Service {
-  static inject = ['subprocess']
-
+export class FakeSandbox extends SandboxProvider {
   /** Every `confine()` call in order. */
   readonly confinements: Confinement[] = []
 
-  constructor(ctx: Context) {
-    super(ctx, 'sandbox')
-  }
-
   /** Record the call and hand back the caller's argv untouched (no real runner). */
-  confine(argv: readonly string[], policy: SandboxPolicy): ConfinedArgv {
+  async confine(argv: readonly string[], policy: SandboxPolicy): Promise<ConfinedArgv> {
     this.confinements.push({ argv: [...argv], policy })
     return {
       argv: [...argv],

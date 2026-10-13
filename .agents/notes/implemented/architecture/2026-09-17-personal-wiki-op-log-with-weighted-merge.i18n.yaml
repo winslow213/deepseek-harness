@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-personal-wiki-op-log-with-weighted-merge.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-17-personal-wiki-op-log-with-weighted-merge.md
-2026-09-17-personal-wiki-op-log-with-weighted-merge.md: b5f1efc2e2026c058ee537c5f8787f62bb2f42fa
-2026-09-17-personal-wiki-op-log-with-weighted-merge.zh.md: 77734b37ef27518bc5577dae31dbd60d35b173dc
+/agent-note-the-personal-wiki-records-an-append-only-op-log-merged-by-a-weighted-gate:
+  en: bf2e1beb147d2634
+  zh: aea4805f87276860
+/agent-note-the-personal-wiki-records-an-append-only-op-log-merged-by-a-weighted-gate/problem:
+  en: 08c7ab5f39c10575
+  zh: 947b52343281392a
+/agent-note-the-personal-wiki-records-an-append-only-op-log-merged-by-a-weighted-gate/decision:
+  en: d1b16cad6182c63c
+  zh: fd4277602a134764
+/agent-note-the-personal-wiki-records-an-append-only-op-log-merged-by-a-weighted-gate/alternatives-considered:
+  en: 62e6dadb63ba7b1f
+  zh: 8e5b4fa875dcacf4
+/agent-note-the-personal-wiki-records-an-append-only-op-log-merged-by-a-weighted-gate/consequences:
+  en: 71115ed8442e9f08
+  zh: 3fe5855de3b382c3

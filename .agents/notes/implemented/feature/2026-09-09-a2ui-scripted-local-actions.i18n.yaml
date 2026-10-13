@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-a2ui-scripted-local-actions.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-09-a2ui-scripted-local-actions.md
-2026-09-09-a2ui-scripted-local-actions.md: 03d89a323dfc8afc98ff2ecb63256c5083eaf36b
-2026-09-09-a2ui-scripted-local-actions.zh.md: e8baac588f5dc2e2e69cc80b46dbb0eec258cc43
+/agent-note-a2ui-scripted-local-actions:
+  en: e35afe9cdc350eaa
+  zh: 9020de1e4f581d3a
+/agent-note-a2ui-scripted-local-actions/problem:
+  en: 59c9ec8cf7204f76
+  zh: ccc9068f98e2d596
+/agent-note-a2ui-scripted-local-actions/decision:
+  en: 2eb01848aeed3d3f
+  zh: 6a0bccd80dbb468c
+/agent-note-a2ui-scripted-local-actions/alternatives-considered:
+  en: 67155019b61f0d74
+  zh: a5eef6be075a189c
+/agent-note-a2ui-scripted-local-actions/consequences:
+  en: d3df31f9419868bc
+  zh: 6025bbbef7344849

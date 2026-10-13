@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-14-plugin-uninstall-npm-bundle.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-plugin-uninstall-npm-bundle.md
-2026-09-14-plugin-uninstall-npm-bundle.md: 32cf05002b0addf438e3fa4996cbe86410ae27e5
-2026-09-14-plugin-uninstall-npm-bundle.zh.md: 8fb8de6bbc8ab769a06185f0bf2e26c94961638d
+/agent-note-plugin-uninstall-extends-to-npm-bundle-dependencies:
+  en: e79d6bfacceedb59
+  zh: b62772f7a5b38c51
+/agent-note-plugin-uninstall-extends-to-npm-bundle-dependencies/problem:
+  en: a2d8b38d01a92ba9
+  zh: b99c3a0f5113f3da
+/agent-note-plugin-uninstall-extends-to-npm-bundle-dependencies/decision:
+  en: 24858229459c0b29
+  zh: 5770f7477ef5458b
+/agent-note-plugin-uninstall-extends-to-npm-bundle-dependencies/alternatives-considered:
+  en: 8a00785fcaa4c17e
+  zh: 97b9ba9f310d054f
+/agent-note-plugin-uninstall-extends-to-npm-bundle-dependencies/consequences:
+  en: a0edfa08d5df5f71
+  zh: 10aadbab231cd249

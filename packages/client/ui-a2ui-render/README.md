@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 
 Import `renderA2uiPopup` and mount one page into a popup window's DOM node:
 
-```ts
+```ts ignore-check
 import { renderA2uiPopup } from '@deepseek-ai/dsh-client-ui-a2ui-render'
 
 renderA2uiPopup(root, { surfaceId, page })

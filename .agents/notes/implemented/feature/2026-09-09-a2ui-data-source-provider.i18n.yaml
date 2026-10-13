@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-a2ui-data-source-provider.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-09-a2ui-data-source-provider.md
-2026-09-09-a2ui-data-source-provider.md: 49e22bc9d5e633960800df09f9474366f7ebb19e
-2026-09-09-a2ui-data-source-provider.zh.md: 0b416ebe8e6d4b6575b0d203113a6c2366bc75f0
+/agent-note-a2ui-dynamic-data-source-provider-seam:
+  en: 71c041d2b72e5eeb
+  zh: 0a1a4e7fd1330f9d
+/agent-note-a2ui-dynamic-data-source-provider-seam/problem:
+  en: bf5f3bedbda705ec
+  zh: 0e813c5d82599e33
+/agent-note-a2ui-dynamic-data-source-provider-seam/decision:
+  en: 5d1f6881982c3a06
+  zh: bd5569a71bf88245
+/agent-note-a2ui-dynamic-data-source-provider-seam/alternatives-considered:
+  en: e5d763f9923bae94
+  zh: c9f630083e255e5e
+/agent-note-a2ui-dynamic-data-source-provider-seam/consequences:
+  en: aeaf7416f28afbd8
+  zh: 2c06e29a3a7704bc

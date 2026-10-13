@@ -1,7 +1,7 @@
 /**
  * Host execution of A2UI `script` actions. A script is a small async program
- * the model authors into the page; it runs on the composed controlled code
- * runtime (`ctx.codeRuntime`, the worker-thread backend in the web profile),
+ * the model authors into the page; it runs on the composed controlled PTC
+ * runtime (`ctx.ptcRuntime`, the Node backend in the web profile),
  * never in the browser and never in the host process. The program may call
  * only the `a2ui.*` members its `binds` grant — each grant maps to one host
  * helper behind the web capability, so a script can fetch or reshape data
@@ -16,7 +16,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { CodeBindingFunction, CodeBindingNamespace, CodeJsonValue } from '@deepseek-ai/dsh-code-runtime'
+import type { PtcBindingFunction, PtcBindingNamespace, PtcJsonValue } from '@deepseek-ai/dsh-ptc-runtime'
 import type { A2uiRunFieldValues, A2uiScriptJson } from './types.ts'
 
 /** One granted binding member a script may call. */
@@ -42,7 +42,7 @@ export interface A2uiRunScript {
    * @param fields - collected field values (not directly bound; a script that
    *   needs them should embed them, or a later revision binds them by name).
    * @returns the run outcome.
-   * @throws when no code runtime is mounted or a program/environment error.
+   * @throws when no PTC runtime is mounted or a program/environment error.
    */
   run(program: string, binds: readonly A2uiScriptBinding[], fields: A2uiRunFieldValues): Promise<A2uiScriptResult>
 }
@@ -58,7 +58,7 @@ function grant(name: string): name is A2uiScriptBinding {
 }
 
 /** Uppercase the string form of one JSON value (deterministic pure helper). */
-function textHelper(value: CodeJsonValue): CodeJsonValue {
+function textHelper(value: PtcJsonValue): PtcJsonValue {
   const text = typeof value === 'string' ? value : JSON.stringify(value)
   return text.toUpperCase()
 }
@@ -71,10 +71,16 @@ type WebFetchOutcome = {
   truncated: boolean
 }
 
+/** The web capability this binding needs, declared locally so the store does not
+ * depend on the whole web Service Definition; `WebRuntime.fetch` has this shape. */
+interface WebFetchCapability {
+  fetch(request: { url: string }): Promise<WebFetchOutcome>
+}
+
 /** The `fetch` helper surfaced through the web capability. */
-function fetchHelper(fn: (request: { url: string }) => Promise<WebFetchOutcome>): CodeBindingFunction {
-  return async (args: unknown): Promise<CodeJsonValue> => {
-    const request = args as FetchArgs
+function fetchHelper(fn: (request: { url: string }) => Promise<WebFetchOutcome>): PtcBindingFunction {
+  return async (args: unknown): Promise<PtcJsonValue> => {
+    const request = args as Partial<FetchArgs> | null
     if (typeof request?.url !== 'string' || !/^https?:\/\//.test(request.url)) {
       throw new Error('a2ui.fetch: expected an `http(s)://` url')
     }
@@ -90,24 +96,24 @@ function fetchHelper(fn: (request: { url: string }) => Promise<WebFetchOutcome>)
 }
 
 /**
- * The code-runtime-backed script capability registered on `ctx.a2uiRunScript`.
- * The code runtime and the web service are resolved lazily so the plugin
+ * The PTC-runtime-backed script capability registered on `ctx.a2uiRunScript`.
+ * The PTC runtime and the web service are resolved lazily so the plugin
  * mounts in compositions without them; only an actual script run needs one.
  */
 export class CodeA2uiRunScript implements A2uiRunScript {
   /** @param ctx - registrant context that may acquire the code runtime and web service. */
   constructor(private readonly ctx: Context) {}
 
-  private async bindingFunctions(binds: readonly A2uiScriptBinding[]): Promise<Record<string, CodeBindingFunction>> {
-    const functions: Record<string, CodeBindingFunction> = {}
+  private bindingFunctions(binds: readonly A2uiScriptBinding[]): Record<string, PtcBindingFunction> {
+    const functions: Record<string, PtcBindingFunction> = {}
     for (const name of binds) {
       if (!grant(name)) continue
       if (name === 'text') {
-        functions.text = async args => textHelper(args as CodeJsonValue)
+        functions.text = args => Promise.resolve(textHelper(args as PtcJsonValue))
         continue
       }
       // fetch
-      const web = this.ctx.get('web')
+      const web = this.ctx.get('web') as WebFetchCapability | undefined
       if (web === undefined) {
         throw new Error('a2uiRunScript: no web service is mounted; a `fetch` binding cannot run')
       }
@@ -125,16 +131,19 @@ export class CodeA2uiRunScript implements A2uiRunScript {
   }
 
   async run(program: string, binds: readonly A2uiScriptBinding[], _fields: A2uiRunFieldValues): Promise<A2uiScriptResult> {
-    const runtime = this.ctx.get('codeRuntime')
+    const runtime = this.ctx.get('ptcRuntime')
     if (runtime === undefined) {
-      throw new Error('a2uiRunScript: no code runtime is mounted; a `script` action cannot run')
+      throw new Error('a2uiRunScript: no PTC runtime is mounted; a `script` action cannot run')
     }
-    const functions = await this.bindingFunctions(binds)
-    const namespaces: CodeBindingNamespace[] = [{ global: 'a2ui', functions }]
-    const result = await runtime.run({
+    const functions = this.bindingFunctions(binds)
+    const namespaces: PtcBindingNamespace[] = [{ global: 'a2ui', functions }]
+    // `resolve` supplies the working directory, deadline, and sandbox policy a
+    // run requires; this caller chooses none of them, so the provider's own
+    // defaults are what a script ends up confined by.
+    const result = await runtime.run(runtime.resolve({
       program,
       bindings: namespaces,
-    })
+    }))
     return {
       ...result.value === undefined ? {} : { value: result.value },
       logs: result.logs,

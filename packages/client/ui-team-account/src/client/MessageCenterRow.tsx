@@ -6,7 +6,7 @@
  * while the document carries the `<meta name="team-shell" content="1">` marker
  * the team reverse proxy injects, matching the other team rows.
  */
-import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronRightOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { hasTeamShellMarker } from './TeamAccountRow.tsx'
@@ -39,7 +39,7 @@ export function MessageCenterRow({ t }: MessageCenterRowProps) {
         <span className={css.title}>{t('messageCenterTitle')}</span>
         <span className={css.desc}>{t('messageCenterHint')}</span>
       </span>
-      <IconChevronRightOutline14 className={css.chevron} />
+      <IconChevronRightOutlineRegular size={14} className={css.chevron} />
     </button>
   )
 }

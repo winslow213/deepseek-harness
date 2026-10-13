@@ -25,7 +25,7 @@ kind: "package-reference"
 
 引入 `renderA2uiPopup` 并把一个页面挂载到弹窗窗口的 DOM 节点：
 
-```ts
+```ts ignore-check
 import { renderA2uiPopup } from '@deepseek-ai/dsh-client-ui-a2ui-render'
 
 renderA2uiPopup(root, { surfaceId, page })

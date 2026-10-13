@@ -132,7 +132,7 @@ export class BashA2uiDataProvider implements A2uiDataProvider {
       ...(spec.timeoutMs === undefined ? {} : { timeoutMs: spec.timeoutMs }),
       stdoutMaxBytes: STDOUT_MAX_BYTES,
     })
-    const result = await shell.run(resolved)
+    const result = await (await shell.execute(resolved)).result()
     if (result.exitCode !== 0) {
       const detail = result.stderr.text.trim()
       throw new Error(`a2ui data source "${source}" failed: exit ${String(result.exitCode)}${detail === '' ? '' : `: ${detail}`}`)

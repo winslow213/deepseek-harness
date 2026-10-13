@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import {
-  IconChevronRightOutline14, IconTrashOutline16, IconCloseOutline16, IconDownloadOutline16, IconShareOutline16,
+  IconChevronRightOutlineRegular, IconTrashOutlineRegular, IconCloseOutlineRegular, IconDownloadOutlineRegular, IconShareOutlineRegular,
   Tooltip, useDismissOnOutsidePointer, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { A2uiToolWire, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
@@ -37,7 +37,10 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
   const [importValue, setImportValue] = useState('')
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState(false)
-  const current = useSessions(state => state.current)
+  // The sidebar is root scope, so the panel resolves the main-view Session the
+  // same way the shell does: the row the main view retains.
+  const current = useSessions(state => Object.values(state.byId)
+    .find(session => (session.retainedBy.mainView ?? 0) > 0)?.id)
   const rootRef = useRef<HTMLDivElement | null>(null)
   useDismissOnOutsidePointer(rootRef, phase !== 'closed', () => { setPhase('closed') })
 
@@ -62,7 +65,9 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
       // Open the popup inside the click gesture so the browser never blocks
       // it; the chat launcher that the open event projects adopts this named
       // window and drives the ready/init handshake.
-      window.open('/a2ui.html', `a2ui-${surfaceId}`, 'popup=yes,width=920,height=760')
+      // Same document-relative popup route the chat launcher opens, so a
+      // mounted app prefix resolves it identically.
+      window.open('a2ui.html', `a2ui-${surfaceId}`, 'popup=yes,width=920,height=760')
       setPhase('closed')
     } catch {
       setOpenError(true)
@@ -127,7 +132,7 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
             else setPhase('closed')
           }}
         >
-          <IconChevronRightOutline14 size={wide ? 14 : 18} />
+          <IconChevronRightOutlineRegular size={wide ? 14 : 18} />
           {wide && <span className={css.entryLabel}>{t('entry.title')}</span>}
         </button>
       </Tooltip>
@@ -137,7 +142,7 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
           <div className={css.header}>
             <h3 className={css.title}>{t('panel.title')}</h3>
             <button type="button" className={css.close} aria-label={t('panel.close')} onClick={() => { setPhase('closed') }}>
-              <IconCloseOutline16 />
+              <IconCloseOutlineRegular />
             </button>
           </div>
 
@@ -151,7 +156,7 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
               disabled={importing}
             />
             <button type="button" className={css.importAction} disabled={importing} onClick={() => { void importShared() }}>
-              <IconDownloadOutline16 />
+              <IconDownloadOutlineRegular />
               <span className={css.importLabel}>{t('panel.import')}</span>
             </button>
           </div>
@@ -171,10 +176,10 @@ export function A2uiStorePanel({ wide, useSessions, t, listTools, openTool, remo
                   {tool.page.title}
                 </button>
                 <button type="button" className={css.share} aria-label={t('row.share')} onClick={() => { void share(tool.name) }}>
-                  <IconShareOutline16 />
+                  <IconShareOutlineRegular />
                 </button>
                 <button type="button" className={css.remove} aria-label={t('row.remove')} onClick={() => { void remove(tool.name) }}>
-                  <IconTrashOutline16 />
+                  <IconTrashOutlineRegular />
                 </button>
               </li>
             ))}

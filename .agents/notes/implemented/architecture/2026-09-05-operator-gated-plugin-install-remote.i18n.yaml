@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-05-operator-gated-plugin-install-remote.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-05-operator-gated-plugin-install-remote.md
-2026-09-05-operator-gated-plugin-install-remote.md: 070ffe564b8c451b652736138a2e20ae196098d6
-2026-09-05-operator-gated-plugin-install-remote.zh.md: bb10a74eac77c527f82e984865ffe6fc2ca3b657
+/agent-note-the-webui-installs-plugins-into-its-own-profile-through-an-operator-gated-remote:
+  en: 76eac251ecd0258f
+  zh: da479d94f1261a32
+/agent-note-the-webui-installs-plugins-into-its-own-profile-through-an-operator-gated-remote/problem:
+  en: 44390df7d871513f
+  zh: 9cce6d5b5e108847
+/agent-note-the-webui-installs-plugins-into-its-own-profile-through-an-operator-gated-remote/decision:
+  en: 56047e23e380e408
+  zh: 9fd57667727660b4
+/agent-note-the-webui-installs-plugins-into-its-own-profile-through-an-operator-gated-remote/alternatives-considered:
+  en: 67e0b9835d2af168
+  zh: d13a99e0420d30ba
+/agent-note-the-webui-installs-plugins-into-its-own-profile-through-an-operator-gated-remote/consequences:
+  en: d2b7985b2f44a611
+  zh: ea1d7eb7ba2c61da

@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-a2ui-share-tokens.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-10-a2ui-share-tokens.md
-2026-09-10-a2ui-share-tokens.md: ba6b1b88d9cef5ad18c2d900450fcd6d530a69a3
-2026-09-10-a2ui-share-tokens.zh.md: cc4c52de3306728c462d4cab212095b973fc01c4
+/agent-note-a2ui-tool-share-tokens:
+  en: 160aa12b033e503f
+  zh: 63dea4b20f6fa0c7
+/agent-note-a2ui-tool-share-tokens/problem:
+  en: 2e517b9abe071a8f
+  zh: 1403c9cdf170a3d9
+/agent-note-a2ui-tool-share-tokens/decision:
+  en: c5aab134ae8f2c49
+  zh: 776ff4b8d18e35c7
+/agent-note-a2ui-tool-share-tokens/alternatives-considered:
+  en: dcb06dd01867930e
+  zh: 6ed56100cbabe523
+/agent-note-a2ui-tool-share-tokens/consequences:
+  en: 45f9539f073d8d56
+  zh: 6716c9ec1546f71c

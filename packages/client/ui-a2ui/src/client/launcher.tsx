@@ -64,8 +64,11 @@ export interface A2uiLiveRead {
 /** Read the live-result stream of one surface (the model-action job output). */
 export type A2uiReadLive = (surfaceId: string) => Promise<A2uiLiveRead>
 
-/** The popup URL served by the web frontend's dedicated A2UI entry. */
+/** The popup route the host serves for the dedicated A2UI entry. */
 const A2UI_POPUP_PATH = '/a2ui.html'
+
+/** The popup route as the browser resolves it, against the document rather than the origin. */
+const A2UI_POPUP_ROUTE = A2UI_POPUP_PATH.slice(1)
 
 /** Serialize one submission as an ordinary user message the model receives. */
 function a2uiSubmitMessage(surfaceId: string, payload: Record<string, unknown>): string {
@@ -168,7 +171,7 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
       } else if (data.type === 'a2ui/runStop') {
         const runBridge = bridge
         if (runBridge !== undefined) void stopRun(runBridge, data.runId)
-      } else if (data.type === 'a2ui/stop') {
+      } else {
         // A `local` action's stop step terminates the correlated command run
         // (when one is active). A null runId means "stop the model job", which
         // needs a host-side live stop and is deferred.
@@ -218,7 +221,7 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
     const runScript = async (popup: Window, runBridge: A2uiRunBridge, action: A2uiAction): Promise<void> => {
       const send = (message: A2uiOpenerMessage): void => { popup.postMessage(message, location.origin) }
       try {
-        const outcome = await runBridge.runScript(action.program ?? '', action.binds as readonly A2uiScriptBinding[] ?? [])
+        const outcome = await runBridge.runScript(action.program ?? '', (action.binds ?? []) as readonly A2uiScriptBinding[])
         if (outcome.error !== undefined) {
           send({ type: 'a2ui/scriptFailed', actionId: action.id, message: outcome.error.message, ok: false })
         } else {
@@ -297,11 +300,11 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
   }
 
   const openWindow = (): void => {
-    console.log('[a2ui] openWindow clicked', { surfaceId, path: A2UI_POPUP_PATH })
-    let win = window.open(A2UI_POPUP_PATH, `a2ui-${surfaceId}`, 'popup=yes,width=920,height=760')
+    console.log('[a2ui] openWindow clicked', { surfaceId, path: A2UI_POPUP_ROUTE })
+    let win = window.open(A2UI_POPUP_ROUTE, `a2ui-${surfaceId}`, 'popup=yes,width=920,height=760')
     if (win === null) {
       // Some blockers reject the named window but allow an unnamed one.
-      win = window.open(A2UI_POPUP_PATH, '_blank', 'width=920,height=760')
+      win = window.open(A2UI_POPUP_ROUTE, '_blank', 'width=920,height=760')
     }
     console.log('[a2ui] window.open result', win === null ? 'null (blocked)' : 'window opened')
     if (win === null) {
@@ -321,7 +324,7 @@ export function A2uiLauncher({ node, sessionId, bridge, submitNotice, resolveSou
       {blocked && (
         <p className={css.launcherError} role="alert">
           {t('launcher.popupBlocked')}{' '}
-          <a href={A2UI_POPUP_PATH} target="_blank" rel="noreferrer">{t('launcher.openDirectly')}</a>
+          <a href={A2UI_POPUP_ROUTE} target="_blank" rel="noreferrer">{t('launcher.openDirectly')}</a>
         </p>
       )}
     </div>

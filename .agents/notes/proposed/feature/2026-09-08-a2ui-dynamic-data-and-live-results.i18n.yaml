@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-08-a2ui-dynamic-data-and-live-results.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-09-08-a2ui-dynamic-data-and-live-results.md
-2026-09-08-a2ui-dynamic-data-and-live-results.md: 683143de80f01c9ea646702a71792ba407dac5de
-2026-09-08-a2ui-dynamic-data-and-live-results.zh.md: 50a68f3db13152962c951fbafbaa2622be445c8a
+/agent-note-a2ui-dynamic-data-sources-and-live-results:
+  en: cafd27b7d0668238
+  zh: 384260db95fac665
+/agent-note-a2ui-dynamic-data-sources-and-live-results/problem:
+  en: 4a2acee05802cb0b
+  zh: da3e71375cac33b0
+/agent-note-a2ui-dynamic-data-sources-and-live-results/proposal:
+  en: 7d3496ce96db80b3
+  zh: 2d1adcd6742ba387
+/agent-note-a2ui-dynamic-data-sources-and-live-results/alternatives-considered:
+  en: 7c4c09ac6313d216
+  zh: 557fd1519462dd52
+/agent-note-a2ui-dynamic-data-sources-and-live-results/acceptance-criteria:
+  en: edcea07d165db75a
+  zh: 71828be5112e21d0
+/agent-note-a2ui-dynamic-data-sources-and-live-results/risks:
+  en: 9ba53aea35420d1d
+  zh: 3e6d6cb9cd0473a2

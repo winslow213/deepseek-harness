@@ -7,7 +7,7 @@
   min-width: 0;
   padding: 12px 16px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-module-platform);
 }
 
@@ -66,7 +66,7 @@
   min-width: 0;
   padding: 6px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -75,7 +75,7 @@
 }
 
 .input:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: -1px;
 }
 
@@ -105,7 +105,7 @@
   min-width: 0;
   padding: 6px 10px;
   border: 0.5px dashed var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-specific-input-minor);
   color: var(--dsw-alias-label-secondary);
   font-size: 14px;
@@ -125,7 +125,7 @@
   margin: 0;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-specific-input-minor);
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
@@ -147,7 +147,7 @@
   min-height: 0;
   overflow: hidden;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-specific-input-major);
 }
 
@@ -156,7 +156,7 @@
   min-width: 120px;
   max-width: 200px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   box-shadow: 0 1px 4px rgb(0 0 0 / 14%);
   font-size: 13px;
   line-height: 18px;
@@ -219,7 +219,7 @@
 }
 
 .canvasNodeInput:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: -1px;
 }
 
@@ -310,7 +310,7 @@
   box-sizing: border-box;
   max-width: 160px;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-module-platform);
   box-shadow: 0 0 0 1px var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
@@ -328,7 +328,7 @@
   min-width: 100px;
   padding: 2px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -337,14 +337,14 @@
 }
 
 .canvasEdgeLabelInput:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: -1px;
 }
 
 .console {
   margin-top: 12px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   overflow: hidden;
   width: 100%;
 }
@@ -364,7 +364,7 @@
 
 .consoleStop {
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-xs);
   background: var(--dsw-alias-button-primary-fill);
   color: var(--dsw-alias-label-primary-foreground);
   font: inherit;

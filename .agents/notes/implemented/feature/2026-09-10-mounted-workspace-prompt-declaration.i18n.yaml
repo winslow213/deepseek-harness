@@ -1,6 +1,28 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-mounted-workspace-prompt-declaration.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-10-mounted-workspace-prompt-declaration.md
-2026-09-10-mounted-workspace-prompt-declaration.md: 1b13e2203e3b1051b28920a317ea82698b55773f
-2026-09-10-mounted-workspace-prompt-declaration.zh.md: 2b6c6823c97a5255ee22b3702c5c6575a9dbb025
+/agent-note-mounted-workspace-prompt-declaration:
+  en: 7dfd2975a3a88d32
+  zh: 6ede364d7b042d85
+/agent-note-mounted-workspace-prompt-declaration/problem:
+  en: 8489add322e57ce8
+  zh: 24019f484d4115d3
+/agent-note-mounted-workspace-prompt-declaration/decision:
+  en: eab8dd89c1e4af7f
+  zh: f1335d8c838135bf
+/agent-note-mounted-workspace-prompt-declaration/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-mounted-workspace-prompt-declaration/alternatives-considered/why-not-a-static-personasuffix-override:
+  en: 5f9f2bf5e61b3b0b
+  zh: 6e0d799d81a7ed31
+/agent-note-mounted-workspace-prompt-declaration/alternatives-considered/why-not-write-the-declaration-into-the-shadow-directory-as-an-agent-instructions-file:
+  en: a9bafaf618557ed7
+  zh: af508e5f47a6d50e
+/agent-note-mounted-workspace-prompt-declaration/alternatives-considered/why-not-a-new-section-order-per-mount:
+  en: 494caa82f403cfb7
+  zh: 75192bd537f929a6
+/agent-note-mounted-workspace-prompt-declaration/consequences:
+  en: 600d01f062e4f87f
+  zh: 989f3375b714ffd9

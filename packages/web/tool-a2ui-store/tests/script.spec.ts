@@ -1,4 +1,4 @@
-/** Behavior of the A2UI script runner: the code-runtime-backed capability over a stub. */
+/** Behavior of the A2UI script runner: the PTC-runtime-backed capability over a stub. */
 
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
@@ -17,12 +17,16 @@ function stubRuntime(result: { value?: unknown; logs?: string[]; error?: { kind:
     logs: result.logs ?? [],
     error: result.error,
   }))
-  return { run, ctx: { get: () => ({ run }) } }
+  // `run` reaches the runtime through `resolve`, which fills the working
+  // directory, deadline, and sandbox policy; the identity stub keeps the
+  // request under test visible to the assertions.
+  const resolve = vi.fn((request: StubRequest) => request)
+  return { run, resolve, ctx: { get: () => ({ resolve, run }) } }
 }
 
 /** Read the bindings the runtime was invoked with, past vitest's mock typing. */
 function requestedBindings(run: { mock: { calls: Array<[StubRequest]> } }): StubRequest['bindings'] {
-  return run.mock.calls[0]![0]!.bindings
+  return run.mock.calls[0]![0].bindings
 }
 
 describe('CodeA2uiRunScript', () => {
@@ -47,9 +51,9 @@ describe('CodeA2uiRunScript', () => {
     expect(out.error).toEqual({ kind: 'timeout', message: 'wall-clock ceiling' })
   })
 
-  it('throws a clear error when no code runtime is mounted', async () => {
+  it('throws a clear error when no PTC runtime is mounted', async () => {
     const cap = new CodeA2uiRunScript({ get: () => undefined } as unknown as Context)
-    await expect(cap.run('return 1', [], {})).rejects.toThrow(/no code runtime is mounted/)
+    await expect(cap.run('return 1', [], {})).rejects.toThrow(/no PTC runtime is mounted/)
   })
 
   it('passes only the granted bindings, dropping any ungranted name', async () => {
@@ -69,14 +73,19 @@ describe('CodeA2uiRunScript fetch binding', () => {
   } {
     const grabbed: Array<{ name: string; fn: (a: unknown) => Promise<unknown> }> = []
     const runtime = {
-      run: vi.fn(async (request: { bindings: Array<{ global: string; functions: Record<string, (a: unknown) => Promise<unknown>> }> }) => {
-        for (const ns of request.bindings) {
+      // The provider's resolve step fills the working directory, deadline, and
+      // sandbox policy a run requires; this stub has no such choices to make.
+      resolve: vi.fn((request: {
+        bindings: Array<{ global: string; functions: Record<string, (a: unknown) => Promise<unknown>> }>
+      }) => request),
+      run: vi.fn(async (spec: { bindings: Array<{ global: string; functions: Record<string, (a: unknown) => Promise<unknown>> }> }) => {
+        for (const ns of spec.bindings) {
           for (const [name, fn] of Object.entries(ns.functions)) grabbed.push({ name, fn })
         }
         return { value: 1, logs: [] }
       }),
     }
-    const ctx = { get: (key: string) => key === 'codeRuntime' ? runtime : key === 'web' ? (web.fetch === undefined ? undefined : web) : undefined } as unknown as Context
+    const ctx = { get: (key: string) => key === 'ptcRuntime' ? runtime : key === 'web' ? (web.fetch === undefined ? undefined : web) : undefined } as unknown as Context
     return { ctx, capture: async () => { await new CodeA2uiRunScript(ctx).run('x', ['fetch', 'text'], {}); return grabbed } }
   }
 

@@ -1,10 +1,10 @@
 /**
  * Host execution of A2UI live-result streaming: attach one background job's
  * output stream to a surface and emit a bounded `a2ui/update` event per polled
- * delta until the job settles. The poll reads an independent reader
- * (`ctx.jobs.openOutputReader`), so the model's own `job_output` reads never
- * consume the streamed deltas; the stream is the durable, replayable live view
- * a `model`-action job shows in its popup.
+ * delta until the job settles. The stream owns its own read offset over
+ * `ctx.jobs.readAt`, so the model's own `job_output` reads never consume the
+ * streamed deltas; the stream is the durable, replayable live view a
+ * `model`-action job shows in its popup.
  * @module @deepseek-ai/dsh-tool-a2ui-store/live
  */
 
@@ -19,11 +19,12 @@ function byteLength(text: string): number {
   return Buffer.byteLength(text, 'utf8')
 }
 
-/** One attached live stream: the independent reader plus the run state it emits. */
+/** One attached live stream: the owned read offset plus the run state it emits. */
 interface LiveStream {
   readonly surfaceId: string
   readonly jobId: JobId
-  readonly reader: { read(): string }
+  /** Whole-stream offset this stream has emitted up to; never moves the model's cursor. */
+  cursor: number
   /** Monotonic sequence of the emitted events for this stream. */
   seq: number
   /** Cumulative byte count of the emitted deltas. */
@@ -85,14 +86,13 @@ export class ShellA2uiLive implements A2uiLive {
     if (jobs === undefined) {
       throw new Error('a2ui live results: no jobs service is mounted; a `model` action job cannot stream')
     }
-    jobs.get(jobId, agent) // throws for an unknown or foreign job
-    const reader = jobs.openOutputReader(jobId, agent)
+    jobs.get(jobId, agent.session.id) // throws for an unknown or foreign job
 
     const prior = this.streams.get(surfaceId)
     if (prior !== undefined && prior.timer !== null) clearInterval(prior.timer)
 
     const stream: LiveStream = {
-      surfaceId, jobId, reader, seq: 0, totalBytes: 0, pending: [], running: true, settled: false, timer: null,
+      surfaceId, jobId, cursor: 0, seq: 0, totalBytes: 0, pending: [], running: true, settled: false, timer: null,
     }
     this.streams.set(surfaceId, stream)
     agent.session.append('a2ui/update', { surfaceId, phase: 'started', seq: 0, totalBytes: 0 })
@@ -115,8 +115,14 @@ export class ShellA2uiLive implements A2uiLive {
   /** Poll one stream: emit a delta, then settle when the job reaches a terminal status. */
   private poll(stream: LiveStream, agent: Agent): void {
     try {
-      let delta = ''
-      delta = stream.reader.read()
+      const jobs = this.ctx.get('jobs')
+      if (jobs === undefined) {
+        this.settle(stream, agent, 'aborted')
+        return
+      }
+      const read = jobs.readAt(stream.jobId, stream.cursor, agent.session.id)
+      const delta = read.chunks.map(chunk => chunk.text).join('')
+      stream.cursor = read.next
       stream.seq += 1
       stream.totalBytes += byteLength(delta)
       if (delta.length > 0) {
@@ -125,12 +131,7 @@ export class ShellA2uiLive implements A2uiLive {
           surfaceId: stream.surfaceId, phase: 'delta', seq: stream.seq, delta, totalBytes: stream.totalBytes,
         })
       }
-      const jobs = this.ctx.get('jobs')
-      if (jobs === undefined) {
-        this.settle(stream, agent, 'aborted')
-        return
-      }
-      const status = jobs.get(stream.jobId, agent).status
+      const status = jobs.get(stream.jobId, agent.session.id).status
       if (status === 'killed') {
         this.settle(stream, agent, 'aborted')
       } else if (status === 'completed' || status === 'failed') {

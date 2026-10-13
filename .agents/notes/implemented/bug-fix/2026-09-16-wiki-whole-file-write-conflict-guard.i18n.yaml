@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-wiki-whole-file-write-conflict-guard.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-wiki-whole-file-write-conflict-guard.md
-2026-09-16-wiki-whole-file-write-conflict-guard.md: 32e26469aafb2cf2e2e72fa9b551b11d52f76017
-2026-09-16-wiki-whole-file-write-conflict-guard.zh.md: 1ce9ff51939b94b2659d189337bcd29265f31d34
+/agent-note-baseline-compare-conflict-guard-on-the-personal-wiki-s-whole-file-layers:
+  en: 19ee0aad5d44cefc
+  zh: 846daaabdaf263bc
+/agent-note-baseline-compare-conflict-guard-on-the-personal-wiki-s-whole-file-layers/problem:
+  en: bec53547eec5f34a
+  zh: 29a9b19bfbeaacbe
+/agent-note-baseline-compare-conflict-guard-on-the-personal-wiki-s-whole-file-layers/decision:
+  en: 1958f943b09aad97
+  zh: 882b562b38c2cf47
+/agent-note-baseline-compare-conflict-guard-on-the-personal-wiki-s-whole-file-layers/alternatives-considered:
+  en: 93a1d6cf49db0993
+  zh: f31f803259185d11
+/agent-note-baseline-compare-conflict-guard-on-the-personal-wiki-s-whole-file-layers/consequences:
+  en: 9d4e89ab2a539fe0
+  zh: 2189ddf4084c9c40
+/agent-note-baseline-compare-conflict-guard-on-the-personal-wiki-s-whole-file-layers/related:
+  en: 0ad504b0d68f0682
+  zh: dba6c8881d8513f8

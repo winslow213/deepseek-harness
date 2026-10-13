@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-08-open-in-app-client-side-editor-launch.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-08-open-in-app-client-side-editor-launch.md
-2026-09-08-open-in-app-client-side-editor-launch.md: 098428a422ba0796e827170649965ceb7ab4a32e
-2026-09-08-open-in-app-client-side-editor-launch.zh.md: 5fd20792b8bd766ab1718c8a41d855a0a1fab27c
+/agent-note-open-in-app-client-side-editor-launch:
+  en: ae5e049511b2226a
+  zh: f12f167150f09c80
+/agent-note-open-in-app-client-side-editor-launch/problem:
+  en: bac662f966f0a1f2
+  zh: 6dcd58863c5a84b9
+/agent-note-open-in-app-client-side-editor-launch/decision:
+  en: bad5899c80c0d2b4
+  zh: fdf8299a0b248d96
+/agent-note-open-in-app-client-side-editor-launch/alternatives-considered:
+  en: 14c4f3cdc1d17750
+  zh: 22c8db3545088967
+/agent-note-open-in-app-client-side-editor-launch/consequences:
+  en: cbe01622269069b9
+  zh: 4b5d01be815b939c

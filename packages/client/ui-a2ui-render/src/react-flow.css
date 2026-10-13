@@ -468,18 +468,23 @@ svg.react-flow__connectionline {
 .react-flow__node-input.selectable:hover, .react-flow__node-default.selectable:hover, .react-flow__node-output.selectable:hover, .react-flow__node-group.selectable:hover {
       box-shadow: var(--xy-node-boxshadow-hover, var(--xy-node-boxshadow-hover-default));
     }
-.react-flow__node-input.selectable.selected,
-    .react-flow__node-input.selectable:focus,
+/* Focused nodes take the shared ring instead of the upstream selected shadow:
+ * ui-theme's focus-ring contract allows a rule that matches `:focus` to name only
+ * the ring color, so `--xy-node-boxshadow-*` cannot stay on this selector. */
+.react-flow__node-input.selectable:focus,
     .react-flow__node-input.selectable:focus-visible,
-    .react-flow__node-default.selectable.selected,
     .react-flow__node-default.selectable:focus,
     .react-flow__node-default.selectable:focus-visible,
-    .react-flow__node-output.selectable.selected,
     .react-flow__node-output.selectable:focus,
     .react-flow__node-output.selectable:focus-visible,
-    .react-flow__node-group.selectable.selected,
     .react-flow__node-group.selectable:focus,
     .react-flow__node-group.selectable:focus-visible {
+      box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+    }
+.react-flow__node-input.selectable.selected,
+    .react-flow__node-default.selectable.selected,
+    .react-flow__node-output.selectable.selected,
+    .react-flow__node-group.selectable.selected {
       box-shadow: var(--xy-node-boxshadow-selected, var(--xy-node-boxshadow-selected-default));
     }
 .react-flow__node-group {

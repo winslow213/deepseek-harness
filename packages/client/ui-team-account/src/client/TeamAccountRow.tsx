@@ -8,7 +8,7 @@
  * content="1">` marker the team reverse proxy injects; without it the plugin
  * contributes nothing visible, which keeps plain single-user dsh clean.
  */
-import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronRightOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import css from './TeamAccountRow.module.css'
@@ -38,7 +38,7 @@ export function TeamAccountRow({ t }: TeamAccountRowProps) {
   if (!hasTeamShellMarker()) return null
 
   const signOut = async (): Promise<void> => {
-    await fetch('/api/logout', { method: 'POST' })
+    await fetch('api/logout', { method: 'POST' })
     window.location.href = '/'
   }
 
@@ -52,7 +52,7 @@ export function TeamAccountRow({ t }: TeamAccountRowProps) {
         <span className={css.title}>{t('title')}</span>
         <span className={css.desc}>{t('hint')}</span>
       </span>
-      <IconChevronRightOutline14 className={css.chevron} />
+      <IconChevronRightOutlineRegular size={14} className={css.chevron} />
     </button>
   )
 }

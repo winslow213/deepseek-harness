@@ -1,5 +1,13 @@
 # WebUI Plugin Install — 交接清单（Phase A + B 已交付）
 
+Status: 已作废。本清单描述的 `@deepseek-ai/dsh-host-plugin-install`、
+`@deepseek-ai/dsh-client-ui-settings-plugin-install`、`pluginInstall` Remote 命名空间
+与 `DSH_PLUGIN_INSTALL` 组合开关均已不存在；install / uninstall / enable-disable
+现由 `@deepseek-ai/dsh-plugin-manager` 统一拥有，模型入口 `plugin_manager` 由 `cordis`
+agent 预设（创造模式）启用、按调用受沙箱批准策略门控，用户入口是 Web **Plugins** 页面。
+因此下文「交付了什么、在哪些文件」全部失效，不要再按它施工。
+保留的文件仅为历史记录；设计侧沿用的部分见 `plugin-install-design.md` 顶部说明。
+
 > 供后续 agent 接手。设计决策与来源见 `shell/plugin-install-design.md`；
 > 本文件只记录「已交付什么、在哪些文件、如何验证、还剩什么」。
 
@@ -54,7 +62,7 @@
 ### Agent Note（已归档为 implemented）
 
 - `.agents/notes/implemented/architecture/2026-09-05-operator-gated-plugin-install-remote.{md,zh.md,i18n.yaml}`
-- `.agents/notes/implemented/feature/2026-09-05-web-settings-plugin-install-tab.{md,zh.md,i18n.yaml}`
+- `.agents/notes/archived/feature/2026-09-05-web-settings-plugin-install-tab.{md,zh.md,i18n.yaml}`
 
 ## 4. 接手须知（关键实现点）
 

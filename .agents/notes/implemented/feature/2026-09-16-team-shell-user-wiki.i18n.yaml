@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-team-shell-user-wiki.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-team-shell-user-wiki.md
-2026-09-16-team-shell-user-wiki.md: 6a7e94fbc35f474a4a549edaf80a7e2ed5c8e631
-2026-09-16-team-shell-user-wiki.zh.md: aa37a52da2b1cd08f20bbb43b217d1e1b7b3a2b8
+/agent-note-a-four-layer-personal-wiki-per-account-written-by-a-model-facing-wiki-note-tool:
+  en: 95a2140ab2762b5a
+  zh: 17af49added9c7ce
+/agent-note-a-four-layer-personal-wiki-per-account-written-by-a-model-facing-wiki-note-tool/problem:
+  en: b78c8ddc4f56cb86
+  zh: 5d5defe0e6469e67
+/agent-note-a-four-layer-personal-wiki-per-account-written-by-a-model-facing-wiki-note-tool/decision:
+  en: 8009af2c5b991270
+  zh: e55e55e0a47eaae7
+/agent-note-a-four-layer-personal-wiki-per-account-written-by-a-model-facing-wiki-note-tool/alternatives-considered:
+  en: 69847b6eb9ff55bd
+  zh: 85e3f8ee0dc04772
+/agent-note-a-four-layer-personal-wiki-per-account-written-by-a-model-facing-wiki-note-tool/consequences:
+  en: 14a1eee53aea3e62
+  zh: 52e6bd108c22cdf1
+/agent-note-a-four-layer-personal-wiki-per-account-written-by-a-model-facing-wiki-note-tool/related:
+  en: 9f535905dfae699d
+  zh: c5d8caec09acbebf

@@ -66,7 +66,7 @@ With `allowUpdate: true`, the model may pass the stable `surfaceId` of an earlie
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The tool owns two jobs: keep the logged page equal to what the model believes it wrote, and append it to the durable log. The registry schema (`additionalProperties: false` at every object level, strict enums) rejects unknown keys and widget kinds before execution; the package then validates the value constraints a JSON schema cannot express — trimmed non-empty `title`, unique trimmed field names and node ids, at least one option per `select`, finite node positions, no self-loop, edges whose endpoints exist — and canonicalizes the page before appending. The surface identity is either the model-supplied `surfaceId` (updates enabled) or a freshly minted `a2ui-…` id. The package also publishes an invariant companion (`@deepseek-ai/dsh-tool-a2ui-surface/invariant`) that validates durable `a2ui/surface` records on cold load and live append, because the browser renderer trusts the log shape and a record that cannot render must fail loud.
+The tool owns two jobs: keep the logged page equal to what the model believes it wrote, and append it to the durable log. The registry schema (`additionalProperties: false` at every object level, strict enums) rejects unknown keys and widget kinds before execution; the package then validates the value constraints a JSON schema cannot express — trimmed non-empty `title`, unique trimmed field names and node ids, at least one option per `select`, finite node positions, no self-loop, edges whose endpoints exist — and canonicalizes the page before appending. The surface identity is either the model-supplied `surfaceId` (updates enabled) or a freshly minted `a2ui-…` id. Canonicalization runs on the only path that writes a record, so no companion re-check is published; a record the renderer cannot draw is refused here, where the model can still correct it.
 
 ### Source map
 
@@ -74,7 +74,6 @@ The tool owns two jobs: keep the logged page equal to what the model believes it
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, page canonicalization, tool registration, session append |
 | [`src/types.ts`](src/types.ts) | Browser-safe page vocabulary shared with the renderer, plus the `a2ui/surface` `SessionEventMap` merge |
-| [`src/invariant.ts`](src/invariant.ts) | Package-owned invariant companion validating durable surface records |
 
 </details>
 

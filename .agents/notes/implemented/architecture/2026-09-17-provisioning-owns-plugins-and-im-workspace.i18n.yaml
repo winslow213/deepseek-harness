@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-provisioning-owns-plugins-and-im-workspace.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-17-provisioning-owns-plugins-and-im-workspace.md
-2026-09-17-provisioning-owns-plugins-and-im-workspace.md: 45d0485c5a7105b7f7ca1adeacbd01718bdef7a0
-2026-09-17-provisioning-owns-plugins-and-im-workspace.zh.md: 65d8b34166d4f38542dbd039ec05846d01bf5c65
+/agent-note-provisioning-owns-the-mandatory-plugin-set-and-the-im-workspace-default:
+  en: 312087571ac3f067
+  zh: 1bb2fabd3e2a75a8
+/agent-note-provisioning-owns-the-mandatory-plugin-set-and-the-im-workspace-default/problem:
+  en: 715e88591e2ed9fb
+  zh: 593eae391b1c1606
+/agent-note-provisioning-owns-the-mandatory-plugin-set-and-the-im-workspace-default/decision:
+  en: 39bd8a7cb98f87f7
+  zh: b1e5a63eda2e6e9a
+/agent-note-provisioning-owns-the-mandatory-plugin-set-and-the-im-workspace-default/alternatives-considered:
+  en: 8165547f6ed1e3c8
+  zh: 02522434051aceab
+/agent-note-provisioning-owns-the-mandatory-plugin-set-and-the-im-workspace-default/consequences:
+  en: cb7cefff65e841e3
+  zh: a88c6c6577d32cd9

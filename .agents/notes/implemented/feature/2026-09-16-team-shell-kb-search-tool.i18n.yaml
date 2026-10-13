@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-team-shell-kb-search-tool.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-team-shell-kb-search-tool.md
-2026-09-16-team-shell-kb-search-tool.md: 714183d8130865ad113b3ab65a1a566be3b5ede5
-2026-09-16-team-shell-kb-search-tool.zh.md: 32602f315678177aa13b97c00f668f19e624b656
+/agent-note-a-kb-search-tool-giving-dsh-sessions-read-access-to-the-team-kb-agent-server:
+  en: 8124526edbe35a86
+  zh: fe83f2e3e2e23f23
+/agent-note-a-kb-search-tool-giving-dsh-sessions-read-access-to-the-team-kb-agent-server/problem:
+  en: 882fdebba69b4e33
+  zh: aa2947fa5525b94f
+/agent-note-a-kb-search-tool-giving-dsh-sessions-read-access-to-the-team-kb-agent-server/decision:
+  en: 41f8396cf91615d6
+  zh: d6c123cb15c5ead0
+/agent-note-a-kb-search-tool-giving-dsh-sessions-read-access-to-the-team-kb-agent-server/alternatives-considered:
+  en: 2cd0d16ff9b2fe8b
+  zh: 7bfb722027ad7272
+/agent-note-a-kb-search-tool-giving-dsh-sessions-read-access-to-the-team-kb-agent-server/consequences:
+  en: 96898d0d575ed458
+  zh: 5fc9b61eae822f32

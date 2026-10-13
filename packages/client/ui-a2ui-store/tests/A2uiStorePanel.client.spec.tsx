@@ -41,9 +41,12 @@ const t = (key: string, params?: Record<string, string>): string => {
   return Object.entries(params).reduce((acc, [name, value]) => acc.replaceAll(`{${name}}`, value), text)
 }
 
-/** Minimal session hook returning a fixed current session. */
-function useSessions(sel: (s: { current: string | undefined }) => string | undefined): string | undefined {
-  return sel({ current: 's1' })
+/** Minimal session hook shaped like the Session list store; the main view retains `s1`. */
+function useSessions(sel: (s: {
+  ids: string[]
+  byId: Record<string, { id: string; retainedBy: { mainView: number } }>
+}) => string | undefined): string | undefined {
+  return sel({ ids: ['s1'], byId: { s1: { id: 's1', retainedBy: { mainView: 1 } } } })
 }
 
 function face(overrides: Partial<A2uiStorePanelFace> = {}): A2uiStorePanelFace {
@@ -189,8 +192,10 @@ describe('A2uiStorePanel open/remove/load', () => {
 
   it('refuses to open without a current session', async () => {
     const f = face()
-    const useSessionsNone = (sel: (s: { current: string | undefined }) => string | undefined): string | undefined =>
-      sel({ current: undefined })
+    const useSessionsNone = (sel: (s: {
+      ids: string[]
+      byId: Record<string, { id: string; retainedBy: { mainView: number } }>
+    }) => string | undefined): string | undefined => sel({ ids: [], byId: {} })
     render(<A2uiStorePanel {...panelProps(f, false, useSessionsNone)} />)
     fireEvent.click(screen.getByRole('button', { name: 'A2UI 工具' }))
     await waitFor(() => { expect(screen.getByText('Hilog capture')).toBeTruthy() })

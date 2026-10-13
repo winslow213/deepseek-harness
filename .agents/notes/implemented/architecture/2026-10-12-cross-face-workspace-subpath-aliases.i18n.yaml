@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-12-cross-face-workspace-subpath-aliases.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-12-cross-face-workspace-subpath-aliases.md
+/agent-note-cross-face-workspace-subpath-aliases-in-the-tsconfig-paths-map:
+  en: d420fb6cdacd5a1f
+  zh: 8420e242fcaab1d2
+/agent-note-cross-face-workspace-subpath-aliases-in-the-tsconfig-paths-map/problem:
+  en: b4a3f86ec050914b
+  zh: 47aa940b82daecc0
+/agent-note-cross-face-workspace-subpath-aliases-in-the-tsconfig-paths-map/decision:
+  en: 42a9806ccb7703dd
+  zh: d2ee71c8d2f018bd
+/agent-note-cross-face-workspace-subpath-aliases-in-the-tsconfig-paths-map/alternatives-considered:
+  en: 5f316b1d7c20b035
+  zh: 41332f99bfde8329
+/agent-note-cross-face-workspace-subpath-aliases-in-the-tsconfig-paths-map/consequences:
+  en: 3cd97a8a424b22a9
+  zh: 7e72a5e491ced87f

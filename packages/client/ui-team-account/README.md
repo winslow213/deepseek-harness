@@ -9,9 +9,9 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package adds rows to Web Settings General: **Pairing code** (生成配对码), **Keep instance running** (保持实例常驻), **Message Center** (消息中心), and **Sign out** (退出登录). All appear only when the served document carries the `<meta name="team-shell">` marker the team reverse proxy injects, so a plain single-user dsh deployment stays unchanged.
+This package adds Web Settings General rows — **Pairing code** (生成配对码), **Keep instance running** (保持实例常驻), **Message Center** (消息中心), and **Sign out** (退出登录) — only when the served document carries the `<meta name="team-shell">` marker the team reverse proxy injects; a plain single-user deployment stays unchanged.
 
-**Sign out** posts to same-origin `/api/logout`, clearing the team session and dsh instance cookie, then navigates to `/` for the unauthenticated login page. **Pairing code** posts to same-origin `/api/pairings` (proxied to the account service, session-authenticated) and shows the minted code, claim command, and a copy control; the code is multi-use within its TTL, so one code mounts several devices. **Keep instance running** toggles the signed-in member's idle-reclaim exemption through `/api/me/idle-exempt`. **Message Center** opens the account service's `/inbox` page in a new tab, where members exchange messages and tasks.
+**Sign out** posts to same-origin `/api/logout` and then navigates to `/`. **Pairing code** posts to same-origin `/api/pairings` and shows the minted code, claim command, and copy control; one code mounts several devices within its TTL. **Keep instance running** toggles the member's idle-reclaim exemption through `/api/me/idle-exempt`. **Message Center** opens the account service's `/inbox` page.
 
 ## Table of Contents
 

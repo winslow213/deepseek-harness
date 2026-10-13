@@ -49,15 +49,22 @@ describe('parseOptions', () => {
 })
 
 describe('BashA2uiDataProvider', () => {
-  function stubShell(run: ReturnType<typeof vi.fn>): { get: () => unknown } {
+  function stubShell(result: ReturnType<typeof vi.fn>): {
+    get: () => unknown
+    execute: ReturnType<typeof vi.fn>
+  } {
+    // A foreground run is one handle whose `result()` is the projection the
+    // provider reads; the stub records the resolved spec and settles both.
+    const execute = vi.fn(async () => ({ result }))
     return {
       get: () => ({
         resolve: (request: { command: string; timeoutMs?: number }) => ({
           command: request.command,
           ...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
         }),
-        run,
+        execute,
       }),
+      execute,
     }
   }
 
@@ -70,12 +77,13 @@ describe('BashA2uiDataProvider', () => {
   })
 
   it('resolves a source by running its filled command through the shell', async () => {
-    const run = vi.fn(async () => ({ exitCode: 0, stdout: { text: '{"items":[{"label":"a","value":"1"}]}', truncated: false }, stderr: { text: '' } }))
-    const provider = new BashA2uiDataProvider(stubShell(run) as unknown as Context, {
+    const result = vi.fn(async () => ({ exitCode: 0, stdout: { text: '{"items":[{"label":"a","value":"1"}]}', truncated: false }, stderr: { text: '' } }))
+    const shell = stubShell(result)
+    const provider = new BashA2uiDataProvider(shell as unknown as Context, {
       'hdc-devices': { command: 'hdc list targets' },
     })
     await expect(provider.resolve('hdc-devices', {})).resolves.toEqual({ items: [{ label: 'a', value: '1' }] })
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ command: 'hdc list targets' }))
+    expect(shell.execute).toHaveBeenCalledWith(expect.objectContaining({ command: 'hdc list targets' }))
   })
 
   it('rejects a source whose command exits nonzero with the stderr detail', async () => {

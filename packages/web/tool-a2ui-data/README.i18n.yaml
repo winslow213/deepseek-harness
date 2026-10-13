@@ -1,6 +1,46 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/web/tool-a2ui-data/README.md
-README.md: 2ed5783d305f71670d49e45cf280060cbbfdc929
-README.zh.md: 2203e7db9f733db28c7e9389b8d89515707f58af
+/:
+  en: 5e72ca26ef1623f3
+  zh: 42a3237f7aa6b43f
+/deepseek-ai-dsh-tool-a2ui-data:
+  en: c1d9c00b7bd7ef21
+  zh: 92561933022ac67e
+/deepseek-ai-dsh-tool-a2ui-data/summary:
+  en: bdba915d3e473fad
+  zh: b089c98d71787cb7
+/deepseek-ai-dsh-tool-a2ui-data/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-tool-a2ui-data/use-this-package:
+  en: d4d021398ee32590
+  zh: 02836c137bd13088
+/deepseek-ai-dsh-tool-a2ui-data/use-this-package/the-provider-contract:
+  en: 89dd23a5f23ceec6
+  zh: ff138c47ea4569a2
+/deepseek-ai-dsh-tool-a2ui-data/use-this-package/the-types-subpath:
+  en: 9bde666967ada399
+  zh: c51388d061b74b6f
+/deepseek-ai-dsh-tool-a2ui-data/understand-the-implementation:
+  en: ba30a8fb0bd9ddba
+  zh: d77c38c6db0a0150
+/deepseek-ai-dsh-tool-a2ui-data/understand-the-implementation/source-map:
+  en: 6ba16ff396ee8326
+  zh: 9f5347dee9406739
+/deepseek-ai-dsh-tool-a2ui-data/further-exploration:
+  en: 001950ac33fa7003
+  zh: 266d70775b92fd46
+/deepseek-ai-dsh-tool-a2ui-data/model-experience:
+  en: b8696cfb82317a36
+  zh: 29e436aea08040ae
+/deepseek-ai-dsh-tool-a2ui-data/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 2064958b0754647e
+/deepseek-ai-dsh-tool-a2ui-data/known-limitations-and-deferred-work:
+  en: 2f661a43cbc5d0e7
+  zh: 0139f0a5cb497bb1
+/deepseek-ai-dsh-tool-a2ui-data/known-limitations-and-deferred-work/dev-note:
+  en: e44e5cc7aecccfb7
+  zh: 60067cff58af8dfd

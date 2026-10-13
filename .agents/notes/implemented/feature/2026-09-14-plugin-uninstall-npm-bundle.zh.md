@@ -25,3 +25,5 @@ Status: implemented
 ## Consequences
 
 运算符现在可以从同一个设置标签页区域卸载任何通过 Web UI 安装的插件，包括 npm-bundle，无需离开浏览器或触碰宿主文件系统。宿主包的测试套件新增 4 个用例，覆盖 npm-bundle 移除、盒内 bundle 名称不命中、`pnpm remove` 失败以及该路径上的受监督重启请求。Remote 与两个包的 README、以及设置标签页的卸载文案，都已去掉本笔记前身记录的「npm-bundle 不在覆盖范围内」措辞——排除范围曾经存在的原因与本次变化，见[被本笔记推翻的排除范围决策](2026-09-14-plugin-uninstall-remote.zh.md)。
+
+**当前归属。** npm-bundle 移除现在以 `@deepseek-ai/dsh-plugin-manager` 上的 `uninstallPlugin` 发布，保留本笔记描述的按依赖定位的路由：profile 清单中的精确键走 bundle 移除，其余三种形式走 patch 行路径。

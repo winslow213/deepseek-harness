@@ -489,13 +489,13 @@ cordis 插件，与 `region-router.ts` 等同属"运行时拷贝进 profile"的�
 
 ### 12.1 基线与规模
 
-共同祖先 `c291e7961a`（2026-09-10，0.1.5-rc.2）。上游 `origin/master` =
-`d743267388`（0.2.1-alpha.2）领先 4894 提交；本分支 `feature-0.2x` =
-`5eb922e40c` 领先 131 提交，合计 514 文件 / +47286 −294。
+共同祖先（2026-09-10，`0.1.5-rc.2`）。上游 `origin/master`（`0.2.1-alpha.2`）
+领先 4894 提交；本分支 `feature-0.2x` 的起点领先 131 提交，合计 514 文件 /
++47286 −294。
 
 **同步方向是 master → feature，且必须先快进 master。** master 只镜像上游、
 永不接收本方提交，所以照 `git merge master` 直接合是错的：本地 `master` 停在
-`c291e7961a`（落后 `origin/master` 4894 提交，可 fast-forward），合它等于合
+共同祖先（落后 `origin/master` 4894 提交，可 fast-forward），合它等于合
 共同祖先，结果是一个 no-op，而看起来像"同步做过了"。**先 `git fetch`，再把
 `master` 快进到 `origin/master`，然后才从 master 往 feature 合**——§12.8 是按
 序执行清单。
@@ -535,13 +535,12 @@ cordis 插件，与 `region-router.ts` 等同属"运行时拷贝进 profile"的�
 | E 放弃 | 3 | `workflow/workflow-worker-thread` · `preset/agent-presets` · `workflow/tool-workflow` | 包已删 / 已改名 | 放弃（§12.4） |
 
 D 桶里 `sandbox/*` 的提交是 team-shell 的安全基础，必须保留。该列表在
-`154957fa24` 之后需要更正与补充：
+"按角色共享沙箱目录"提交之后需要更正与补充：
 
-- `241f918405`（跨账号读屏蔽）改 `packages/sandbox/{sandbox,sandbox-local}`；
-- **`a39d498db5` 不属于 sandbox**——它改的是 `packages/fs/tool-fs-search/`
-  （把 grep/glob 的 ripgrep 收敛进沙箱）与一份 Agent Note，§12.1 的归属
-  记错了；
-- **`154957fa24`（按角色共享沙箱目录）** 是 §12 写完之后新增的第二个
+- "跨账号读屏蔽"改 `packages/sandbox/{sandbox,sandbox-local}`；
+- **"把 grep/glob 的 ripgrep 收敛进沙箱"不属于 sandbox**——它改的是
+  `packages/fs/tool-fs-search/` 与一份 Agent Note，§12.1 的归属记错了；
+- **"按角色共享沙箱目录"** 是 §12 写完之后新增的第二个
   `packages/sandbox/*` 提交，见 §12.6。
 
 上游没有这三处改动中的任何一处，因此都不会被上游版本自动取代。
@@ -587,7 +586,8 @@ D 桶里 `sandbox/*` 的提交是 team-shell 的安全基础，必须保留。�
 
 上游删除 `workflow/workflow-worker-thread`，改由 `workflow-ptc` +
 `ptc-runtime` 承担；`tool-ralph` 移入 `experimental`。本分支唯一的工作流
-提交 `acafb1fc9f`（22 文件）跨 3 个包，其中 2 个在上游已不存在或已改名：
+提交（"workflow agent profile node config"，22 文件）跨 3 个包，其中 2 个在
+上游已不存在或已改名：
 
 | 涉及包 | 上游现状 | 处置 |
 |---|---|---|
@@ -648,7 +648,7 @@ provider 行。当前决定：保留 hub 与 agent 两端。
 
 ### 12.6 上游同步需保留的本方 sandbox 增量（§12 之后新增）
 
-`154957fa24`（按角色共享沙箱目录）在上游保有的四个源文件里加了增量。上游
+"按角色共享沙箱目录"提交在上游保有的四个源文件里加了增量。上游
 同包亦有改动，所以下次 `git merge master` 冲突时，这些增量**要按语义重做，
 不能整文件取任一版本**。逐文件记下改了什么、以及重做时必须保住的前提：
 
@@ -695,7 +695,7 @@ feature**：master 只镜像 fork 的上游，永不接收本方提交。
 
 1. **取上游并快进 master**。`git fetch origin`；`git checkout master`；
    `git merge --ff-only origin/master`。**这一步不能省**：本地 master 落后
-   上游 4894 提交，直接合它等于合共同祖先 `c291e7961a`，结果是 no-op 而看
+   上游 4894 提交，直接合它等于合共同祖先，结果是 no-op 而看
    起来像"同步已完成"。`--ff-only` 用来保证 master 仍是上游镜像——若它不
    再是 `origin/master` 的祖先，说明有人往 master 上提交过，此时应停下排查
    而不是合并。

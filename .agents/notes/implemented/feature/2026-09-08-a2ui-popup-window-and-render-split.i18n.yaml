@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-08-a2ui-popup-window-and-render-split.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-08-a2ui-popup-window-and-render-split.md
-2026-09-08-a2ui-popup-window-and-render-split.md: 97021357bb225f53d7a4b9ff26833bd33ea2963d
-2026-09-08-a2ui-popup-window-and-render-split.zh.md: c7d92fe1f2f81ce020943fb09ebda0ccaf55073d
+/agent-note-a2ui-popup-window-and-zero-cordis-render-split:
+  en: 6b08f1a805affae0
+  zh: 5156b1d65675940e
+/agent-note-a2ui-popup-window-and-zero-cordis-render-split/problem:
+  en: 00f8243c425a40cf
+  zh: 8b8ceb1abf5a16db
+/agent-note-a2ui-popup-window-and-zero-cordis-render-split/decision:
+  en: c509ada28a47e88e
+  zh: c6377739e19c47e4
+/agent-note-a2ui-popup-window-and-zero-cordis-render-split/alternatives-considered:
+  en: aadc749ce86564ad
+  zh: 9f2e41e695e42b16
+/agent-note-a2ui-popup-window-and-zero-cordis-render-split/consequences:
+  en: 03d60e020aeffe91
+  zh: e82069c88ec8e125

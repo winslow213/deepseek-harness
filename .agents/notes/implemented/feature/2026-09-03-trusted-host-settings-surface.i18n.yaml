@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-03-trusted-host-settings-surface.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-03-trusted-host-settings-surface.md
-2026-09-03-trusted-host-settings-surface.md: 2b1cdf7c2eaed73a04de444fe1ca0c46d6d7dffa
-2026-09-03-trusted-host-settings-surface.zh.md: 1f972f4c3ffa235f4eea885a3e37002913c9b81c
+/agent-note-trusted-hosts-reach-the-browser-privileged-surface:
+  en: e50e5b146262d5eb
+  zh: 283053e5aa0616ce
+/agent-note-trusted-hosts-reach-the-browser-privileged-surface/problem:
+  en: 6b75193b30285b39
+  zh: 5039d7bda7a646ff
+/agent-note-trusted-hosts-reach-the-browser-privileged-surface/decision:
+  en: 2ae7998509ebe6e9
+  zh: cc62d1fd44288ee5
+/agent-note-trusted-hosts-reach-the-browser-privileged-surface/alternatives-considered:
+  en: b3e34db5e88db4f3
+  zh: df8f30e8c35401ad
+/agent-note-trusted-hosts-reach-the-browser-privileged-surface/consequences:
+  en: bfc496eb9dcd285e
+  zh: 5c9b5961af7923f3

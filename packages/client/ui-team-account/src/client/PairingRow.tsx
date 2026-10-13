@@ -7,7 +7,7 @@
  * marker, matching the Sign out row.
  */
 import { useState } from 'react'
-import { IconCheckOutline16, IconCopyOutline16, IconChevronRightOutline14, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCheckOutlineRegular, IconCopyOutlineRegular, IconChevronRightOutlineRegular, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { hasTeamShellMarker } from './TeamAccountRow.tsx'
@@ -48,7 +48,7 @@ export function PairingRow({ t }: PairingRowProps) {
   const mint = async (): Promise<void> => {
     setState({ phase: 'busy' })
     try {
-      const res = await fetch('/api/pairings', { method: 'POST' })
+      const res = await fetch('api/pairings', { method: 'POST' })
       if (!res.ok) {
         console.error(`[team-account] pairing mint failed: HTTP ${String(res.status)}`)
         setState({ phase: 'error' })
@@ -81,7 +81,7 @@ export function PairingRow({ t }: PairingRowProps) {
           <span className={css.title}>{t('pairTitle')}</span>
           <span className={css.desc}>{t('pairHint')}</span>
         </span>
-        <IconChevronRightOutline14 className={css.chevron} />
+        <IconChevronRightOutlineRegular size={14} className={css.chevron} />
       </button>
 
       {state.phase === 'ready' && state.code !== undefined && (
@@ -96,7 +96,7 @@ export function PairingRow({ t }: PairingRowProps) {
             <div className={css.valueRow}>
               <code className={css.code}>{state.code}</code>
               <button type="button" className={css.copy} onClick={() => { void copy(state.code as string) }} aria-label={t('copy')}>
-                {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
+                {copied ? <IconCheckOutlineRegular /> : <IconCopyOutlineRegular />}
               </button>
             </div>
           </div>
@@ -105,7 +105,7 @@ export function PairingRow({ t }: PairingRowProps) {
             <div className={css.valueRow}>
               <code className={css.command}>{command}</code>
               <button type="button" className={css.copy} onClick={() => { void copy(command as string) }} aria-label={t('copy')}>
-                {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
+                {copied ? <IconCheckOutlineRegular /> : <IconCopyOutlineRegular />}
               </button>
             </div>
           </div>

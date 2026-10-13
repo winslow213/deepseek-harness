@@ -20,9 +20,9 @@ import { ShellExecutor, type CollectedOutput } from '@deepseek-ai/dsh-shell'
 import type {
   ShellExecRequest,
   ShellExecSpec,
-  ShellProcess,
+  ShellExecution,
+  ShellObservedStreams,
   ShellProcessRead,
-  ShellProcessReader,
   ShellProcessStatus,
   ShellRunResult,
 } from '@deepseek-ai/dsh-shell'
@@ -226,6 +226,7 @@ export class RemoteShellCore {
       command: request.command,
       workdir: request.workdir ?? this.config.cwd,
       timeoutMs,
+      onExpiry: request.onExpiry ?? 'kill',
       stdoutMaxBytes,
       ...request.signal !== undefined ? { signal: request.signal } : {},
       ...request.stdin !== undefined ? { stdin: request.stdin } : {},
@@ -236,179 +237,154 @@ export class RemoteShellCore {
     }
   }
 
-  run(spec: ShellExecSpec): Promise<ShellRunResult> {
-    return this.foreground(spec)
-  }
-
-  start(spec: ShellExecSpec): ShellProcess {
-    return this.background(spec)
-  }
-
-  /** POST one exec to the hub and stream its frames. */
-  private async execFetch(spec: ShellExecSpec, timeoutMs: number | undefined, signal?: AbortSignal): Promise<{ res: Response; requestId: string }> {
-    const requestId = randomUUID()
-    const res = await fetch(`${this.config.hubUrl}/api/exec`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      signal,
-      body: JSON.stringify({
-        id: requestId,
-        user: this.config.user,
-        ...this.config.agentId === undefined ? {} : { agentId: this.config.agentId },
-        argv: shellArgvFor(spec.workdir, spec.command),
-        cwd: spec.workdir,
-        ...timeoutMs !== undefined ? { timeoutMs } : {},
-      }),
-    })
-    return { res, requestId }
-  }
-
-  /** Settle a foreground run, killing the remote group on abort/timeout. */
-  private async foreground(spec: ShellExecSpec): Promise<ShellRunResult> {
+  /**
+   * Prepare and run one command on the user's own host through the hub.
+   *
+   * The handle is the only access path: `result()` is the foreground projection
+   * over the same captured streams `readOutput`/`observed` read. Under
+   * `onExpiry: 'kill'` a deadline stops the remote process group and classifies
+   * the projection `timedOut`; under `'none'` no deadline is armed and only the
+   * caller's signal or {@link ShellProcess.kill} stops the command.
+   * @param spec - a resolved spec from {@link resolve}.
+   * @returns the live handle with its memoized result projection.
+   */
+  async execute(spec: ShellExecSpec): Promise<ShellExecution> {
     const startedAt = Date.now()
-    const stdout = new CappedOutput(spec.stdoutMaxBytes)
-    const stderr = new CappedOutput(this.config.maxOutputBytes)
-    let timedOut = false
-    let aborted = false
-    let code: number | null = null
-    let sig: NodeJS.Signals | null = null
-    let sawTerminal = false
-    let requestId: string | undefined
-
-    const killRemote = (): void => {
-      if (requestId === undefined) return
-      void runKill(this.config.hubUrl, this.config.user, requestId, this.config.agentId).catch(() => {})
-    }
-    let deadlineTimer: NodeJS.Timeout | undefined
-    const onAbort = (): void => {
-      aborted = true
-      killRemote()
-    }
-    spec.signal?.addEventListener('abort', onAbort, { once: true })
-
-    try {
-      const started = await this.execFetch(spec, spec.timeoutMs)
-      requestId = started.requestId
-      deadlineTimer = setTimeout(() => {
-        timedOut = true
-        killRemote()
-      }, spec.timeoutMs)
-      await readExecStream(started.res, (event) => {
-        switch (event.kind) {
-          case 'stream':
-            if (event.channel === 'stdout') stdout.push(event.data)
-            else stderr.push(event.data)
-            return
-          case 'exit':
-            code = event.code
-            sig = event.signal
-            sawTerminal = true
-            return
-          case 'request-error':
-            throw new Error(`remote shell error: ${event.message}`)
-        }
-      })
-      if (!sawTerminal) {
-        code = null
-        sig = null
-      }
-      if (!aborted && !timedOut && sig === 'SIGKILL' && Date.now() - startedAt >= spec.timeoutMs) {
-        timedOut = true
-      }
-      if (timedOut && !aborted) {
-        code = null
-        sig = 'SIGKILL'
-      }
-      return {
-        exitCode: code,
-        signal: sig,
-        timedOut,
-        aborted,
-        timeoutMs: spec.timeoutMs,
-        stdout: stdout.collect(),
-        stderr: stderr.collect(),
-      }
-    } catch (error) {
-      if (spec.signal?.aborted === true) {
-        aborted = true
-        return {
-          exitCode: null,
-          signal: null,
-          timedOut: false,
-          aborted: true,
-          timeoutMs: spec.timeoutMs,
-          stdout: stdout.collect(),
-          stderr: stderr.collect(),
-        }
-      }
-      throw error
-    } finally {
-      clearTimeout(deadlineTimer)
-      spec.signal?.removeEventListener('abort', onAbort)
-    }
-  }
-
-  /** A background process backed by an open hub exec stream. */
-  private background(spec: ShellExecSpec): ShellProcess {
     let status: ShellProcessStatus = 'running'
     let exitCode: number | null = null
     let signal: NodeJS.Signals | null = null
     let spawnError = ''
     let requestId: string | undefined
-    const stdout = new CappedOutput(this.config.maxOutputBytes)
+    // The deadline is this executor's own expiry; the caller's signal is a
+    // separate cause, so classification reads both and the first cause wins.
+    let expired = false
+    let callerAborted = spec.signal?.aborted === true
+    const stdout = new CappedOutput(spec.stdoutMaxBytes)
     const stderr = new CappedOutput(this.config.maxOutputBytes)
     let settle!: () => void
     const done = new Promise<void>((resolve) => { settle = resolve })
+    let resultPromise: Promise<ShellRunResult> | undefined
 
-    // A provider failure is delivered once through whichever read path polls
-    // it first; it is not duplicated across independent readers.
+    /** Stop the remote process group; a no-op until the hub has given it an id. */
+    const killRemote = (): void => {
+      if (requestId === undefined) return
+      void runKill(this.config.hubUrl, this.config.user, requestId, this.config.agentId).catch(() => {})
+    }
+    const onAbort = (): void => {
+      callerAborted = true
+      killRemote()
+    }
+    spec.signal?.addEventListener('abort', onAbort, { once: true })
+    const deadlineTimer = spec.onExpiry === 'kill'
+      ? setTimeout(() => {
+        expired = true
+        killRemote()
+      }, spec.timeoutMs)
+      : undefined
+
+    /** True when this execution's own abort or deadline ended the command. */
+    const selfStopped = (): boolean => expired || spec.signal?.aborted === true
+
+    // First-cause classification: this executor's own deadline outranks the
+    // caller's signal, and a hub-side SIGKILL that landed at or after the
+    // deadline is the timeout the hub was enforcing, not an unexplained signal.
+    const classify = (): { timedOut: boolean; aborted: boolean } => {
+      const timedOut = expired
+        || (spec.onExpiry === 'kill' && signal === 'SIGKILL' && Date.now() - startedAt >= spec.timeoutMs)
+      return { timedOut, aborted: !timedOut && spec.signal?.aborted === true }
+    }
+
+    // A provider failure produces no stream output, so its note is the whole
+    // stderr stream for every reader. The observed reader serves it at offset
+    // 0; the consuming read folds it in exactly once.
+    let spawnErrorReported = false
     const consumeSpawnError = (): string => {
-      const note = spawnError
-      spawnError = ''
-      return note
+      if (spawnError.length === 0 || spawnErrorReported) return ''
+      spawnErrorReported = true
+      return spawnError
     }
 
-    // Each reader owns its own cursor over the two capped streams, so a
-    // live-result consumer never consumes the primary readOutput delta.
-    const makeReader = (): ShellProcessReader => {
-      let ownOutOffset = 0
-      let ownErrOffset = 0
-      return {
-        read: (): ShellProcessRead => {
-          const outText = stdout.collect().text
-          const errText = stderr.collect().text
-          const out = outText.slice(ownOutOffset)
-          const err = errText.slice(ownErrOffset)
-          ownOutOffset += out.length
-          ownErrOffset += err.length
-          const sep = out.length > 0 && !out.endsWith('\n') ? '\n' : ''
-          const mergedErr = err.length > 0 ? `${sep}[stderr]\n${err}` : ''
-          const note = out.length === 0 && err.length === 0 ? consumeSpawnError() : ''
-          return { delta: `${out}${mergedErr}${note}`, lossy: false }
-        },
-      }
+    // Each reader owns its own offset over the two capped streams, so a
+    // live-result observer never consumes the primary readOutput delta.
+    const offsetReader = (stream: CappedOutput): ShellObservedStreams['stdout'] => ({
+      readFrom: (fromByte: number) => {
+        const { text } = stream.collect()
+        // An offset past the retained head means the requested bytes slid out
+        // of the tail window: the whole tail is the answer and the gap is lossy.
+        if (fromByte > text.length) return { text, nextOffset: text.length, lossy: true }
+        return { text: text.slice(fromByte), nextOffset: text.length, lossy: false }
+      },
+    })
+    const observedStdout = offsetReader(stdout)
+    const observedStderrStream = offsetReader(stderr)
+    const observedStderr: ShellObservedStreams['stderr'] = {
+      readFrom: (fromByte: number) => {
+        if (spawnError.length === 0) return observedStderrStream.readFrom(fromByte)
+        const note = Buffer.from(spawnError, 'utf8')
+        return {
+          text: note.subarray(Math.min(fromByte, note.length)).toString('utf8'),
+          nextOffset: note.length,
+          lossy: false,
+        }
+      },
     }
-    const primary = makeReader()
+    let stdoutOffset = 0
+    let stderrOffset = 0
 
-    const proc: ShellProcess = {
+    const proc: ShellExecution = {
       get status() { return status },
       get exitCode() { return exitCode },
       get signal() { return signal },
       done,
-      readOutput: (): ShellProcessRead => primary.read(),
-      createOutputReader: (): ShellProcessReader => makeReader(),
+      readOutput: (): ShellProcessRead => {
+        const out = observedStdout.readFrom(stdoutOffset)
+        const err = observedStderrStream.readFrom(stderrOffset)
+        stdoutOffset = out.nextOffset
+        stderrOffset = err.nextOffset
+
+        const note = consumeSpawnError()
+        const failureSeparator = err.text.length > 0 && !err.text.endsWith('\n') ? '\n' : ''
+        const errText = err.text + (note.length > 0 ? `${failureSeparator}${note}` : '')
+        // Single newline between sections: stdout chunks usually end with one
+        // already; add it only when missing.
+        const separator = out.text.length > 0 && !out.text.endsWith('\n') ? '\n' : ''
+        return {
+          delta: out.text + (errText.length > 0 ? `${separator}[stderr]\n${errText}` : ''),
+          lossy: out.lossy || err.lossy,
+          ...out.spillPath !== undefined ? { stdoutSpillPath: out.spillPath } : {},
+          ...err.spillPath !== undefined ? { stderrSpillPath: err.spillPath } : {},
+        }
+      },
+      observed: { stdout: observedStdout, stderr: observedStderr },
       kill: (): boolean => {
         if (status !== 'running') return false
         status = 'killed'
-        if (requestId !== undefined) void runKill(this.config.hubUrl, this.config.user, requestId, this.config.agentId).catch(() => {})
+        killRemote()
         return true
+      },
+      result: (): Promise<ShellRunResult> => {
+        resultPromise ??= done.then(() => {
+          if (spawnError.length > 0) throw new Error(spawnError)
+          return {
+            exitCode,
+            signal,
+            ...classify(),
+            timeoutMs: spec.timeoutMs,
+            stdout: stdout.collect(),
+            stderr: stderr.collect(),
+          }
+        })
+        return resultPromise
       },
     }
 
     void (async () => {
       try {
-        const started = await this.execFetch(spec, undefined)
+        // Only the deadline policy decides whether the hub enforces the
+        // deadline too; `'none'` leaves the remote range unbounded.
+        const started = await this.execFetch(spec, spec.onExpiry === 'kill' ? spec.timeoutMs : undefined)
         requestId = started.requestId
+        if (callerAborted) killRemote()
         await readExecStream(started.res, (event) => {
           switch (event.kind) {
             case 'stream':
@@ -428,17 +404,44 @@ export class RemoteShellCore {
         })
         if (status === 'running') {
           status = 'killed'
-          spawnError = 'remote channel closed before the process exited'
+          // A stream that ends without a terminal frame is a provider failure,
+          // unless this execution's own abort or deadline is why it ended.
+          if (!selfStopped()) spawnError = 'remote channel closed before the process exited'
         }
       } catch (error) {
         if (status === 'running') status = 'killed'
-        spawnError = `remote exec failed: ${error instanceof Error ? error.message : String(error)}`
+        // A cancellation that stopped the fetch is that cancellation, not a
+        // provider failure: the projection reports `aborted`/`timedOut`.
+        if (!selfStopped()) {
+          spawnError = `remote exec failed: ${error instanceof Error ? error.message : String(error)}`
+        }
       } finally {
+        if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
+        spec.signal?.removeEventListener('abort', onAbort)
         settle()
       }
     })()
 
     return proc
+  }
+
+  /** POST one exec to the hub and stream its frames. */
+  private async execFetch(spec: ShellExecSpec, timeoutMs: number | undefined, signal?: AbortSignal): Promise<{ res: Response; requestId: string }> {
+    const requestId = randomUUID()
+    const res = await fetch(`${this.config.hubUrl}/api/exec`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        id: requestId,
+        user: this.config.user,
+        ...this.config.agentId === undefined ? {} : { agentId: this.config.agentId },
+        argv: shellArgvFor(spec.workdir, spec.command),
+        cwd: spec.workdir,
+        ...timeoutMs !== undefined ? { timeoutMs } : {},
+      }),
+    })
+    return { res, requestId }
   }
 }
 
@@ -460,12 +463,8 @@ export class RemoteShellExecutor extends ShellExecutor {
     return this.core.resolve(request)
   }
 
-  override run(spec: ShellExecSpec): Promise<ShellRunResult> {
-    return this.core.run(spec)
-  }
-
-  override start(spec: ShellExecSpec): ShellProcess {
-    return this.core.start(spec)
+  override execute(spec: ShellExecSpec): Promise<ShellExecution> {
+    return this.core.execute(spec)
   }
 }
 

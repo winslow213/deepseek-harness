@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-07-a2ui-tool-store-local-save.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-07-a2ui-tool-store-local-save.md
-2026-09-07-a2ui-tool-store-local-save.md: f0cebaa4b0eda00a4ffb3df5bd504c12b8467c40
-2026-09-07-a2ui-tool-store-local-save.zh.md: d99ba844dadae4632d1d66d131c88fc458f4ad65
+/agent-note-a2ui-tool-store-for-local-save-and-distribution:
+  en: bbfa14a4163c4779
+  zh: 8d75cdf99146c518
+/agent-note-a2ui-tool-store-for-local-save-and-distribution/problem:
+  en: e47abd5f2bb55933
+  zh: f13622310ddef21f
+/agent-note-a2ui-tool-store-for-local-save-and-distribution/decision:
+  en: cdef78bd488a9335
+  zh: 24a95ca8ec5fa4c8
+/agent-note-a2ui-tool-store-for-local-save-and-distribution/alternatives-considered:
+  en: f11132ee92b8d418
+  zh: a1fb0b0185deaf5c
+/agent-note-a2ui-tool-store-for-local-save-and-distribution/consequences:
+  en: 562287e17bf0f819
+  zh: 1da1ca757964cfa7

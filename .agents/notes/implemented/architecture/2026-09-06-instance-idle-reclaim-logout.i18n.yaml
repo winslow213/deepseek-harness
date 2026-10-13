@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-06-instance-idle-reclaim-logout.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-06-instance-idle-reclaim-logout.md
-2026-09-06-instance-idle-reclaim-logout.md: 367bb387ba074ab2404b91e26416099da4945130
-2026-09-06-instance-idle-reclaim-logout.zh.md: 5050e060e3fbcb9fa30f360c5232866f83f6433f
+/agent-note-idle-reclaim-and-logout-close-for-per-user-instances:
+  en: f1294df5288a5783
+  zh: ef1ce2fd4dae3491
+/agent-note-idle-reclaim-and-logout-close-for-per-user-instances/problem:
+  en: 0cc1e4a729dbe1ac
+  zh: af6e6a646530a032
+/agent-note-idle-reclaim-and-logout-close-for-per-user-instances/decision:
+  en: baa3191bee36eb07
+  zh: bf55841c35d4444e
+/agent-note-idle-reclaim-and-logout-close-for-per-user-instances/alternatives-considered:
+  en: a6bb65fbf0f4f905
+  zh: 71dd5e56a92cb10e
+/agent-note-idle-reclaim-and-logout-close-for-per-user-instances/consequences:
+  en: 2ce61791c81b49f9
+  zh: 8bb81b66669a4ca8

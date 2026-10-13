@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-self-service-registration-with-operator-approval.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-16-self-service-registration-with-operator-approval.md
-2026-09-16-self-service-registration-with-operator-approval.md: c81adaff2dd37c7eec38cb49b9cf479fc15c9496
-2026-09-16-self-service-registration-with-operator-approval.zh.md: 90e3a408fda53cf35fad75208521fb48a546909e
+/agent-note-self-service-registration-gated-by-operator-approval:
+  en: df54e52112a1fc1d
+  zh: 3625826f17943a11
+/agent-note-self-service-registration-gated-by-operator-approval/problem:
+  en: 257ccfb6c751becb
+  zh: 0fc4c9e5d85ddb0d
+/agent-note-self-service-registration-gated-by-operator-approval/decision:
+  en: c7514dc4f33a61cc
+  zh: c21685969d3516f8
+/agent-note-self-service-registration-gated-by-operator-approval/alternatives-considered:
+  en: b240fec7b2a98e15
+  zh: e6f7b5772c5cb124
+/agent-note-self-service-registration-gated-by-operator-approval/consequences:
+  en: 5d358442a1bfe51d
+  zh: 1078cd9c31ddf33a

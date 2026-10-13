@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-a2ui-submission-notice-context.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-09-a2ui-submission-notice-context.md
-2026-09-09-a2ui-submission-notice-context.md: 43d660b7667eb77199e5da0c0f072f014d9fa70d
-2026-09-09-a2ui-submission-notice-context.zh.md: 7f25d8fda7ede374090296c8bdf6198f66362f73
+/agent-note-a2ui-submissions-log-as-collapsed-context-notices:
+  en: e37bbd8f251d0d6d
+  zh: 7d9cede11bbedeab
+/agent-note-a2ui-submissions-log-as-collapsed-context-notices/problem:
+  en: 4c2d7bbeeed0a516
+  zh: 7f040213ae91bb4f
+/agent-note-a2ui-submissions-log-as-collapsed-context-notices/decision:
+  en: 071310524d5f3417
+  zh: 42c66510ba3dbf10
+/agent-note-a2ui-submissions-log-as-collapsed-context-notices/alternatives-considered:
+  en: 443e630bb1937193
+  zh: 02b2c327a03dc4db
+/agent-note-a2ui-submissions-log-as-collapsed-context-notices/consequences:
+  en: 4a44ddded3e94e8e
+  zh: d482fe3dfa81a2e1

@@ -69,7 +69,7 @@ describe('PairingRow', () => {
     mount('zh')
     fireEvent.click(screen.getByRole('button', { name: /生成配对码/ }))
 
-    await waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('/api/pairings', { method: 'POST' }) })
+    await waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('api/pairings', { method: 'POST' }) })
     await waitFor(() => { expect(screen.getByText('abc-123')).toBeTruthy() })
     expect(screen.getByText(zh.pairCommandLabel)).toBeTruthy()
     // The claim command embeds the code.

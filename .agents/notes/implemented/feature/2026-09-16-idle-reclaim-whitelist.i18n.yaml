@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-idle-reclaim-whitelist.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-idle-reclaim-whitelist.md
-2026-09-16-idle-reclaim-whitelist.md: 44564d3430cc6f5a36937bf1b39c47a5a38b1eed
-2026-09-16-idle-reclaim-whitelist.zh.md: 98b326adc072d76f7e6351733f9bfbd658c0f705
+/agent-note-per-user-whitelist-against-the-idle-instance-reclaim-sweep:
+  en: 1e9e2c417a0844c1
+  zh: f049d7dfeff16eb5
+/agent-note-per-user-whitelist-against-the-idle-instance-reclaim-sweep/problem:
+  en: d7273540693b3cf9
+  zh: acfd1b6c7f46c494
+/agent-note-per-user-whitelist-against-the-idle-instance-reclaim-sweep/decision:
+  en: f70d9abe563f380d
+  zh: 4a08f7c808e90799
+/agent-note-per-user-whitelist-against-the-idle-instance-reclaim-sweep/alternatives-considered:
+  en: 6e39d6fd570c4360
+  zh: 35b52266239a04f5
+/agent-note-per-user-whitelist-against-the-idle-instance-reclaim-sweep/consequences:
+  en: fc0a41ed180221c8
+  zh: dea49fc2dd1c11be
+/agent-note-per-user-whitelist-against-the-idle-instance-reclaim-sweep/related:
+  en: 60c5666c9adb873d
+  zh: 64cc7498ff59cd81

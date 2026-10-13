@@ -367,7 +367,7 @@ describe('dsh-tool-a2ui-surface', () => {
           write: [{ field: ' out ', from: ' value.x ' }] }],
       }
       const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
-      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions[0]).toMatchObject({
         write: [{ field: 'out', from: 'value.x' }],
       })
     })
@@ -400,7 +400,7 @@ describe('dsh-tool-a2ui-surface', () => {
         actions: [{ id: 'run', label: 'Run', execution: 'command', command: 'hdc -t {sn} hilog' }],
       }
       const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
-      const actions = (page as unknown as { actions: Array<Record<string, unknown>> }).actions!
+      const actions = (page as unknown as { actions: Array<Record<string, unknown>> }).actions
       expect(actions[0]).toMatchObject({ id: 'run', execution: 'command', command: 'hdc -t {sn} hilog' })
       expect(actions[0]).not.toHaveProperty('tool')
     })
@@ -413,7 +413,7 @@ describe('dsh-tool-a2ui-surface', () => {
         actions: [{ id: 'run', label: 'Run', execution: 'command', command: 'sleep 2', timeoutMs: 5000 }],
       }
       const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
-      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({ timeoutMs: 5000 })
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions[0]).toMatchObject({ timeoutMs: 5000 })
     })
 
     it('rejects a command action without a command', () => {
@@ -447,7 +447,7 @@ describe('dsh-tool-a2ui-surface', () => {
         actions: [{ id: 's', label: 'Script', execution: 'script', program: 'return 1', binds: ['text'] }],
       }
       const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
-      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions[0]).toMatchObject({
         id: 's', execution: 'script', program: 'return 1', binds: ['text'],
       })
     })
@@ -476,8 +476,8 @@ describe('dsh-tool-a2ui-surface', () => {
         actions: [{ id: 's', label: 'Steps', execution: 'local', result: '{a}' }],
       }
       const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
-      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({ result: '{a}' })
-      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).not.toHaveProperty('steps')
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions[0]).toMatchObject({ result: '{a}' })
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions[0]).not.toHaveProperty('steps')
     })
 
     it('canonicalizes a local action step list in order, trimmed on field/value/source', () => {
@@ -494,7 +494,7 @@ describe('dsh-tool-a2ui-surface', () => {
           ] }],
       }
       const page = canonicalizeA2uiPage(raw as unknown as A2uiPageInput)
-      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions![0]).toMatchObject({
+      expect((page as unknown as { actions: Array<Record<string, unknown>> }).actions[0]).toMatchObject({
         execution: 'local',
         steps: [
           { kind: 'set', field: 'a', value: '1' },
