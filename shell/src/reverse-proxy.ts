@@ -53,7 +53,13 @@ export interface ProxyOptions {
   readonly routes: ReadonlyMap<string, Upstream>
 }
 
-/** Session cookie name shared with the team account service. */
+/**
+ * Default session cookie name, shared with the team account service.
+ * A deployment sharing a host with another team shell sets
+ * `TEAM_SESSION_COOKIE`, because browsers scope cookies by host and ignore
+ * the port, so two account services on one host would otherwise overwrite
+ * each other's sessions.
+ */
 export const TEAM_SESSION_COOKIE = 'dsh_team_session'
 
 /** Proxy one HTTP request to the upstream, stripping the route prefix. */
@@ -332,6 +338,11 @@ export interface AccountProxyOptions {
   readonly accountUrl: string
   /** Instance ports to prefer for a user before falling back to the account route decision. */
   readonly staticRoutes?: ReadonlyMap<string, number>
+  /**
+   * Team session cookie name; defaults to {@link TEAM_SESSION_COOKIE}. Must
+   * match the account service behind `accountUrl`, which sets the cookie.
+   */
+  readonly sessionCookieName?: string
 }
 
 /**
@@ -430,6 +441,7 @@ async function accountRouteDecision(accountUrl: string, cookieHeader: string | u
  * spawned instance receive a "not ready" page.
  */
 export function startAccountProxy(options: AccountProxyOptions): ReturnType<typeof createServer> {
+  const sessionCookie = options.sessionCookieName ?? TEAM_SESSION_COOKIE
   const server = createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://proxy.invalid').pathname
     // Logout is handled locally so both the team session (via the account
@@ -463,7 +475,7 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
     }
     void (async () => {
       try {
-        const session = readCookie(req.headers.cookie, TEAM_SESSION_COOKIE)
+        const session = readCookie(req.headers.cookie, sessionCookie)
         if (session === undefined) {
           // API calls without a session get JSON; browser navigation gets the page.
           if (pathname.startsWith('/api/')) { json(res, 401, { authenticated: false }); return }
@@ -506,7 +518,7 @@ export function startAccountProxy(options: AccountProxyOptions): ReturnType<type
   server.on('upgrade', (req, socket, head) => {
     void (async () => {
       try {
-        const session = readCookie(req.headers.cookie, TEAM_SESSION_COOKIE)
+        const session = readCookie(req.headers.cookie, sessionCookie)
         if (session === undefined) {
           socket.destroy()
           return

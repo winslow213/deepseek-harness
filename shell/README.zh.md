@@ -153,6 +153,10 @@ npm run account
 
 `TEAM_DB_URL`（Postgres）与 `TEAM_REDIS_URL`（Redis）必填；复制 `.env.example` 为 `.env` 并填入。登录成功后，账号服务分配空闲 loopback 端口，在进程内监督该用户的 `dsh --profile web`，并登记 proxy 读取的实例路由。`DSH_USERS_ROOT` 与 `DSH_ENTRY_HOST` 控制生成的实例。
 
+`TEAM_SESSION_COOKIE`（默认 `dsh_team_session`）是账号服务签发的登录 cookie 名，proxy 按同一名字读取。cookie 按 host 划分、忽略端口，所以同一 host 上的两个团队 shell 必须在此取不同值，否则一方登录会覆盖另一方的会话；该名不随端口变化，因此改它会一次性登出所有成员。
+
+`TEAM_MANDATORY_BUNDLES` 是钉在每个账号 web profile 上的 `name@version` 逗号分隔列表；不设置则保留 0.1.x 内置钉版（`@xmanrui/dsh-im@4.20.2`、`@nanmicoder/dsh-agent-teams@^0.1.18`）。只要设置（包括设为空字符串），该值即为准。若某运行时不在这些插件的 peer 范围内，可据此不装它们，而不是在每次账号 provision 时都付一次被拒的 `pnpm add`。
+
 账号服务还签发多设备配对码：浏览器「生成配对码」设置行发 `POST /api/pairings`（会话鉴权，经 proxy），hub 通过 `POST /api/pairings/claim` 核实认领的码。用 `--account http://127.0.0.1:3900` 启动 hub，使其向账号服务（而非静态 `--user-token` 表）查询码并学习每位成员的 agent token；`TEAM_PAIRING_TTL_SECS` 设置码的有效期。
 
 Operator CLI：

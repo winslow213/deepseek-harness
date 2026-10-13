@@ -58,6 +58,7 @@ export async function main(): Promise<void> {
   const server = createAccountServer({
     auth, sessions, users, instances, pairings, lifecycle, registrations, messages,
     sessionTtlSecs: env.sessionTtlSecs,
+    sessionCookieName: env.sessionCookieName,
     registrationDomains: env.registrationDomains,
     defaultPassword: env.defaultPassword,
     adminSecret: env.adminSecret,

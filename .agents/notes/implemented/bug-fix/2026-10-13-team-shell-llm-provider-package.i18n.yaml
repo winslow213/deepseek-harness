@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for 2026-10-13-team-shell-llm-provider-package.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-13-team-shell-llm-provider-package.md
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider:
+  en: ce11bebaa6a90d70
+  zh: 24cd58fc5fd1fc3e
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/problem:
+  en: 35cdbae6fcbaae3b
+  zh: ad827bc7ed02d559
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/decision:
+  en: dc38b62218d78e5a
+  zh: 2ffc374f084ea03d
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: 4237c596c10e1ee9
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/alternatives-considered/inherit-the-adapter-s-default-catalog-instead-of-pinning-models:
+  en: b32547c3e4f28773
+  zh: 4b2f9e353c345b5e
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/alternatives-considered/mount-both-packages-or-mount-the-library-alongside-the-plugin:
+  en: a00f39fb63e19662
+  zh: 5f5368fb2ddad3e8
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/alternatives-considered/fix-the-name-and-leave-the-catalog-alone:
+  en: b7c25dc33e617dad
+  zh: 00e5252116379586
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/alternatives-considered/fall-back-to-the-inherited-deepseek-api-key-instead-of-naming-a-credential-reference:
+  en: 4a9a67d32ae2123a
+  zh: 0cd4cbf1b8a978b8
+/agent-note-team-shell-mounts-the-plugin-that-registers-its-model-provider/consequences:
+  en: 860e2e74d9b70551
+  zh: 5fa59c9198265987

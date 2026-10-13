@@ -145,3 +145,66 @@ message + `details.output`。
   ~70 同时在线的分析记录在 design §10。
 - 插件安装已具备：4 表单 + pnpm 自愈 + 监督重启 + 装完自动刷新（见上文）。
 - alice 32001 带 `DSH_PLUGIN_INSTALL=true` + `--trusted-host` + 自愈 lib。
+
+## 隔离的第二套栈（功能验证用）
+
+同一台机器上再起一套完整 shell，与常驻的那套互不干扰。逐项换掉所有
+带部署身份的值，其余（LLM 凭据、DB 凭据、`DSH_ENTRY_HOST`）沿用同一份
+`shell/.env`：
+
+| 变量 | 常驻 | 第二套 |
+| --- | --- | --- |
+| `TEAM_DB_URL` | `.../postgres` | `.../dsh_team_dev` |
+| `TEAM_REDIS_URL` | `.../6380/0` | `.../6380/1` |
+| `TEAM_HTTP_PORT` | 3900 | 4101 |
+| `TEAM_INSTANCE_PORT_START/END` | 32001/60999 | 61000/61999 |
+| `DSH_USERS_ROOT` | `~/.dsh-users` | `~/.dsh-users-dev` |
+| `TEAM_ENTRY_BASE_URL` | `http://10.33.2.56:3999` | `http://10.33.2.56:4100` |
+| `TEAM_SESSION_COOKIE` | `dsh_team_session` | `dsh_team_session_dev` |
+
+**`TEAM_SESSION_COOKIE` 是必需的，不是可选的**：cookie 按 host 划分、忽略
+端口，两套都通过 `10.33.2.56` 访问时同名会互相顶掉，换端口规避不了。
+account 与 proxy 各读一次该变量，两边必须同值。
+
+第二套用 `dsh_team_dev` 这套独立库；要复用某个生产账号（含其密码哈希与
+agent token），从生产库把该行整行复制过去即可，不写生产库。
+
+在新版本（`0.2.1-alpha.2`）上还要把 `TEAM_MANDATORY_BUNDLES` 设为空：
+`@xmanrui/dsh-im` 与 `@nanmicoder/dsh-agent-teams` 的 peer 范围不覆盖该
+运行时，每次 provision 都会付一次被拒的 `dsh plugin add`（约 18 秒），
+且新版本的功能已由内置能力承担。
+
+### 第二套的 API 凭据取生产那份
+
+`TEAM_LLM_*` 与 `TEAM_KB_AGENT_TOKEN` 要从生产 `shell/.env` 读，而不是用
+本仓 `shell/.env` 的那份：两者 `TEAM_LLM_API_KEY` 不同，用错那把测出来的
+是另一份配额，结论不可信。密钥只经环境变量下发，`cordis.patch.yml` 里存的是
+`apiKeyEnv: DSH_LLM_API_KEY` 这类引用，用户根下不落明文。
+
+KB 令牌通常无需额外处理：从生产库整行复制过来的账号自带其 `agent_token`，
+而 `ensureKbSearch` 优先用账号自己的令牌，`TEAM_KB_AGENT_TOKEN` 只是在没有
+账号库可读时兜底。
+
+### 合并上游后必须复查团队 patch 的插件包名
+
+上游 `0.2.1-alpha.2` 把注册 `deepseek-official` 的插件从
+`@deepseek-ai/dsh-llm-deepseek` 拆了出来：该包现在只是共用的 Messages
+adapter 库（仅 `export { registerDeepSeekProvider }`），插件本体改为
+`@deepseek-ai/dsh-llm-deepseek-api-key`。合并后 `writeTeamLlmPatch` 仍写旧包名，
+结果是**一个 provider 都没注册**，但 home patch、环境变量、`settings.yaml`
+看上去全部正常 —— 实例启动无任何报错，只有模型目录是空的
+（`session/modelCatalog` 返回 `routableProviders: []`）。
+
+判定方法：挂载的包必须导出 `apply`（或继承 `Service`）。`shell/tests/team-llm-patch.spec.ts`
+把这条钉成回归测试，包名对照真实导出而非字符串，下次重命名会在测试里失败。
+
+**同类风险**：`writeTeamSandboxPatch` / `writeTeamDirectoryPickerPatch` 等其余
+团队 patch 块也写插件包名，上游任何一次包拆分都会造成同样的静默失败。
+
+### 模型清单在团队 patch 里显式钉住
+
+`writeTeamLlmPatch` 写出 `models:`，钉住成员在模型选择器里看到的三个：
+`deepseek-flash`、`deepseek-v4-pro`、`deepseek-v4-flash-vision-exp`。不钉就会
+继承上游默认目录，而那是会缩水的：`0.2.1-alpha.2` 的默认目录只剩 Flash 与
+Pro，把账号原本有的视觉模型丢掉了。团队端点实际提供 9 个模型，需要改清单
+时改 `TEAM_MODELS`（`shell/src/spawn-user.ts`）并重启实例。

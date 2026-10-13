@@ -52,10 +52,39 @@ const WEB_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] as con
  * same way `dsh plugin --profile web add <spec>` would, so a mandatory
  * plugin's `dependencies` entry and `dsh.profile.bundles` row are
  * indistinguishable from one a member chose themselves.
+ *
+ * These target the 0.1.x runtime. A deployment on a runtime whose peer ranges
+ * the plugins do not cover sets `TEAM_MANDATORY_BUNDLES` to the empty string
+ * rather than let every provision retry an install the plugin manager
+ * rejects.
  */
 const MANDATORY_BUNDLE_SPECS: Readonly<Record<string, string>> = {
   '@xmanrui/dsh-im': '4.20.2',
   '@nanmicoder/dsh-agent-teams': '^0.1.18',
+}
+
+/**
+ * Resolve the specs to install from `TEAM_MANDATORY_BUNDLES`, a
+ * comma-separated `name@version` sequence.
+ *
+ * Unset keeps the built-in pins. Set — including to the empty string — is
+ * authoritative, so a deployment can run without any pinned bundle. Entries
+ * without a version, such as a bare scoped name, are dropped rather than
+ * guessed at: an unpinned install is a different deployment decision.
+ *
+ * @param raw - the raw `TEAM_MANDATORY_BUNDLES` value, or undefined.
+ * @returns the name-to-spec mapping to reconcile.
+ */
+export function parseMandatoryBundles(raw: string | undefined): Record<string, string> {
+  if (raw === undefined) return { ...MANDATORY_BUNDLE_SPECS }
+  const specs: Record<string, string> = {}
+  for (const entry of raw.split(',')) {
+    const trimmed = entry.trim()
+    const at = trimmed.lastIndexOf('@')
+    if (at <= 0 || at === trimmed.length - 1) continue
+    specs[trimmed.slice(0, at)] = trimmed.slice(at + 1)
+  }
+  return specs
 }
 
 /** Base directory holding every user's DSH_HOME. */
@@ -216,7 +245,9 @@ export function provisionUserHome(user: string, env?: NodeJS.ProcessEnv, account
  * A failed install is logged and left for the next restart to retry — a
  * member's login must not block on a registry hiccup.
  * @param user - the account whose profile is provisioned.
- * @param env - environment carrying `DSH_USERS_ROOT`.
+ * @param env - environment carrying `DSH_USERS_ROOT` and the optional
+ *   `TEAM_MANDATORY_BUNDLES` override resolved by
+ *   {@link parseMandatoryBundles}.
  */
 export function ensureMandatoryBundles(user: string, env: NodeJS.ProcessEnv = process.env): void {
   const home = userHome(user, env)
@@ -228,12 +259,13 @@ export function ensureMandatoryBundles(user: string, env: NodeJS.ProcessEnv = pr
     return // provisionUserHome always writes this manifest first; a missing/corrupt file is a different problem.
   }
   const deps = manifest.dependencies ?? {}
-  const missing = Object.entries(MANDATORY_BUNDLE_SPECS).filter(([name, version]) => deps[name] !== version)
+  const specs = parseMandatoryBundles(env.TEAM_MANDATORY_BUNDLES)
+  const missing = Object.entries(specs).filter(([name, version]) => deps[name] !== version)
   if (missing.length === 0) return
-  const specs = missing.map(([name, version]) => `${name}@${version}`)
+  const requested = missing.map(([name, version]) => `${name}@${version}`)
   const result = spawnSync(
     process.execPath,
-    ['--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'plugin', '--profile', 'web', 'add', ...specs],
+    ['--import', 'tsx/esm', join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'plugin', '--profile', 'web', 'add', ...requested],
     { env: { ...process.env, [DSH_HOME_ENV]: home }, cwd: REPO_ROOT, stdio: 'pipe' },
   )
   if (result.status !== 0) {
@@ -527,6 +559,51 @@ function upsertTeamBlock(patchPath: string, block: string, id: string): void {
 }
 
 /**
+ * The model catalog every account's profile exposes.
+ *
+ * The team endpoint serves more than the upstream default advertises, and
+ * upstream's default has shrunk across releases — the 0.2.1-alpha.2 catalog
+ * carries only Flash and Pro, dropping the vision model accounts had before.
+ * Pinning the list here keeps members' model picker stable across those
+ * upstream default changes. Entries mirror `DEFAULT_MODELS` in
+ * `packages/llm/llm-deepseek/src/models.ts`; `inputModalities` must include
+ * `image` for a model that accepts images.
+ */
+const TEAM_MODELS: readonly { id: string; name: string; description?: string; vision: boolean }[] = [
+  { id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', vision: true },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek-V4-Pro',
+    description: 'Stronger agentic coding, knowledge, and difficult reasoning; suited to complex or quality-critical tasks at higher cost.',
+    vision: false,
+  },
+  { id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek-V4-Flash-Vision-Exp', vision: true },
+]
+
+/** Default context capacity both the upstream catalog and the team endpoint report. */
+const TEAM_MODEL_CONTEXT_WINDOW = 1_000_000
+
+/** Render {@link TEAM_MODELS} as the `models:` sequence of the LLM patch block. */
+function renderTeamModels(): string[] {
+  const lines = ['    models:']
+  for (const model of TEAM_MODELS) {
+    lines.push(`      - id: ${model.id}`)
+    lines.push(`        name: ${model.name}`)
+    if (model.description !== undefined) lines.push(`        description: ${model.description}`)
+    lines.push(`        contextWindow: ${String(TEAM_MODEL_CONTEXT_WINDOW)}`)
+    // Flash keeps the upstream cache-compatibility flags: the endpoint accepts
+    // tool definitions only by addition, and rewrites of the system prompt
+    // belong in history.
+    if (model.vision) lines.push('        inputModalities: [text, image]')
+    if (model.id === 'deepseek-flash') {
+      lines.push('        systemPromptUpdate: in-history')
+      lines.push('        toolUpdate: addition-only')
+    }
+  }
+  return lines
+}
+
+/**
  * Upsert the home-level cordis patch steering the DeepSeek adapter to the team
  * endpoint and key reference. The key is never materialized here: the patch
  * names the `DSH_LLM_API_KEY` credential reference, resolved per request from
@@ -546,10 +623,11 @@ function writeTeamLlmPatch(home: string): void {
     '# DSH_LLM_BASE_URL at startup. Change the account service environment and',
     '# restart the instance to propagate new facts to every user.',
     '- id: llm-deepseek',
-    "  name: '@deepseek-ai/dsh-llm-deepseek'",
+    "  name: '@deepseek-ai/dsh-llm-deepseek-api-key'",
     '  config:',
     `    apiKeyEnv: ${LLM_KEY_REF}`,
     `    baseURL: !!js process.env.${LLM_BASE_URL_ENV}`,
+    ...renderTeamModels(),
   ].join('\n')
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_LLM_PATCH_ID)
 }

@@ -14,7 +14,6 @@ import { verifyPassword } from './password.ts'
 import { MessageError, type MessageStore } from './messages.ts'
 import { approvalPage, changePasswordPage, inboxPage, registerPage, resultPage } from '../team-pages.ts'
 
-const COOKIE_NAME = 'dsh_team_session'
 const MAX_BODY_BYTES = 16 * 1024
 
 /**
@@ -40,6 +39,11 @@ interface HttpServices {
   registrations: RegistrationService
   messages: MessageStore
   sessionTtlSecs: number
+  /**
+   * Name of the session cookie issued on login. Must equal the name the
+   * reverse proxy reads; see `TEAM_SESSION_COOKIE`.
+   */
+  sessionCookieName: string
   /** Email domains the registration form accepts, shown on the page. */
   registrationDomains: readonly string[]
   /** Password issued to an approved account, shown on the registration page. */
@@ -61,9 +65,9 @@ function parseCookies(header: string | undefined): Map<string, string> {
   return out
 }
 
-function sessionCookie(sessionId: string, ttlSecs: number): string {
+function sessionCookie(sessionId: string, ttlSecs: number, name: string): string {
   return [
-    `${COOKIE_NAME}=${sessionId}`,
+    `${name}=${sessionId}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Strict',
@@ -71,8 +75,8 @@ function sessionCookie(sessionId: string, ttlSecs: number): string {
   ].join('; ')
 }
 
-function expiredSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`
+function expiredSessionCookie(name: string): string {
+  return `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -134,7 +138,7 @@ async function handleLogin(req: IncomingMessage, res: ServerResponse, s: HttpSer
     sendJson(res, 401, { error: result.error ?? 'authentication failed' })
     return
   }
-  res.setHeader('set-cookie', sessionCookie(result.sessionId, s.sessionTtlSecs))
+  res.setHeader('set-cookie', sessionCookie(result.sessionId, s.sessionTtlSecs, s.sessionCookieName))
   if (result.userId === undefined) {
     await s.sessions.destroy(result.sessionId)
     sendJson(res, 500, { error: 'authentication succeeded without a user id' })
@@ -159,7 +163,7 @@ async function handleLogin(req: IncomingMessage, res: ServerResponse, s: HttpSer
 
 async function handleLogout(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
   const cookies = parseCookies(req.headers.cookie)
-  const sessionId = cookies.get(COOKIE_NAME)
+  const sessionId = cookies.get(s.sessionCookieName)
   if (sessionId !== undefined) {
     const userId = await s.sessions.lookup(sessionId)
     await s.sessions.destroy(sessionId)
@@ -167,7 +171,7 @@ async function handleLogout(req: IncomingMessage, res: ServerResponse, s: HttpSe
     // web), matching the S6 lifecycle goal; the next login cold-starts.
     if (userId !== undefined) await s.lifecycle.stop(userId)
   }
-  res.setHeader('set-cookie', expiredSessionCookie())
+  res.setHeader('set-cookie', expiredSessionCookie(s.sessionCookieName))
   sendJson(res, 200, { loggedOut: true })
 }
 
@@ -215,7 +219,7 @@ async function handleUserRole(req: IncomingMessage, res: ServerResponse, s: Http
 
 async function handleSessionRoute(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
   const cookies = parseCookies(req.headers.cookie)
-  const sessionId = cookies.get(COOKIE_NAME)
+  const sessionId = cookies.get(s.sessionCookieName)
   if (sessionId === undefined) {
     sendJson(res, 401, { authenticated: false, error: 'no session' })
     return
@@ -247,7 +251,7 @@ async function handleSessionRoute(req: IncomingMessage, res: ServerResponse, s: 
 
 async function handleMe(req: IncomingMessage, res: ServerResponse, s: HttpServices): Promise<void> {
   const cookies = parseCookies(req.headers.cookie)
-  const sessionId = cookies.get(COOKIE_NAME)
+  const sessionId = cookies.get(s.sessionCookieName)
   if (sessionId === undefined) {
     sendJson(res, 401, { authenticated: false })
     return
@@ -279,7 +283,7 @@ async function handleMe(req: IncomingMessage, res: ServerResponse, s: HttpServic
 /** Resolve the current session's user from cookies, or undefined. */
 export async function sessionUser(req: IncomingMessage, s: HttpServices): Promise<{ userId: string; username: string } | undefined> {
   const cookies = parseCookies(req.headers.cookie)
-  const sessionId = cookies.get(COOKIE_NAME)
+  const sessionId = cookies.get(s.sessionCookieName)
   if (sessionId === undefined) return undefined
   const userId = await s.sessions.lookup(sessionId)
   if (userId === undefined) return undefined

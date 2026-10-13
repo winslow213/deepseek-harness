@@ -11,7 +11,32 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ensureMandatoryBundles, provisionUserHome } from '../src/spawn-user.ts'
+import { ensureMandatoryBundles, parseMandatoryBundles, provisionUserHome } from '../src/spawn-user.ts'
+
+describe('parseMandatoryBundles', () => {
+  it('keeps the built-in pins when the variable is unset', () => {
+    assert.deepEqual(parseMandatoryBundles(undefined), {
+      '@xmanrui/dsh-im': '4.20.2',
+      '@nanmicoder/dsh-agent-teams': '^0.1.18',
+    })
+  })
+
+  it('treats an empty value as no pinned bundles', () => {
+    assert.deepEqual(parseMandatoryBundles(''), {})
+    assert.deepEqual(parseMandatoryBundles('  ,  '), {})
+  })
+
+  it('reads a comma-separated name@version sequence', () => {
+    assert.deepEqual(
+      parseMandatoryBundles('@scope/one@^1.2.3, @scope/two@4.5.6'),
+      { '@scope/one': '^1.2.3', '@scope/two': '4.5.6' },
+    )
+  })
+
+  it('drops entries without a version instead of guessing one', () => {
+    assert.deepEqual(parseMandatoryBundles('@scope/one,@scope/two@1.0.0'), { '@scope/two': '1.0.0' })
+  })
+})
 
 describe('ensureMandatoryBundles', () => {
   it('does not spawn pnpm when every pinned spec already matches the manifest', async () => {
@@ -38,6 +63,17 @@ describe('ensureMandatoryBundles', () => {
     } finally {
       await rm(usersRoot, { recursive: true, force: true })
     }
+  })
+
+  it('never spawns pnpm when the deployment pins no bundles', () => {
+    // The 0.2.x runtime rejects the 0.1.x pins, so a deployment on it sets
+    // TEAM_MANDATORY_BUNDLES empty; provisioning must then not shell out at
+    // all, not shell out and discard the failure.
+    assert.doesNotThrow(() => ensureMandatoryBundles('nonexistent-user', {
+      ...process.env,
+      DSH_USERS_ROOT: join(tmpdir(), 'dsh-users-definitely-missing-xyz'),
+      TEAM_MANDATORY_BUNDLES: '',
+    }))
   })
 
   it('is a no-op when the profile manifest does not exist yet', () => {

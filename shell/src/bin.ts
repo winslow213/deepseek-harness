@@ -75,7 +75,13 @@ async function main(): Promise<void> {
           console.error('usage: dsh-shell proxy <entryPort> --account <accountUrl>')
           process.exit(1)
         }
-        const server = startAccountProxy({ port: entryPort, accountUrl })
+        const server = startAccountProxy({
+          port: entryPort,
+          accountUrl,
+          ...(process.env.TEAM_SESSION_COOKIE === undefined || process.env.TEAM_SESSION_COOKIE === ''
+            ? {}
+            : { sessionCookieName: process.env.TEAM_SESSION_COOKIE }),
+        })
         console.log(`account proxy listening on http://0.0.0.0:${String(entryPort)} (account ${accountUrl})`)
         process.on('SIGINT', () => { server.close(() => process.exit(0)) })
         break

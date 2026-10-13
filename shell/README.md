@@ -160,6 +160,10 @@ npm run account
 
 `TEAM_DB_URL` (Postgres) and `TEAM_REDIS_URL` (Redis) are required; copy `.env.example` to `.env` and fill them in. After a successful login the service allocates a free loopback port, supervises `dsh --profile web` for that user in-process, and records the route the proxy reads. `DSH_USERS_ROOT` and `DSH_ENTRY_HOST` control the spawned instances.
 
+`TEAM_SESSION_COOKIE` (default `dsh_team_session`) names the login cookie the account service issues and the reverse proxy reads. Cookies are scoped by host and ignore the port, so two team shells on one host must differ here or each login overwrites the other's; the name is not per-port, so changing it signs every member out once.
+
+`TEAM_MANDATORY_BUNDLES` is the comma-separated `name@version` list pinned onto every account's web profile; unset keeps the built-in 0.1.x pins (`@xmanrui/dsh-im@4.20.2`, `@nanmicoder/dsh-agent-teams@^0.1.18`). Set it — including to the empty string — and that value is authoritative. A runtime whose peer ranges those plugins do not cover runs without them rather than paying a rejected `pnpm add` on every account provision.
+
 The service also mints multi-device pairing codes: the browser's Pairing code settings row posts `POST /api/pairings` (session-authenticated, proxied), and the hub verifies a claimed code through `POST /api/pairings/claim`. Start the hub with `--account http://127.0.0.1:3900` so it asks the account service (rather than its static `--user-token` table) to resolve codes and learn each member's agent token; `TEAM_PAIRING_TTL_SECS` sets the code lifetime.
 
 Operator CLI:

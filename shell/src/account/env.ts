@@ -1,3 +1,5 @@
+import { TEAM_SESSION_COOKIE } from '../reverse-proxy.ts'
+
 /** Runtime configuration for the account service, from environment variables. */
 
 export interface EnvConfig {
@@ -7,6 +9,12 @@ export interface EnvConfig {
   redisUrl: string
   /** Loopback HTTP port the account API listens on. */
   httpPort: number
+  /**
+   * Session cookie name, shared with the reverse proxy. Deployments that put
+   * two team shells on one host must differ here: browsers scope cookies by
+   * host and ignore the port, so equal names collide.
+   */
+  sessionCookieName: string
   /** Session TTL in seconds (default 30 days, aligned with dsh browser cookie). */
   sessionTtlSecs: number
   /** Base64url length of the issued agent token (256 bits). */
@@ -67,6 +75,10 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     throw new Error(`TEAM_AGENT_TOKEN_BYTES must be >= 16; got ${JSON.stringify(rawBytes)}`)
   }
   const adminSecret = env.TEAM_ADMIN_SECRET
+  const sessionCookieName = env.TEAM_SESSION_COOKIE ?? TEAM_SESSION_COOKIE
+  if (!/^[A-Za-z0-9_-]+$/u.test(sessionCookieName)) {
+    throw new Error(`TEAM_SESSION_COOKIE must be a cookie token; got ${JSON.stringify(sessionCookieName)}`)
+  }
   const rawPortStart = env.TEAM_INSTANCE_PORT_START ?? '32001'
   const rawPortEnd = env.TEAM_INSTANCE_PORT_END ?? '60999'
   const portStart = Number(rawPortStart)
@@ -100,6 +112,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   }
   return {
     dbUrl, redisUrl, httpPort, sessionTtlSecs, agentTokenBytes,
+    sessionCookieName,
     adminSecret: adminSecret === '' ? undefined : adminSecret,
     portStart, portEnd, pairingTtlSecs, idleTimeoutSecs,
     registrationDomains: splitList(env.TEAM_REGISTRATION_DOMAINS, DEFAULT_REGISTRATION_DOMAINS),
