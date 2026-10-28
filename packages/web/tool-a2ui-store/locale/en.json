@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "tool-a2ui-store",
+    "description": "Persist and share model-authored A2UI pages through the a2ui_export tool and local store."
+  }
+}

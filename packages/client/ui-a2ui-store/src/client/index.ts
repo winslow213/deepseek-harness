@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { A2uiStorePanel } from './A2uiStorePanel.tsx'
-import { en, NS, type A2uiStoreKey, zh } from './locales.ts'
+import { de, en, es, fr, ja, NS, pt, ru, type A2uiStoreKey, zh } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -27,7 +27,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.a2uiStore']
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-a2ui-store: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-a2ui-store: dictionaries')
 
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',

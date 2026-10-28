@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Interface des outils A2UI",
+    "description": "Listez les outils A2UI enregistrés dans la barre latérale et rouvrez-en un dans la conversation."
+  }
+}

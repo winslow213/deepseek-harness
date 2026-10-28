@@ -30,7 +30,7 @@ Status: implemented
 
 `writeTeamSandboxPatch` 把它们写进账号的 `cordis.patch.yml`，与 `readDeniedRoots` 并列 —— 这正是让被授予的目录能穿过读屏蔽可见的原因。那个文件是 **home 层** patch，而落在哪一层决定了覆盖能否存活：`ensureRegionRouter` 每次 provision 都整文件重写 `profiles/web/cordis.patch.yml`，只对"不再带着它写过的那个块"的文件让手（那样也就没有 region router 了），所以追加在 profile 层的按账号覆盖会在该账号下次启动实例时丢失；home 层则只按块 upsert，从不整文件重写。因此部署若要扩展某个角色的授予——或者要配置任何按账号的插件——都应写 home 层，而不是 profile 层。`readDeniedRoots` 与 `readAllowedRoots` 必须保持为单引号 YAML 标量：未加引号的 `!!js [` 值会被解析成流式序列，随后的 `.filter(...)` 会让整份 patch 失败，那是账号无法启动，而不只是屏蔽失效。
 
-**`rwRoots` 加入 `SandboxExecutionPolicy`**，并由 `effectiveRwRoots()` 在任何方言看到它之前完成过滤。条目在以下情况被丢弃：不是绝对路径、等于 `/`、或是 mode 自有路径（`workspaceRoot`、`/tmp`、`tmpdir()`）本身或其祖先。最后这条不是整洁性问题：bwrap 方言把 `--bind` 追加到承载 `--tmpfs` 的同一段，而 bwrap 以最后匹配的挂载为准，因此绑定一个 mode 自有路径的祖先会静默替换该路径原有的处理，而不是在其之上追加。
+**`additionalWritableRoots` 加入 `SandboxExecutionPolicy`**，并由 [`packages/sandbox/sandbox/src/roots.ts`](../../../../packages/sandbox/sandbox/src/roots.ts) 中的 `additionalRoot()` 在任何方言看到它之前完成校验。条目在以下情况抛出 `SandboxInvalidRootError`：不是已存在的目录、经由符号链接解析、等于 `/`、或是 mode 自有路径（`workspaceRoot`、`/tmp`、`tmpdir()`）本身或其祖先。最后这条不是整洁性问题：bwrap 方言把 `--bind` 追加到承载 `--tmpfs` 的同一段，而 bwrap 以最后匹配的挂载为准，因此绑定一个 mode 自有路径的祖先会静默替换该路径原有的处理，而不是在其之上追加。对无法按字面成立的条目直接报错是有意为之：一条被丢掉的授予会在部署以为已授予的目录上留空，而首个症状是沙箱拒绝的一次写入。bwrap 与 Landlock 方言读取 `workspaceWritableRoots()`，它在 `workspace-write` 之外返回空集；读边界则改用 `extraWritableRoots()` 重新暴露这些授予，它不区分 mode，因为写授予从不收窄调用方的可读范围。
 
 **各方言在各自表达式需要的位置接入这些额外根**，而不是三者共用同一个 helper：
 
@@ -58,13 +58,13 @@ landlock 那条规则是最不直观的。配置了读屏蔽后，它的 `readOn
 
 **把共享目录放在用户根之下，仅依赖 `<usersRoot>` 解析。** 不采纳：`readDeniedRoots` 覆盖整个用户根，而影子树防护之所以存在，正是因为一个位于被拒绝树内的重新暴露目录，恰恰也是可能一并吞掉影子根的形状。让这些目录位于各 home 之外、并按名字重新暴露，使两个列表彼此独立。
 
-**让沙箱为读与写只消费单一的 `rwRoots`。** 不采纳：它把"可写"与"必须可读"混为一谈。一个授予完全可以可读而不可写，单一字段会让这无法表达。
+**让沙箱为读与写只消费单一的 `additionalWritableRoots`。** 不采纳：它把"可写"与"必须可读"混为一谈。一个授予完全可以可读而不可写，单一字段会让这无法表达。
 
 **角色查询失败时让 spawn 失败。** 不采纳：见上文决策。一个没有共享目录的降级账号仍可用；一个无法启动的账号则不然。
 
 ## 后果
 
-账号现在能看到一个公共目录，当其角色为 `operator` 时还能看到一个管理员目录，并且从 shell 与文件系统工具都可达。三道闸门被一并覆盖：`packages/sandbox/sandbox/tests/roots.spec.ts` 覆盖丢弃规则与影子防护，`packages/sandbox/sandbox-local/tests/local.spec.ts` 覆盖 bwrap 与 landlock 的参数列表，`shell/tests/region-router.spec.ts` 覆盖读边界，`shell/tests/shared-roots.spec.ts` 与 `shell/tests/spawn-user-sandbox.spec.ts` 覆盖映射解析与 spawn 交给子进程的按角色环境。
+账号现在能看到一个公共目录，当其角色为 `operator` 时还能看到一个管理员目录，并且从 shell 与文件系统工具都可达。三道闸门被一并覆盖：`packages/sandbox/sandbox/tests/roots.spec.ts` 覆盖拒绝规则与影子防护，`packages/sandbox/sandbox-local/tests/local.spec.ts` 覆盖 bwrap 与 landlock 的参数列表，`shell/tests/region-router.spec.ts` 覆盖读边界，`shell/tests/shared-roots.spec.ts` 与 `shell/tests/spawn-user-sandbox.spec.ts` 覆盖映射解析与 spawn 交给子进程的按角色环境。
 
 代价是多了一处决定沙箱可以触碰什么的地方，以及一个失败方式是沉默的映射：`path` 写错会得到零个共享根与一行日志，而不是一个错误。对此的兜底是解析后的列表在每个账号的 `cordis.patch.yml` 中可见，运维可以读到某个角色实际产出了什么。
 

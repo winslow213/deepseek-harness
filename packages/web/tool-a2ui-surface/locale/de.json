@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI-Seitenwerkzeug",
+    "description": "Verfassen Sie eine deklarative A2UI-Seite über das a2ui_surface-Werkzeug, die die Weboberfläche rendert."
+  }
+}

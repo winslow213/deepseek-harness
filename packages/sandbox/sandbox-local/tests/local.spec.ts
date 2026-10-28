@@ -94,6 +94,34 @@ describe('profile dialects', () => {
     expect(landlockProfileArgs(WW)).toEqual(['--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', '/ws'])
   })
 
+  it('bwrap workspace-write binds each explicit extra root beside the workspace', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'dsh-ws-'))
+    const extra = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-extra-')))
+    tempDirs.push(ws, extra)
+    const realWs = realpathSync.native(ws)
+    const realExtra = realpathSync.native(extra)
+    expect(bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [extra] })).toEqual([
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+      '--tmpfs', '/tmp', '--bind', realWs, realWs, '--bind', realExtra, realExtra,
+    ])
+  })
+
+  it('landlock workspace-write adds each explicit extra root to the writable list', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'dsh-ws-'))
+    const extra = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-extra-')))
+    tempDirs.push(ws, extra)
+    expect(landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [extra] })).toEqual([
+      '--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', realpathSync.native(ws), '--rw', realpathSync.native(extra),
+    ])
+  })
+
+  it('read-only ignores extra roots in every backend dialect', () => {
+    const policy: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws', additionalWritableRoots: ['/extra'] }
+    expect(bwrapProfileArgs(policy)).not.toContain('--bind')
+    expect(landlockProfileArgs(policy)).toEqual(['--ro', '/', '--rw', '/dev/null'])
+    expect(seatbeltProfileArgs(policy)).toEqual(['-p', SEATBELT_RO_PROFILE])
+  })
+
   it('seatbelt read-only: allow-default with every file write denied except the /dev/null literal', () => {
     expect(seatbeltProfileArgs(RO)).toEqual(['-p', SEATBELT_RO_PROFILE])
   })
@@ -109,6 +137,18 @@ describe('profile dialects', () => {
     expect(seatbeltProfileArgs(WW)).toEqual(['-p', `${SEATBELT_RO_PROFILE} ${allow}`])
   })
 
+  it('seatbelt workspace-write grants every explicit extra root', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'dsh-ws-'))
+    const extra = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-extra-')))
+    tempDirs.push(ws, extra)
+    const profile = seatbeltProfileArgs({
+      mode: 'workspace-write',
+      workspaceRoot: ws,
+      additionalWritableRoots: [extra],
+    })[1] as string
+    expect(profile).toContain(`(subpath "${realpathSync.native(extra)}")`)
+  })
+
   it('seatbelt workspace-write dedups a workspace root that already IS the temp dir', () => {
     const profile = seatbeltProfileArgs({ mode: 'workspace-write', workspaceRoot: tmpdir() })[1] as string
     const grant = `(subpath "${realpathSync(tmpdir())}")`
@@ -120,7 +160,7 @@ describe('profile dialects', () => {
     const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
     tempDirs.push(shared)
     const canonical = realpathSync.native(shared)
-    const args = bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', rwRoots: [shared] })
+    const args = bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', additionalWritableRoots: [shared] })
     expect(args.slice(-3)).toEqual(['--bind', canonical, canonical])
     // After both mode mounts, which is what makes last-wins land on the grant.
     expect(args.indexOf(canonical)).toBeGreaterThan(args.indexOf('/ws'))
@@ -131,7 +171,7 @@ describe('profile dialects', () => {
     const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
     tempDirs.push(shared)
     const canonical = realpathSync.native(shared)
-    const noShield = landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', rwRoots: [shared] })
+    const noShield = landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', additionalWritableRoots: [shared] })
     expect(noShield).toEqual(['--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', '/ws', '--rw', canonical])
     // Shielded, the active read policy is an allow-list: the blanket `--ro /` is
     // gone, so a grant outside the denied roots must be named back into BOTH
@@ -139,7 +179,7 @@ describe('profile dialects', () => {
     const shielded = landlockProfileArgs({
       mode: 'workspace-write',
       workspaceRoot: '/ws',
-      rwRoots: [shared],
+      additionalWritableRoots: [shared],
       readDeniedRoots: ['/denied'],
     })
     expect(shielded).not.toContain('/')
@@ -149,7 +189,7 @@ describe('profile dialects', () => {
   it('seatbelt workspace-write: a grant needs no dialect change, because the profile already derives both helpers', () => {
     const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
     tempDirs.push(shared)
-    const profile = seatbeltProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', rwRoots: [shared] })[1] as string
+    const profile = seatbeltProfileArgs({ mode: 'workspace-write', workspaceRoot: '/ws', additionalWritableRoots: [shared] })[1] as string
     // One `allow file-write*` form names every writable root; the grant joins it.
     const canonical = realpathSync.native(shared)
     expect(profile).toContain(`(subpath "${canonical}")`)
@@ -159,7 +199,7 @@ describe('profile dialects', () => {
   it('read-only: a grant reaches no dialect (the mode withholds every write)', () => {
     const shared = mkdtempSync(join(tmpdir(), 'dsh-shared-'))
     tempDirs.push(shared)
-    const policy: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws', rwRoots: [shared] }
+    const policy: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws', additionalWritableRoots: [shared] }
     expect(bwrapProfileArgs(policy)).toEqual([
       '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
     ])
@@ -441,6 +481,20 @@ describe('the default seatbelt probe (sandbox-exec contract)', () => {
 })
 
 describe('the windows-acl probe (runner invocation contract)', () => {
+  it('refuses unsupported extra grants before a Windows runner or ACL mutation', async () => {
+    const { ctx, sandbox } = await setup({}, {
+      chain: ['windows-acl'],
+      probeWindowsAcl: () => true,
+      windowsAclRunnerArgs: ['node', 'windows-acl-runner.js'],
+    })
+    try {
+      await expect(sandbox.confine(['true'], { ...WW, additionalWritableRoots: ['/extra'] }))
+        .rejects.toThrow('Windows ACL confinement does not support additional writable directories')
+      await expect(sandbox.confine(['true'], { ...RO, additionalWritableRoots: ['/extra'] })).resolves.toBeDefined()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
   // The product chain reaches windows-acl only unprobed (win32's sole
   // candidate), so the probe case and the runner-entry resolution are pinned
   // through the chain seam, mirroring the seatbelt default-probe contract.

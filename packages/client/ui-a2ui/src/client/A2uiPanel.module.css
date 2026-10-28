@@ -34,8 +34,10 @@
   cursor: pointer;
 }
 
-.launcherButton:hover {
-  background: var(--dsw-alias-button-primary-hover);
+@media (hover: hover) {
+  .launcherButton:hover {
+    background: var(--dsw-alias-button-primary-hover);
+  }
 }
 
 .launcherError {

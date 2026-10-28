@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "tool-a2ui-data-bash",
+    "description": "Resolve a whitelisted source name into select-field options through a bash data provider."
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-a2ui-render",
   "description": "Zero-cordis React renderer for model-authored A2UI pages: the form and canvas panels, the standalone popup mount, and the popup wire protocol. Consumed by the web frontend's dedicated /a2ui.html popup.",
-  "version": "0.2.1-alpha.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -38,8 +38,6 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
     "@deepseek-ai/dsh-tool-a2ui-surface": "workspace:*",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.0",
     "@xyflow/react": "^12.11.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

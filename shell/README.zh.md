@@ -190,7 +190,7 @@ node --import tsx/esm src/bin.ts account-cli set-role <username> <operator|membe
 自己的 home 与它的角色被授予的目录。`TEAM_SHARED_ROOTS` 未设置、为空或格式错误时不授予
 任何目录，角色未知同样不授予。
 
-每个账号解析出的列表出现在它自己的 `$DSH_HOME/cordis.patch.yml` 中（`rwRoots` 与
+每个账号解析出的列表出现在它自己的 `$DSH_HOME/cordis.patch.yml` 中（`additionalWritableRoots` 与
 `readAllowedRoots`），运营者可据此读取某个角色实际产出了什么。按账号的覆盖应写进这个
 home 层 patch，而不是 profile 层 patch：provision 在每次实例启动时都会重写
 `profiles/web/cordis.patch.yml`——只对"不再带着它写过的那个块"的文件让手——追加在那里的

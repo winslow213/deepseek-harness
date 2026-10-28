@@ -12,7 +12,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import { A2uiLauncher, type A2uiReadLive, type A2uiResolveSource, type A2uiRunBridge, type A2uiSubmitNotice } from './launcher.tsx'
 import { a2uiSurfaceDefinition } from './a2ui-definition.ts'
-import { en, NS, type A2uiKey, zh } from './locales.ts'
+import { de, en, es, fr, ja, NS, pt, ru, type A2uiKey, zh } from './locales.ts'
 
 /** The producer name the chat renders on the collapsed a2ui context row. */
 const A2UI_SOURCE = 'a2ui'
@@ -114,7 +114,7 @@ function buildReadLive(ctx: ClientContext): A2uiReadLive {
 /** Register the A2UI Definition, dictionary, and keyed Chat launcher. */
 export function apply(ctx: ClientContext): void {
   ctx.uiConversation.events.register(a2uiSurfaceDefinition)
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-a2ui: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-a2ui: dictionaries')
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'a2ui-surface',

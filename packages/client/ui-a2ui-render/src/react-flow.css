@@ -465,9 +465,11 @@ svg.react-flow__connectionline {
   border: var(--xy-node-border, var(--xy-node-border-default));
   background-color: var(--xy-node-background-color, var(--xy-node-background-color-default));
 }
-.react-flow__node-input.selectable:hover, .react-flow__node-default.selectable:hover, .react-flow__node-output.selectable:hover, .react-flow__node-group.selectable:hover {
-      box-shadow: var(--xy-node-boxshadow-hover, var(--xy-node-boxshadow-hover-default));
-    }
+@media (hover: hover) {
+  .react-flow__node-input.selectable:hover, .react-flow__node-default.selectable:hover, .react-flow__node-output.selectable:hover, .react-flow__node-group.selectable:hover {
+    box-shadow: var(--xy-node-boxshadow-hover, var(--xy-node-boxshadow-hover-default));
+  }
+}
 /* Focused nodes take the shared ring instead of the upstream selected shadow:
  * ui-theme's focus-ring contract allows a rule that matches `:focus` to name only
  * the ring color, so `--xy-node-boxshadow-*` cannot stay on this selector. */
@@ -501,16 +503,18 @@ svg.react-flow__connectionline {
   .react-flow__selection:focus-visible {
     outline: none;
   }
-.react-flow__controls-button:hover {
-      background: var(
-        --xy-controls-button-background-color-hover-props,
-        var(--xy-controls-button-background-color-hover, var(--xy-controls-button-background-color-hover-default))
-      );
-      color: var(
-        --xy-controls-button-color-hover-props,
-        var(--xy-controls-button-color-hover, var(--xy-controls-button-color-hover-default))
-      );
-    }
+@media (hover: hover) {
+  .react-flow__controls-button:hover {
+    background: var(
+      --xy-controls-button-background-color-hover-props,
+      var(--xy-controls-button-background-color-hover, var(--xy-controls-button-background-color-hover-default))
+    );
+    color: var(
+      --xy-controls-button-color-hover-props,
+      var(--xy-controls-button-color-hover, var(--xy-controls-button-color-hover-default))
+    );
+  }
+}
 .react-flow__controls-button:disabled {
       pointer-events: none;
     }

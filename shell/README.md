@@ -186,7 +186,7 @@ node --import tsx/esm src/bin.ts account-cli set-role <username> <operator|membe
 
 A shared directory has to sit inside `DSH_USERS_ROOT`, because that root is what the sandbox read shield denies: a directory outside it is not denied at all, so every account can read it whatever its role. Inside the root, provisioning re-exposes only the account's own home and the directories its role was granted. `TEAM_SHARED_ROOTS` unset, empty, or malformed grants nothing, and an unknown role gets no grant.
 
-Each account's resolved lists appear in its own `$DSH_HOME/cordis.patch.yml` as `rwRoots` and `readAllowedRoots`, so an operator can read what a role produced. Per-account overrides belong in that home patch rather than the profile patch: provisioning rewrites `profiles/web/cordis.patch.yml` on every instance start — it steps back only from a file that no longer carries the block it wrote — so an override appended there is lost.
+Each account's resolved lists appear in its own `$DSH_HOME/cordis.patch.yml` as `additionalWritableRoots` and `readAllowedRoots`, so an operator can read what a role produced. Per-account overrides belong in that home patch rather than the profile patch: provisioning rewrites `profiles/web/cordis.patch.yml` on every instance start — it steps back only from a file that no longer carries the block it wrote — so an override appended there is lost.
 
 ### Self-service registration
 

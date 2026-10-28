@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "tool-a2ui-surface",
+    "description": "Author a declarative A2UI page through the a2ui_surface tool that the web UI renders."
+  }
+}

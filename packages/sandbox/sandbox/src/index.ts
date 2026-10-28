@@ -19,12 +19,12 @@ export {
   validateEscalationArgs,
 } from './escalation.ts'
 export type { EscalationApproval, EscalationApprover, EscalationOutcome, EscalationRequest } from './escalation.ts'
-export { canonicalPath, effectiveRwRoots, readShield, writableRoots } from './roots.ts'
+export { canonicalPath, readShield, workspaceWritableRoots, writableRoots, SandboxInvalidRootError } from './roots.ts'
 
 /**
  * File-effect policy for confined processes. `read-only` permits only required
- * sinks such as `/dev/null`; `workspace-write` also permits the workspace and a
- * backend-defined temp area; `danger-full-access` bypasses confinement. Network
+ * sinks such as `/dev/null`; `workspace-write` also permits the workspace,
+ * explicit extra roots, and backend-defined temp areas; `danger-full-access` bypasses confinement. Network
  * and process visibility are outside this vocabulary.
  */
 export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
@@ -63,22 +63,23 @@ export interface SandboxExecutionPolicy {
    */
   readAllowedRoots?: readonly string[]
   /**
-   * Extra absolute directories this execution may WRITE under, beyond whatever
-   * the mode already grants — a deployment's shared directories, whose members
-   * exchange files. It grants no read: the mode already makes the host readable,
-   * so an entry here means "may MODIFY", not "may see". Under `read-only` it
-   * grants nothing, and under `danger-full-access` it adds nothing.
+   * Extra physical absolute directories this execution may WRITE under, beyond
+   * whatever the mode already grants — a deployment's shared directories, whose
+   * members exchange files. It grants no read: the mode already makes the host
+   * readable, so an entry here means "may MODIFY", not "may see". Absence means
+   * none; these grant nothing under `read-only` or `danger-full-access`, and
+   * remote paths are checked on the remote host.
    *
    * This is an authorization, not an isolation boundary: two tenants granted
    * one directory can overwrite each other. Directory-level arbitration is the
    * deployment's (shared group, setgid, umask).
    *
-   * Each entry is canonicalized and compared as the enforcement layers compare
-   * paths; an entry that is not absolute, that is `/`, or that would replace a
-   * mount the mode itself installs is discarded rather than granted — see
-   * `effectiveRwRoots`, which owns the derivation.
+   * The enforcing host rejects a missing entry, a non-directory, a symlinked
+   * entry, the filesystem root, and an ancestor of a mount the mode itself
+   * installs, because none of those can be enforced as written — see
+   * `workspaceWritableRoots`, which owns the derivation.
    */
-  rwRoots?: readonly string[]
+  additionalWritableRoots?: readonly string[]
   /**
    * Opaque identity of the calling session (the branded `dsh-session`
    * SessionId). Backends key per-session state off it (e.g. windows-acl gives
@@ -178,6 +179,14 @@ export class SandboxUnavailableError extends HarnessError {
       SANDBOX_UNAVAILABLE,
     )
     this.name = 'SandboxUnavailableError'
+  }
+}
+
+/** The selected backend is available but cannot enforce the requested policy. */
+export class SandboxUnsupportedPolicyError extends HarnessError {
+  constructor(detail: string) {
+    super(detail, 'SANDBOX_UNSUPPORTED_POLICY')
+    this.name = 'SandboxUnsupportedPolicyError'
   }
 }
 

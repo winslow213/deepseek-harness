@@ -200,7 +200,7 @@ member   → 读/暴露: [home, common]           写: [common]
 
 | 闸门 | 接入方式 | 谁自动受益 |
 |---|---|---|
-| **G1 写** | `rwRoots` 并入 `writableRoots()`；bwrap mode 段追加 `--bind`；landlock `readWrite` 追加 | fs-sandbox、seatbelt 自动；bwrap/landlock 各一处 |
+| **G1 写** | `additionalWritableRoots` 并入 `writableRoots()`；bwrap mode 段追加 `--bind`；landlock `readWrite` 追加 | fs-sandbox、seatbelt 自动；bwrap/landlock 各一处 |
 | **G2 读（shell）** | 共享根并入 `readAllowedRoots`（即 `readShield().allowed` 的过滤前输入） | bwrap、seatbelt 自动；landlock 另需 `readOnly`（§3.3） |
 | **G3 读（ctx.fs）** | `region-router` 新增 `readableRoots`，并入两个 `assertLocal*Readable` 的允许集 | 单点 |
 
@@ -271,7 +271,7 @@ landlock 有。
 export function effectiveRwRoots(policy: SandboxExecutionPolicy): string[] {
   if (policy.mode !== 'workspace-write') return []
   const modeOwned = writableRoots(policy)          // workspaceRoot, /tmp, tmpdir()
-  return [...new Set((policy.rwRoots ?? []).map(canonicalPath))]
+  return [...new Set((policy.additionalWritableRoots ?? []).map(canonicalPath))]
     .filter(root => isAbsolute(root))
     .filter(root => root !== '/')
     .filter(root => !modeOwned.some(owned => isUnder(owned, root)))
@@ -341,7 +341,7 @@ instance-manager.start(userId)                     异步：拿到 account.role
    ↓ role
 provisionUserHome(user, env, { agentToken, role }) 同步
    ↓
-writeTeamSandboxPatch(home)              写 patch：rwRoots + readAllowedRoots 两行
+writeTeamSandboxPatch(home)              写 patch：additionalWritableRoots + readAllowedRoots 两行
                                          （列表值来自 env，见下）
 teamChildEnv(home, supervised, role)     env：DSH_RW_ROOTS / DSH_READ_ALLOWED_ROOTS
 ```
@@ -353,7 +353,7 @@ teamChildEnv(home, supervised, role)     env：DSH_RW_ROOTS / DSH_READ_ALLOWED_R
 patch 两行都改成 env 驱动（该块已有 `!!js` 先例）：
 
 ```yaml
-    rwRoots: !!js JSON.parse(process.env.DSH_RW_ROOTS ?? '[]')
+    additionalWritableRoots: !!js JSON.parse(process.env.DSH_RW_ROOTS ?? '[]')
     readAllowedRoots: !!js JSON.parse(process.env.DSH_READ_ALLOWED_ROOTS ?? '[]')
 ```
 
@@ -389,13 +389,13 @@ mkdir -p ~/.dsh-users/shared/admin ~/.dsh-users/shared/common
 
 | # | 位置 | 改什么 | 为什么 |
 |---|---|---|---|
-| 1 | `packages/sandbox/sandbox/src/index.ts` | `SandboxExecutionPolicy` 加 `rwRoots?` + JSDoc（§3.4） | 契约类型面 |
+| 1 | `packages/sandbox/sandbox/src/index.ts` | `SandboxExecutionPolicy` 加 `additionalWritableRoots?` + JSDoc（§3.4） | 契约类型面 |
 | 2 | `packages/sandbox/sandbox/src/roots.ts` | 新增 `effectiveRwRoots()`；`writableRoots()` 与 `readShield()` 各接一处 | G1 与 G2；两处接入消掉 3 个消费方的漏改 |
 | 3 | `packages/sandbox/sandbox-local/src/profiles.ts` | bwrap mode 段追加 `--bind`；landlock `readOnly` 与 `readWrite` 各追加 | 两个自拼方言（§3.3） |
-| 4 | `packages/sandbox/sandbox-policy/src/index.ts` | Config 加 `rwRoots`；类字段 + 构造赋值；`resolve()` 空则省略 | 配置入口 |
+| 4 | `packages/sandbox/sandbox-policy/src/index.ts` | Config 加 `additionalWritableRoots`；类字段 + 构造赋值；`resolve()` 空则省略 | 配置入口 |
 | 5 | **`shell/src/remote/region-router.ts`** | Config 加 `readableRoots`；两处 `assertLocal*Readable` 改用统一 allow 判定 | **G3** |
 | 6 | `shell/src/remote/inject.ts` | `regionRouterPatchYaml` / `injectRegionRouter` 透出 `readableRoots` | 让 G3 的配置到达 profile |
-| 7 | `shell/src/spawn-user.ts` | ① `TEAM_SHARED_ROOTS` 解析（宽容）<br>② 按 role 解析路径<br>③ `teamChildEnv` 注入两个 env<br>④ patch 追加 `rwRoots` 行并扩 `readAllowedRoots` | 逐账号注入 |
+| 7 | `shell/src/spawn-user.ts` | ① `TEAM_SHARED_ROOTS` 解析（宽容）<br>② 按 role 解析路径<br>③ `teamChildEnv` 注入两个 env<br>④ patch 追加 `additionalWritableRoots` 行并扩 `readAllowedRoots` | 逐账号注入 |
 | 8 | `shell/src/account/instance-manager.ts` | 传 `role: account?.role` | 角色来源 |
 | 9 | `shell/src/account/cli.ts` | 若缺 `set-role`，补一个（现只有 create 时的 `--operator`） | 把 winslow/tucker 设为 operator |
 | 10 | `packages/sandbox/sandbox/tests/roots.spec.ts` | 补用例 | 已有该文件 |
@@ -502,7 +502,7 @@ seatbelt 段（消费两个 helper → 自动）、`region-shell`（非影子 wo
 
 ### 步 1 · 类型面与 helper（`roots.spec.ts`）
 
-1. `rwRoots` 在 `workspace-write` 下进入 `writableRoots()`
+1. `additionalWritableRoots` 在 `workspace-write` 下进入 `writableRoots()`
 2. `read-only` 下**不**进入（模式闸门）
 3. 屏蔽根**外**的共享根**不**出现在 `readShield().allowed`（既有过滤保持）
 4. 屏蔽根**内**的共享根**出现**在 `readShield().allowed`
@@ -513,11 +513,11 @@ seatbelt 段（消费两个 helper → 自动）、`region-shell`（非影子 wo
 
 7. bwrap profile 含共享根 `--bind`，且**位于 shield 段之后**
 8. landlock 的 `readOnly`（有屏蔽时）与 `readWrite` 均含共享根
-9. seatbelt profile 未新增 `rwRoots` 相关代码（回归：既有 golden 不变）
+9. seatbelt profile 未新增 `additionalWritableRoots` 相关代码（回归：既有 golden 不变）
 
 ### 步 3 · 配置入口（`sandbox-policy` 测试）
 
-10. 不配置时 `resolve()` 返回对象**不含** `rwRoots` 键
+10. 不配置时 `resolve()` 返回对象**不含** `additionalWritableRoots` 键
 
 ### 步 4 · 映射解析与注入（`shell/tests`）
 

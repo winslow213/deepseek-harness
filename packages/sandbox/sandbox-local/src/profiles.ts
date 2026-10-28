@@ -5,7 +5,7 @@
  */
 
 import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/landlock-run'
-import { effectiveRwRoots, readShield, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { readShield, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 
 /** Every ancestor directory of `path`, outermost first, excluding `path` itself. */
@@ -46,16 +46,7 @@ export function bwrapProfileArgs(policy: SandboxPolicy): string[] {
   }
   if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')
-    args.push('--bind', policy.workspaceRoot, policy.workspaceRoot)
-    // The policy's extra grants land after the mode's own mounts: bwrap applies
-    // mounts in argument order, so a grant buried by the shield above has
-    // already been re-exposed read-only and this bind makes it writable, while
-    // one that sits under the ephemeral `/tmp` replaces only its own subtree.
-    // `effectiveRwRoots` discards the grants this ordering would turn into a
-    // wholesale replacement of a mode-owned mount.
-    for (const root of effectiveRwRoots(policy)) {
-      args.push('--bind', root, root)
-    }
+    for (const root of workspaceWritableRoots(policy)) args.push('--bind', root, root)
   }
   return args
 }
@@ -91,7 +82,7 @@ const LANDLOCK_SYSTEM_READ_ROOTS = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '
 export function landlockProfileArgs(policy: SandboxPolicy): string[] {
   const readWrite = ['/dev/null']
   if (policy.mode === 'workspace-write') {
-    readWrite.push('/tmp', policy.workspaceRoot, ...effectiveRwRoots(policy))
+    readWrite.push('/tmp', ...workspaceWritableRoots(policy))
   }
   const { denied, allowed } = readShield(policy)
   // Without a shield the blanket `readOnly: ['/']` already covers a grant. With
@@ -100,7 +91,7 @@ export function landlockProfileArgs(policy: SandboxPolicy): string[] {
   // already in `allowed`. Both cases are satisfied by naming the grants here.
   const readOnly = denied.length === 0
     ? ['/']
-    : [...new Set([...LANDLOCK_SYSTEM_READ_ROOTS, ...allowed, ...effectiveRwRoots(policy)])]
+    : [...new Set([...LANDLOCK_SYSTEM_READ_ROOTS, ...allowed, ...workspaceWritableRoots(policy)])]
   return landlockGrantArgs({ readOnly, readWrite })
 }
 
@@ -111,11 +102,13 @@ function sbplString(path: string): string {
 
 /**
  * Build the sandbox-exec arguments and SBPL profile for one policy. The
- * writable roots come from the shared {@link writableRoots} helper (canonical,
- * deduplicated) so the Seatbelt grant and the in-process fs fence
- * (`@deepseek-ai/dsh-fs-sandbox`) can never drift apart; read shielding comes
- * from the shared {@link readShield} helper for the same reason.
- * @param policy - file-effect and read-boundary policy to express as an SBPL profile.
+ * workspace-owned writable roots (workspace plus explicit extra directories)
+ * come from the shared {@link writableRoots} helper (canonical, deduplicated)
+ * so the Seatbelt grant and the in-process fs fence
+ * (`@deepseek-ai/dsh-fs-sandbox`) can never drift apart; the helper adds the
+ * documented Seatbelt temp areas. Read shielding comes from the shared
+ * {@link readShield} helper for the same reason.
+ * @param policy - the file-effect policy to derive the profile from.
  * @returns sandbox-exec arguments before the trailing separator and command argv.
  */
 export function seatbeltProfileArgs(policy: SandboxPolicy): string[] {

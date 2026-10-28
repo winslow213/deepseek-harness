@@ -4,7 +4,7 @@
  * override kit (fold + write path) every enforcing capability reads.
  */
 
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -20,7 +20,7 @@ async function mounted(config: {
   workspaceRoot?: string
   readDeniedRoots?: string[]
   readAllowedRoots?: string[]
-  rwRoots?: string[]
+  additionalWritableRoots?: string[]
 } = {}) {
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
@@ -40,7 +40,7 @@ function session(id: string, cwd?: string): Session {
 }
 
 function agentFor(activeSession: Session): Agent {
-  return { session: activeSession } as unknown as Agent
+  return { session: activeSession } as Agent
 }
 
 async function policyContext(ctx: Context, activeSession: Session): Promise<string | undefined> {
@@ -61,11 +61,11 @@ describe('SandboxPolicyService', () => {
     expect(ctx.sandboxPolicy.workspaceRoot).toBe('/ws/../ws/./sub')
   })
 
-  it('rejects a relative deployment workspace root at load', async () => {
+  it.each(['relative/workspace', '/invalid\0root'])('rejects an invalid deployment workspace root at load: %j', async (workspaceRoot) => {
     const ctx = new Context()
     try {
       await ctx.plugin(SessionProjectionRegistry)
-      await expect(ctx.plugin(SandboxPolicyService, { workspaceRoot: 'relative/workspace' }))
+      await expect(ctx.plugin(SandboxPolicyService, { workspaceRoot }))
         .rejects.toThrow('sandbox-policy: workspace root must be an absolute execution-world path')
       expect(ctx.get('sandboxPolicy')).toBeUndefined()
     } finally {
@@ -81,40 +81,32 @@ describe('SandboxPolicyService', () => {
     })
   })
 
-  it('omits rwRoots entirely when unconfigured, so the resolved policy keeps its pre-existing spelling', async () => {
+  it('omits additionalWritableRoots entirely when unconfigured, so the resolved policy keeps its pre-existing spelling', async () => {
     const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
-    expect(Object.hasOwn(ctx.sandboxPolicy.resolve(), 'rwRoots')).toBe(false)
-    expect(ctx.sandboxPolicy.resolve().rwRoots).toBeUndefined()
+    expect(Object.hasOwn(ctx.sandboxPolicy.resolve(), 'additionalWritableRoots')).toBe(false)
+    expect(ctx.sandboxPolicy.resolve().additionalWritableRoots).toBeUndefined()
   })
 
-  it('carries configured rwRoots through resolve, canonicalized like its read-boundary neighbours', async () => {
-    const real = mkdtempSync(join(tmpdir(), 'dsh-policy-rw-'))
+  it('carries a frozen detached copy of the configured extra writable roots in execution-world spelling', async () => {
+    const configured = ['/projects/shared/.git', '/projects/shared/../shared/worktrees']
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback', additionalWritableRoots: configured })
+    configured.push('/late/mutation')
+    const policy = ctx.sandboxPolicy.resolve()
+    expect(policy.additionalWritableRoots).toEqual(['/projects/shared/.git', '/projects/shared/../shared/worktrees'])
+    expect(Object.isFrozen(policy.additionalWritableRoots)).toBe(true)
+    expect(Object.isFrozen(ctx.sandboxPolicy.additionalWritableRoots)).toBe(true)
+  })
+
+  it('rejects a relative additional writable root at load', async () => {
+    const ctx = new Context()
     try {
-      const alias = join(tmpdir(), 'dsh-policy-rw-alias')
-      symlinkSync(real, alias)
-      const ctx = await mounted({
-        mode: 'workspace-write',
-        workspaceRoot: '/fallback',
-        rwRoots: [alias],
-      })
-      // The symlink resolves to its target, matching how the enforcing layers
-      // compare paths.
-      expect(ctx.sandboxPolicy.resolve().rwRoots).toEqual([realpathSync.native(real)])
+      await ctx.plugin(SessionProjectionRegistry)
+      await expect(ctx.plugin(SandboxPolicyService, { additionalWritableRoots: ['relative/extra'] }))
+        .rejects.toThrow('sandbox-policy: additionalWritableRoots entries must be absolute execution-world paths')
+      expect(ctx.get('sandboxPolicy')).toBeUndefined()
     } finally {
-      rmSync(real, { recursive: true, force: true })
-      rmSync(join(tmpdir(), 'dsh-policy-rw-alias'), { force: true })
+      await ctx.fiber.dispose()
     }
-  })
-
-  it('keeps an unresolvable rwRoot spelling as configured, the conservative fallback its neighbours share', async () => {
-    const ctx = await mounted({
-      mode: 'workspace-write',
-      workspaceRoot: '/fallback',
-      rwRoots: ['/srv/not-created-yet/share'],
-    })
-    // Nothing exists at that path, so there is no identity to resolve; the
-    // grant matches nothing until the deployment creates the directory.
-    expect(ctx.sandboxPolicy.resolve().rwRoots).toEqual(['/srv/not-created-yet/share'])
   })
 
   it('resolves each session mode and cwd together without changing the fallback', async () => {
@@ -203,7 +195,7 @@ describe('SandboxPolicyService', () => {
 })
 
 describe('sandbox:policy request context', () => {
-  async function promptMounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {}): Promise<Context> {
+  async function promptMounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string; additionalWritableRoots?: string[] } = {}): Promise<Context> {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(SessionProjectionRegistry)
@@ -221,6 +213,28 @@ describe('sandbox:policy request context', () => {
     } as const
 
     expect(await policyContext(ctx, session(`sess-${mode}`, '/projects/../projects/current'))).toBe(expected[mode])
+  })
+
+  it('renders explicit extra writable directories under workspace-write', async () => {
+    const ctx = await promptMounted({
+      mode: 'workspace-write',
+      workspaceRoot: '/fallback',
+      additionalWritableRoots: ['/projects/shared/.git', '/projects/shared/worktrees'],
+    })
+    expect(await policyContext(ctx, session('sess-extra', '/projects/current'))).toBe(
+      `Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${JSON.stringify('/projects/current')}. Additional writable directories: ["/projects/shared/.git","/projects/shared/worktrees"]. Some platform temporary areas may also be writable.`,
+    )
+  })
+
+  it('does not advertise extra directories under read-only, which grants nothing', async () => {
+    const ctx = await promptMounted({
+      mode: 'read-only',
+      workspaceRoot: '/fallback',
+      additionalWritableRoots: ['/projects/shared/.git'],
+    })
+    expect(await policyContext(ctx, session('sess-readonly-extra', '/projects/current'))).toBe(
+      'Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.',
+    )
   })
 
   it('keeps the complete rendered prompt byte-stable across TMPDIR changes', async () => {
@@ -277,10 +291,10 @@ describe('the sandbox/mode session kit', () => {
   it('the sandboxMode projection folds to the last switch, or null without one', async () => {
     const ctx = await mounted()
     const session = Session.create(SessionId('sess-fold'))
-    expect(ctx.sessionProjections.stateOf(session, 'sandboxMode')).toBeNull()
+    expect(ctx.sessionProjections.checkpoint(session).sandboxMode?.val).toBeNull()
     setSandboxMode(session, 'workspace-write')
     setSandboxMode(session, 'read-only')
-    expect(ctx.sessionProjections.stateOf(session, 'sandboxMode')).toBe('read-only')
+    expect(ctx.sessionProjections.checkpoint(session).sandboxMode?.val).toBe('read-only')
   })
 
   it('setSandboxMode appends exactly one sandbox/mode event per switch', () => {

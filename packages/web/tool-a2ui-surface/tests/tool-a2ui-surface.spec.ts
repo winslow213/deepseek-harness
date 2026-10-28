@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { type Agent } from '@deepseek-ai/dsh-agent'
 
@@ -15,7 +17,7 @@ const testToolSignal = new AbortController().signal
 /**
  * Drives the REAL plugin body: mounts `dsh-tool-a2ui-surface` on a real
  * `ToolRuntime` and invokes the registered `a2ui_surface` tool through
- * `ctx.tools.execute`, with a fake parent Agent carrying a real `Session` —
+ * `executeModelToolFixture`, with a fake parent Agent carrying a real `Session` —
  * so the append the tool makes is observable on a genuine session log (only
  * the agent wrapper is a stand-in; the session and the tool are the shipping
  * code).
@@ -31,6 +33,7 @@ async function setup(allowUpdate = true): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(tool, { allowUpdate })
   return ctx
 }
@@ -38,7 +41,7 @@ async function setup(allowUpdate = true): Promise<Context> {
 let callCounter = 0
 function callSurface(ctx: Context, args: unknown, over: { agent?: Agent | undefined } = {}) {
   const agent = 'agent' in over ? over.agent : agentWithSession()
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: testToolSignal,
     callId: ToolCallId(`call-${++callCounter}`),
     name: 'a2ui_surface',

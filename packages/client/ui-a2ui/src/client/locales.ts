@@ -43,5 +43,125 @@ export const en: Record<A2uiKey, string> = {
   'edge.labelPlaceholder': 'Edge label',
 }
 
+/** Japanese dictionary (same key set). */
+export const ja: Record<A2uiKey, string> = {
+  'field.required': '必須',
+  'button.submit': '送信',
+  'button.submitting': '送信中…',
+  'error.required': '必須項目を入力してください：{name}',
+  'error.busy': 'メッセージを処理中です。しばらく待ってから送信してください',
+  'action.localDone': '完了',
+  'launcher.open': 'ウィンドウで開く',
+  'launcher.hint': '独立したウィンドウで操作します',
+  'launcher.popupBlocked': 'ポップアップがブラウザにブロックされました。このサイトのポップアップを許可するか、',
+  'launcher.openDirectly': '直接開いてください',
+  'hint.submission': '送信すると、{surfaceId} の入力内容が 1 通のメッセージとしてモデルに送られます。',
+  'node.editHint': 'ダブルクリックでノードを編集',
+  'node.labelPlaceholder': 'ノードのタイトル',
+  'node.detailPlaceholder': 'カスタム内容…',
+  'edge.editHint': 'ダブルクリックで接続線のテキストを編集',
+  'edge.labelPlaceholder': '接続線のテキスト',
+}
+
+/** Spanish dictionary (same key set). */
+export const es: Record<A2uiKey, string> = {
+  'field.required': 'Obligatorio',
+  'button.submit': 'Enviar',
+  'button.submitting': 'Enviando…',
+  'error.required': 'Rellena el campo obligatorio: {name}',
+  'error.busy': 'Se está procesando un mensaje; espera antes de enviar',
+  'action.localDone': 'Hecho',
+  'launcher.open': 'Abrir en una ventana',
+  'launcher.hint': 'Interactúa en una ventana aparte',
+  'launcher.popupBlocked': 'El navegador bloqueó la ventana emergente; permite las de este sitio o',
+  'launcher.openDirectly': 'ábrela directamente',
+  'hint.submission': 'Al enviar, los valores introducidos en {surfaceId} se mandan al modelo como un mensaje.',
+  'node.editHint': 'Haz doble clic para editar este nodo',
+  'node.labelPlaceholder': 'Título del nodo',
+  'node.detailPlaceholder': 'Contenido personalizado…',
+  'edge.editHint': 'Haz doble clic para editar este texto de conexión',
+  'edge.labelPlaceholder': 'Texto de la conexión',
+}
+
+/** French dictionary (same key set). */
+export const fr: Record<A2uiKey, string> = {
+  'field.required': 'Obligatoire',
+  'button.submit': 'Envoyer',
+  'button.submitting': 'Envoi…',
+  'error.required': 'Renseignez le champ obligatoire : {name}',
+  'error.busy': 'Un message est en cours de traitement ; attendez avant d’envoyer',
+  'action.localDone': 'Terminé',
+  'launcher.open': 'Ouvrir dans une fenêtre',
+  'launcher.hint': 'Interagir dans une fenêtre séparée',
+  'launcher.popupBlocked': 'La fenêtre a été bloquée par le navigateur ; autorisez les fenêtres de ce site, ou',
+  'launcher.openDirectly': 'ouvrez-la directement',
+  'hint.submission': 'L’envoi transmet au modèle les valeurs saisies pour {surfaceId} sous forme de message.',
+  'node.editHint': 'Double-cliquez pour modifier ce nœud',
+  'node.labelPlaceholder': 'Titre du nœud',
+  'node.detailPlaceholder': 'Contenu personnalisé…',
+  'edge.editHint': 'Double-cliquez pour modifier ce libellé',
+  'edge.labelPlaceholder': 'Libellé de la liaison',
+}
+
+/** German dictionary (same key set). */
+export const de: Record<A2uiKey, string> = {
+  'field.required': 'Pflichtfeld',
+  'button.submit': 'Senden',
+  'button.submitting': 'Wird gesendet…',
+  'error.required': 'Bitte das Pflichtfeld ausfüllen: {name}',
+  'error.busy': 'Eine Nachricht wird gerade verarbeitet; bitte vor dem Senden warten',
+  'action.localDone': 'Fertig',
+  'launcher.open': 'Im Fenster öffnen',
+  'launcher.hint': 'In einem eigenen Fenster bedienen',
+  'launcher.popupBlocked': 'Das Popup wurde vom Browser blockiert; erlauben Sie Popups für diese Seite oder',
+  'launcher.openDirectly': 'öffnen Sie es direkt',
+  'hint.submission': 'Beim Senden werden die eingegebenen Werte für {surfaceId} als Nachricht an das Modell übertragen.',
+  'node.editHint': 'Doppelklick zum Bearbeiten des Knotens',
+  'node.labelPlaceholder': 'Knotentitel',
+  'node.detailPlaceholder': 'Eigener Inhalt…',
+  'edge.editHint': 'Doppelklick zum Bearbeiten der Verbindungsbeschriftung',
+  'edge.labelPlaceholder': 'Beschriftung der Verbindung',
+}
+
+/** Russian dictionary (same key set). */
+export const ru: Record<A2uiKey, string> = {
+  'field.required': 'Обязательное поле',
+  'button.submit': 'Отправить',
+  'button.submitting': 'Отправка…',
+  'error.required': 'Заполните обязательное поле: {name}',
+  'error.busy': 'Сейчас обрабатывается сообщение; дождитесь завершения перед отправкой',
+  'action.localDone': 'Готово',
+  'launcher.open': 'Открыть в окне',
+  'launcher.hint': 'Работать в отдельном окне',
+  'launcher.popupBlocked': 'Браузер заблокировал всплывающее окно; разрешите всплывающие окна для этого сайта или',
+  'launcher.openDirectly': 'откройте его напрямую',
+  'hint.submission': 'После отправки введённые для {surfaceId} значения уйдут модели одним сообщением.',
+  'node.editHint': 'Двойной щелчок — изменить узел',
+  'node.labelPlaceholder': 'Заголовок узла',
+  'node.detailPlaceholder': 'Своё содержимое…',
+  'edge.editHint': 'Двойной щелчок — изменить подпись связи',
+  'edge.labelPlaceholder': 'Подпись связи',
+}
+
+/** Portuguese dictionary (same key set). */
+export const pt: Record<A2uiKey, string> = {
+  'field.required': 'Obrigatório',
+  'button.submit': 'Enviar',
+  'button.submitting': 'Enviando…',
+  'error.required': 'Preencha o campo obrigatório: {name}',
+  'error.busy': 'Há uma mensagem em processamento; aguarde antes de enviar',
+  'action.localDone': 'Concluído',
+  'launcher.open': 'Abrir em janela',
+  'launcher.hint': 'Interagir em uma janela separada',
+  'launcher.popupBlocked': 'O navegador bloqueou a janela; permita pop-ups para este site ou',
+  'launcher.openDirectly': 'abra diretamente',
+  'hint.submission': 'Ao enviar, os valores preenchidos em {surfaceId} são enviados ao modelo como uma mensagem.',
+  'node.editHint': 'Clique duas vezes para editar este nó',
+  'node.labelPlaceholder': 'Título do nó',
+  'node.detailPlaceholder': 'Conteúdo personalizado…',
+  'edge.editHint': 'Clique duas vezes para editar este texto de conexão',
+  'edge.labelPlaceholder': 'Texto da conexão',
+}
+
 /** Union of this namespace's dictionary keys. */
 export type A2uiKey = keyof typeof zh

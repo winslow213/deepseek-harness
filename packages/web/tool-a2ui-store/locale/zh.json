@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI 页面存储",
+    "description": "通过 a2ui_export 工具和本地存储持久化并分享模型编写的 A2UI 页面。"
+  }
+}

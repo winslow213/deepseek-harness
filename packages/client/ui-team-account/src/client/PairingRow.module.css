@@ -127,8 +127,10 @@
   cursor: pointer;
 }
 
-.copy:hover {
-  color: var(--dsw-alias-label-primary);
+@media (hover: hover) {
+  .copy:hover {
+    color: var(--dsw-alias-label-primary);
+  }
 }
 
 .error {

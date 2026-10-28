@@ -687,12 +687,12 @@ export function sharedRootsFor(role: string | undefined, env: NodeJS.ProcessEnv 
  * sides are read from the environment at startup, so nothing about another
  * account's layout is baked into this file.
  *
- * The same block carries the deployment's shared directories: `rwRoots` grants
- * them writable, and `readAllowedRoots` re-exposes them, which the sandbox's
- * read shield requires because the shared directory lives inside the denied
- * users root. Both lists are per account — the role decided them — and both
- * arrive whole through the environment, so neither expression nests quotes
- * inside the YAML scalar.
+ * The same block carries the deployment's shared directories:
+ * `additionalWritableRoots` grants them writable, and `readAllowedRoots`
+ * re-exposes them, which the sandbox's read shield requires because the shared
+ * directory lives inside the denied users root. Both lists are per account —
+ * the role decided them — and both arrive whole through the environment, so
+ * neither expression nests quotes inside the YAML scalar.
  * @param home - the user's DSH_HOME.
  */
 function writeTeamSandboxPatch(home: string): void {
@@ -714,7 +714,7 @@ function writeTeamSandboxPatch(home: string): void {
     `    readDeniedRoots: !!js '[process.env.${DSH_USERS_ROOT_ENV}].filter(Boolean)'`,
     `    readAllowedRoots: !!js JSON.parse(process.env.${DSH_READ_ALLOWED_ROOTS_ENV} ?? '[]')`,
     '# Shared directories this account may write, resolved from its role.',
-    `    rwRoots: !!js JSON.parse(process.env.${DSH_RW_ROOTS_ENV} ?? '[]')`,
+    `    additionalWritableRoots: !!js JSON.parse(process.env.${DSH_RW_ROOTS_ENV} ?? '[]')`,
   ].join('\n')
   upsertTeamBlock(join(home, 'cordis.patch.yml'), `${start}${body}\n${end}`, TEAM_SANDBOX_PATCH_ID)
 }

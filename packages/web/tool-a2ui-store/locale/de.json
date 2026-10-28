@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI-Seitenspeicher",
+    "description": "Speichern und teilen Sie vom Modell verfasste A2UI-Seiten über das a2ui_export-Werkzeug und den lokalen Speicher."
+  }
+}

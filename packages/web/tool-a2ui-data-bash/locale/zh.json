@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI bash 数据源",
+    "description": "通过 bash 数据提供方把白名单中的 source 名称解析为 select 字段的选项。"
+  }
+}

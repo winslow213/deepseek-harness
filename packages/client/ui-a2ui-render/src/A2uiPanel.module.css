@@ -274,7 +274,12 @@
  * Edges are reconnectable: hovering or selecting one thickens the line so it
  * reads as pullable. The pull anchors themselves already carry a move cursor.
  */
-.canvas :global(.react-flow__edge:hover .react-flow__edge-path),
+@media (hover: hover) {
+  .canvas :global(.react-flow__edge:hover .react-flow__edge-path) {
+    stroke-width: 2.5;
+  }
+}
+
 .canvas :global(.react-flow__edge.selected .react-flow__edge-path) {
   stroke-width: 2.5;
 }

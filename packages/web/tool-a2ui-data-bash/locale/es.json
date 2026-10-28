@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Origen de datos bash de A2UI",
+    "description": "Resuelve un nombre de origen incluido en la lista blanca en las opciones de un campo select mediante un proveedor bash."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI ページツール",
+    "description": "Web UI が描画する宣言的な A2UI ページを a2ui_surface ツールで作成します。"
+  }
+}

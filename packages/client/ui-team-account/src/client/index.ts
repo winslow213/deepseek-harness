@@ -16,7 +16,7 @@ import { TeamAccountRow } from './TeamAccountRow.tsx'
 import { PairingRow } from './PairingRow.tsx'
 import { IdleExemptRow } from './IdleExemptRow.tsx'
 import { MessageCenterRow } from './MessageCenterRow.tsx'
-import { en, zh, type TeamAccountLocaleKey } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh, type TeamAccountLocaleKey } from './locales.ts'
 
 export type { TeamAccountRowProps } from './TeamAccountRow.tsx'
 export type { PairingRowProps } from './PairingRow.tsx'
@@ -43,7 +43,7 @@ export const inject = ['slots', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-team-account: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-team-account: dictionaries')
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',

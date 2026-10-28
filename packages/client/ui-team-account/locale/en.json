@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ui-team-account",
+    "description": "Add pairing-code, keep-instance-running, message-center, and sign-out rows to Team Shell settings."
+  }
+}

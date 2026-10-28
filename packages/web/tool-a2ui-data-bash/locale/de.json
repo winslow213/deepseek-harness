@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI-bash-Datenquelle",
+    "description": "Löst einen zugelassenen Quellennamen über einen bash-Datenanbieter in Optionen eines select-Felds auf."
+  }
+}

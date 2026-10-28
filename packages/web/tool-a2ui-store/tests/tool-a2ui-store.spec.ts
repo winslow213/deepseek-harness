@@ -7,7 +7,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { A2uiFormPage } from '@deepseek-ai/dsh-tool-a2ui-surface/types'
@@ -40,6 +42,7 @@ async function setup(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(tool, { dir })
   return ctx
 }
@@ -92,7 +95,7 @@ describe('a2ui_export tool', () => {
   it('exports a page the model authored into the store', async () => {
     const ctx = await setup()
     const agent = agentWithSession()
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'a2ui_export',
@@ -112,7 +115,7 @@ describe('a2ui_export tool', () => {
     const ctx = await setup()
     const agent = agentWithSession()
     const bad = { kind: 'form', title: 'x', fields: [{ name: 'a', label: 'A', type: 'bogus' }] }
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-2'),
       name: 'a2ui_export',
@@ -129,7 +132,7 @@ describe('a2ui_attach_output tool', () => {
   it('attaches a job to a surface and reports it', async () => {
     const ctx = await setup()
     const attach = vi.spyOn(ctx.a2uiLive, 'attach').mockImplementation(() => {})
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'a2ui_attach_output',
@@ -147,7 +150,7 @@ describe('a2ui_attach_output tool', () => {
   it('requires an owning agent', async () => {
     const ctx = await setup()
     const attach = vi.spyOn(ctx.a2uiLive, 'attach').mockImplementation(() => {})
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-2'),
       name: 'a2ui_attach_output',
@@ -163,7 +166,7 @@ describe('a2ui_share / a2ui_import tools', () => {
     const ctx = await setup()
     await ctx.a2uiStore.save('share-me', page)
 
-    const share = await ctx.tools.execute({
+    const share = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'a2ui_share',
@@ -176,7 +179,7 @@ describe('a2ui_share / a2ui_import tools', () => {
     expect(token.startsWith('a2ui-share:')).toBe(true)
 
     await removeA2uiTool(dir, 'share-me')
-    const imp = await ctx.tools.execute({
+    const imp = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-2'),
       name: 'a2ui_import',
@@ -192,7 +195,7 @@ describe('a2ui_share / a2ui_import tools', () => {
   it('rejects sharing an unknown tool and importing an invalid token', async () => {
     const ctx = await setup()
 
-    const share = await ctx.tools.execute({
+    const share = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'a2ui_share',
@@ -200,7 +203,7 @@ describe('a2ui_share / a2ui_import tools', () => {
     })
     expect(share.isError).toBe(true)
 
-    const imp = await ctx.tools.execute({
+    const imp = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-2'),
       name: 'a2ui_import',

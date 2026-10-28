@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI bash データソース",
+    "description": "bash データ提供元を介して、ホワイトリストの source 名を select フィールドの選択肢に解決します。"
+  }
+}

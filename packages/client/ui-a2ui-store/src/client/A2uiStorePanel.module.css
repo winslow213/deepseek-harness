@@ -19,8 +19,10 @@
   cursor: pointer;
 }
 
-.entry:hover {
-  background: var(--dsw-specific-input-minor);
+@media (hover: hover) {
+  .entry:hover {
+    background: var(--dsw-specific-input-minor);
+  }
 }
 
 .entryLabel {
@@ -105,8 +107,10 @@
   cursor: pointer;
 }
 
-.open:hover {
-  background: var(--dsw-specific-input-minor);
+@media (hover: hover) {
+  .open:hover {
+    background: var(--dsw-specific-input-minor);
+  }
 }
 
 .remove {
@@ -118,8 +122,10 @@
   cursor: pointer;
 }
 
-.remove:hover {
-  color: var(--dsw-alias-state-error-primary);
+@media (hover: hover) {
+  .remove:hover {
+    color: var(--dsw-alias-state-error-primary);
+  }
 }
 
 .share {
@@ -131,8 +137,10 @@
   cursor: pointer;
 }
 
-.share:hover {
-  color: var(--dsw-alias-label-primary);
+@media (hover: hover) {
+  .share:hover {
+    color: var(--dsw-alias-label-primary);
+  }
 }
 
 .importRow {
@@ -165,8 +173,10 @@
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
 }
-.importAction:hover {
-  background: var(--dsw-specific-input-major);
+@media (hover: hover) {
+  .importAction:hover {
+    background: var(--dsw-specific-input-major);
+  }
 }
 .importAction:disabled {
   opacity: .5;

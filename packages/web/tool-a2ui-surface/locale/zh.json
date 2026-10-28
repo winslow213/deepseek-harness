@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "A2UI 页面工具",
+    "description": "通过 a2ui_surface 工具编写由 Web 界面渲染的声明式 A2UI 页面。"
+  }
+}

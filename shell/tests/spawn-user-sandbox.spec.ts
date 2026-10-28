@@ -44,7 +44,7 @@ describe('team sandbox patch', () => {
     const patch = await patchFor('alice', process.env)
     assert.match(patch, /readDeniedRoots: !!js .*DSH_USERS_ROOT/)
     assert.match(patch, /readAllowedRoots: !!js .*DSH_READ_ALLOWED_ROOTS/)
-    assert.match(patch, /rwRoots: !!js .*DSH_RW_ROOTS/)
+    assert.match(patch, /additionalWritableRoots: !!js .*DSH_RW_ROOTS/)
     // The account's own home and its shared directories are never spelled
     // literally into a file that every account's loader reads.
     assert.doesNotMatch(patch, /readAllowedRoots: !!js .*alice/)

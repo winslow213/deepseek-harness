@@ -654,9 +654,9 @@ provider 行。当前决定：保留 hub 与 agent 两端。
 
 | 文件 | 本方增量 | 重做时必须保住的前提 |
 |---|---|---|
-| `packages/sandbox/sandbox/src/index.ts` | `SandboxExecutionPolicy` 加 `rwRoots?: readonly string[]` 字段与 JSDoc | 字段只表"可写"，**不表可读**；`read-only` 下不授予任何东西 |
+| `packages/sandbox/sandbox/src/index.ts` | `SandboxExecutionPolicy` 加 `additionalWritableRoots?: readonly string[]` 字段与 JSDoc | 字段只表"可写"，**不表可读**；`read-only` 下不授予任何东西 |
 | `packages/sandbox/sandbox/src/roots.ts` | 新增四个导出的派生函数：`modeOwnedRoots()`、`shadowsModeOwnedMount()`、`grantedExtraRoots()`、`effectiveRwRoots()`；`writableRoots()` 改为并入 `effectiveRwRoots()` 的结果；`readShield()` 的 allowed 侧输入多并入一次 `grantedExtraRoots()` | 丢弃规则（非绝对路径、`/`、mode 自有挂载本身或其祖先）必须仍在**所有方言看到之前**统一执行，而不是各方言各判一次 |
-| `packages/sandbox/sandbox-policy/src/index.ts` | `Config` 加 `rwRoots?: string[]`；类字段 + 构造 `canonicalPath`；`resolve()` 空则**省略该键** | 空列表必须省略键（不是给空数组），否则既有"不含该键"的断言失效 |
+| `packages/sandbox/sandbox-policy/src/index.ts` | `Config` 加 `additionalWritableRoots?: string[]`；类字段 + 构造 `canonicalPath`；`resolve()` 空则**省略该键** | 空列表必须省略键（不是给空数组），否则既有"不含该键"的断言失效 |
 | `packages/sandbox/sandbox-local/src/profiles.ts` | bwrap mode 段追加 `--bind`；landlock `readWrite` 与 `readOnly`（有屏蔽时）各追加 | bwrap 依赖**参数顺序**（last mount wins）：grant 必须在 `--tmpfs` 之后；landlock 的 `readOnly` 在有屏蔽时是严格 allow-list，**两条都要补** |
 
 四个文件的本方改动都**没有上游对应物**，因此不会被上游版本自动取代。
@@ -683,7 +683,7 @@ provider 行。当前决定：保留 hub 与 agent 两端。
   生成）：不要手工解冲突，解完源码冲突后跑
   `npx tsx scripts/gen-config-catalog.ts` 重新生成再比对。
 
-- 本提交**未改** `scripts/type-equiv.manifest.json`；但 `rwRoots` 进了
+- 本提交**未改** `scripts/type-equiv.manifest.json`；但 `additionalWritableRoots` 进了
   `docs/subsystems/sandbox.md` 的 `SandboxExecutionPolicy` type-equiv 块，
   该块必须与源声明逐字符一致，配对侧 `.zh.md` 必须**逐字节相同**。上游若改
   了该接口，先改源码再 `npx tsx scripts/verify-type-equiv.ts`。
@@ -715,7 +715,7 @@ feature**：master 只镜像 fork 的上游，永不接收本方提交。
    里 8 个改名检测产物（`UD`/`AU`）会随之消失。
 
 5. **保住本方 sandbox 增量**（§12.6）。四个上游保有的文件必须按语义重做，
-   **不能整文件取任一版本**：丢弃规则在所有方言之前统一执行、空 `rwRoots`
+   **不能整文件取任一版本**：丢弃规则在所有方言之前统一执行、空 `additionalWritableRoots`
    省略键、bwrap 的 `--bind` 必须在 `--tmpfs` 之后、landlock 两条列表都要
    补。seatbelt / `fs/fs-sandbox` / windows-acl 零改动，其 golden 断言不应
    变化——若它们变了，说明第 5 步做错了。

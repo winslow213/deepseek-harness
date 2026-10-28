@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-a2ui-data",
   "description": "A2UI dynamic data-source capability: the ctx.a2uiData provider contract and the ctx.remote.a2uiData namespace that resolve a named source into a select field's options",
-  "version": "0.2.1-alpha.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

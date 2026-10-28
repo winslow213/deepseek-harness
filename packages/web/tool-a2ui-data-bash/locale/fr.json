@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Source de données bash A2UI",
+    "description": "Résolvez un nom de source autorisé en options de champ select via un fournisseur bash."
+  }
+}
