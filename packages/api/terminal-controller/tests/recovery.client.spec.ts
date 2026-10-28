@@ -41,6 +41,7 @@ function fixture() {
       })
     })),
     shells: vi.fn<TerminalRemote['shells']>(async () => success([info.shell])),
+    availability: vi.fn<TerminalRemote['availability']>(async () => success({ available: true })),
     environment: vi.fn<TerminalRemote['environment']>(async () => success(environment)), list: vi.fn<TerminalRemote['list']>(async () => success([])),
     create: vi.fn<TerminalRemote['create']>(async (_session, request) => success({ ...info, id: request.id })),
     close: vi.fn<TerminalRemote['close']>(async () => success(undefined)), rename: vi.fn<TerminalRemote['rename']>(async () => success(undefined)),
@@ -683,6 +684,17 @@ it('discovers menu choices without creating a process and remembers a choice bef
   expect((await service.launchShells(sessionId, new AbortController().signal)).selectedShell).toBeUndefined()
   await h.view().refresh()
   expect(vi.mocked(h.remote.create).mock.calls.at(-1)?.[1]).not.toHaveProperty('shellPath')
+})
+
+it('forwards the workspace confinement the Host reports for a Session', async () => {
+  const h = fixture()
+  vi.mocked(h.remote.availability).mockResolvedValue(success({ available: false, reason: 'not-mounted-workspace' }))
+  const { service } = await h.service()
+  expect(await service.availability(sessionId, new AbortController().signal))
+    .toEqual({ available: false, reason: 'not-mounted-workspace' })
+  vi.mocked(h.remote.availability).mockResolvedValueOnce(failure('host offline'))
+  await expect(service.availability(sessionId, new AbortController().signal)).rejects.toThrow('host offline')
+  expect(h.remote.create).not.toHaveBeenCalled()
 })
 
 it('retains the last selection across a failed automatic launch', async () => {

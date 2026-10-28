@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { allowAllAccess, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { TerminalLaunchShells } from '@deepseek-ai/dsh-api-terminal-controller/client'
+import type { TerminalAvailability } from '@deepseek-ai/dsh-api-terminal-controller/types'
 import type { GlobalStandardProps, SessionStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PaneId, TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
@@ -37,21 +38,28 @@ const catalogEntry = (shortcut: GuideShortcut): ShortcutCatalogEntry => ({
   modified: false, conflicts: [], issue: null, ...shortcut,
 })
 
-function mount(description: string | undefined = en.description, shortcut?: GuideShortcut) {
+function mount(description: string | null | undefined = en.description, shortcut?: GuideShortcut,
+  availability: TerminalAvailability | 'reject' | 'pending' = { available: true }) {
   const loadShells = vi.fn<TerminalGuideProps['loadShells']>(async () => choices)
+  const loadAvailability = vi.fn<TerminalGuideProps['loadAvailability']>(availability === 'reject'
+    ? async () => { throw new Error('host offline') }
+    : availability === 'pending'
+      ? () => new Promise<TerminalAvailability>(() => {})
+      : async () => availability)
   const selectShell = vi.fn()
   const openTab = vi.fn()
   let shortcuts = shortcut === undefined ? [] : [catalogEntry(shortcut)]
   const props: TerminalGuideProps = {
     ...standard,
     useShortcuts: <T,>(selector: (entries: readonly ShortcutCatalogEntry[]) => T): T => selector(shortcuts),
-    entryId: 'new', kind: 'terminal', title: en.new, description, t: makeTranslate(en),
+    entryId: 'new', kind: 'terminal', title: en.new,
+    ...description === null ? {} : { description }, t: makeTranslate(en),
     useTabInfo: () => ({ sidebar: { expanded: true, fullscreen: false }, panel: { id: 'pane-guide' as PaneId },
       tab: { id: 'tab-guide' as TabId, kind: 'guide', contentId: 'sidebar://guide', title: 'Start',
         visible: true, signal: new AbortController().signal,
         navigation: { address: 'sidebar://guide', params: undefined, revision: 0 },
         actions: { openTab, bindCommands: vi.fn(() => vi.fn()), openResource: vi.fn(), close: vi.fn() } } }),
-    loadShells, selectShell,
+    loadShells, loadAvailability, selectShell,
   }
   const view = render(<TerminalGuide {...props} />)
   const open = () => fireEvent.click(view.getByRole('button', { name: en.shell }))
@@ -59,8 +67,44 @@ function mount(description: string | undefined = en.description, shortcut?: Guid
     shortcuts = [catalogEntry(next)]
     view.rerender(<TerminalGuide {...props} />)
   }
-  return { view, props, open, loadShells, selectShell, openTab, setShortcut }
+  return { view, props, open, loadShells, loadAvailability, selectShell, openTab, setShortcut }
 }
+
+it('replaces the launch card with the confinement reason outside a mounted device workspace', async () => {
+  const h = mount(en.description, undefined, { available: false, reason: 'not-mounted-workspace' })
+  await act(async () => { await Promise.resolve() })
+  const card = h.view.container.querySelector('[data-terminal-unavailable="not-mounted-workspace"]')
+  expect(card).not.toBeNull()
+  expect(card?.textContent).toContain(en.notMountedWorkspace)
+  expect(h.view.container.querySelector('button')).toBeNull()
+  expect(h.loadShells).not.toHaveBeenCalled()
+  expect(h.openTab).not.toHaveBeenCalled()
+})
+
+it('keeps the launch affordance when the availability query itself fails', async () => {
+  const h = mount(en.description, undefined, 'reject')
+  await act(async () => { await Promise.resolve() })
+  expect(h.view.container.querySelector('[data-terminal-unavailable]')).toBeNull()
+  fireEvent.click(h.view.getByRole('button', { name: /^New terminal/u }))
+  expect(h.openTab).toHaveBeenCalledExactlyOnceWith('terminal', { replaceTab: true })
+})
+
+it('drops a late availability answer from an unmounted card', async () => {
+  const pending = mount(en.description, undefined, 'pending')
+  pending.view.unmount()
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  expect(pending.openTab).not.toHaveBeenCalled()
+  const failing = mount(en.description, undefined, 'reject')
+  failing.view.unmount()
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  expect(failing.openTab).not.toHaveBeenCalled()
+})
+
+it.each([null, en.description])('keeps the unavailable card readable with description %s', async (description) => {
+  const h = mount(description, undefined, { available: false, reason: 'not-mounted-workspace' })
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  expect(h.view.container.querySelector('[data-terminal-unavailable]')?.textContent).toContain(en.notMountedWorkspace)
+})
 
 it('opens the default shell from the main button without querying a menu', () => {
   const h = mount()

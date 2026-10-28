@@ -10,8 +10,8 @@ import { discoverShells, resolveShell } from './shells.ts'
 import { BrowserTerminal } from './terminal.ts'
 import { TerminalRetention } from './retention.ts'
 import type {
-  TerminalShell, TerminalInput, TerminalCreateRequest, TerminalEnvironment, TerminalFrame, TerminalRetentionFrame,
-  WebTerminalId, WebTerminalInfo,
+  TerminalShell, TerminalInput, TerminalCreateRequest, TerminalEnvironment, TerminalAvailability,
+  TerminalFrame, TerminalRetentionFrame, WebTerminalId, WebTerminalInfo,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -56,6 +56,13 @@ export interface Config {
   readonly activityPollIntervalMs: number
   /** Delay before retrying failed owned terminal cleanup. */
   readonly cleanupRetryMs: number
+  /**
+   * Root whose descendants are mounted-device workspaces, i.e. the team
+   * shell's shadow tree. When set, a Session may open terminals only where its
+   * workspace is one of those mounts, because the shell belongs to the paired
+   * machine rather than this Host; omitted leaves every workspace eligible.
+   */
+  readonly mountedWorkspaceRoot?: string
 }
 
 interface TerminalAllocation {
@@ -90,6 +97,7 @@ export class TerminalController extends TypertRemoteService {
     unattendedTimeoutMs: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(7_200_000),
     activityPollIntervalMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(30_000),
     cleanupRetryMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(60_000),
+    mountedWorkspaceRoot: z.string(),
   })
 
   private readonly owners = new Map<SessionId, OwnedSession>()
@@ -122,6 +130,41 @@ export class TerminalController extends TypertRemoteService {
     return { cwd: workingDirectory.get(agent.session),
       maxInputBytes: this.config.maxInputBytes, maxBufferedBytes: this.config.maxBufferedBytes, maxCols: this.config.maxCols,
       maxRows: this.config.maxRows, scrollback: this.config.scrollback }
+  }
+
+  /**
+   * Report whether this Session's workspace may open a terminal at all.
+   * @param agent - Session owner supplied by the Gateway.
+   * @param signal - request cancellation.
+   * @returns availability, with the reason when the workspace is not a mounted device.
+   */
+  @Remote
+  availability(agent: Agent, signal: AbortSignal): TerminalAvailability {
+    signal.throwIfAborted()
+    return this.workspaceAvailability(agent)
+  }
+
+  /**
+   * The failure a Session outside a mounted device workspace produces.
+   * @returns the Remote error naming the confinement.
+   */
+  private static notMounted(): RemoteError<'terminal/not-mounted-workspace'> {
+    return new RemoteError('terminal/not-mounted-workspace', 'This deployment opens terminals only inside a mounted device workspace', {})
+  }
+
+  /**
+   * Refuse a Session workspace this deployment confines terminals away from.
+   * @param agent - Session owner supplied by the Gateway.
+   * @returns availability for the Session's current workspace.
+   */
+  private workspaceAvailability(agent: Agent): TerminalAvailability {
+    const root = this.config.mountedWorkspaceRoot
+    if (root === undefined) return { available: true }
+    const cwd = this.execution(agent).workingDirectory.get(agent.session)
+    const base = root.endsWith('/') ? root.slice(0, -1) : root
+    return cwd === base || cwd.startsWith(`${base}/`)
+      ? { available: true }
+      : { available: false, reason: 'not-mounted-workspace' }
   }
 
   /**
@@ -158,6 +201,8 @@ export class TerminalController extends TypertRemoteService {
   @Remote
   async create(agent: Agent, request: TerminalCreateRequest, signal: AbortSignal): Promise<WebTerminalInfo> {
     this.lifetime.signal.throwIfAborted()
+    const availability = this.workspaceAvailability(agent)
+    if (!availability.available) throw TerminalController.notMounted()
     if (!/^[\w-]{1,128}$/u.test(request.id)) throw new Error('Invalid terminal identity')
     this.dimensions(request.cols, request.rows)
     const owner = this.owner(agent)

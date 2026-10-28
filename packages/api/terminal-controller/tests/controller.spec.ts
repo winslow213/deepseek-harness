@@ -107,6 +107,33 @@ describe('TerminalController', () => {
     expect(sandboxPolicy.resolve).not.toHaveBeenCalled()
   })
 
+  it('confines terminals to mounted device workspaces when the deployment names their root', async () => {
+    const { controller, agent } = fixture({ mountedWorkspaceRoot: '/var/lib/dsh-mounts' })
+    expect(controller.availability(agent, signal())).toEqual({ available: false, reason: 'not-mounted-workspace' })
+    await expect(controller.create(agent, request, signal()))
+      .rejects.toMatchObject({ code: 'terminal/not-mounted-workspace' })
+  })
+
+  it('accepts a workspace at the mounted root or beneath it', () => {
+    const { controller, ctx } = fixture({ mountedWorkspaceRoot: '/var/lib/dsh-mounts/' })
+    const inside = owner(ctx, 'inside', '/var/lib/dsh-mounts/alice/mount-1/code')
+    const atRoot = owner(ctx, 'root', '/var/lib/dsh-mounts')
+    expect(controller.availability(inside, signal())).toEqual({ available: true })
+    expect(controller.availability(atRoot, signal())).toEqual({ available: true })
+  })
+
+  it('leaves every workspace eligible when no mounted root is configured', () => {
+    const { controller, agent } = fixture()
+    expect(controller.availability(agent, signal())).toEqual({ available: true })
+  })
+
+  it('honors cancellation before answering availability', () => {
+    const { controller, agent } = fixture({ mountedWorkspaceRoot: '/var/lib/dsh-mounts' })
+    const abort = new AbortController()
+    abort.abort(new Error('request cancelled'))
+    expect(() => controller.availability(agent, abort.signal)).toThrow('request cancelled')
+  })
+
   it('uses the current directory for new user terminals while retaining earlier directories and permissions', async () => {
     const { ctx, controller, agent, subprocess, sandboxPolicy, workingDirectory } = fixture()
     const policy: SandboxExecutionPolicy = { mode: 'workspace-write', workspaceRoot: '/workspace', sessionId: agent.id }

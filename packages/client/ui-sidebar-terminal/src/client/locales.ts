@@ -23,6 +23,7 @@ export const zh = {
   attachmentEnded: '终端连接已结束，请重新连接。',
   invalidOutput: '终端画面传输异常，请重新连接。',
   terminalLimit: '终端数量已达上限，请关闭不用的终端后重试。已退出的终端也计入数量。',
+  notMountedWorkspace: '终端只在挂载设备的工作区中可用；当前会话使用服务器工作空间，请在挂载的设备会话中新建终端。',
 } satisfies Record<string, string>
 
 /** English terminal copy. */
@@ -41,6 +42,7 @@ export const en = {
   attachmentEnded: 'The terminal connection ended. Reconnect to continue.',
   invalidOutput: 'The terminal screen could not be received. Reconnect to recover it.',
   terminalLimit: 'The terminal limit has been reached. Close unused terminals and try again. Exited terminals also count toward the limit.',
+  notMountedWorkspace: 'Terminals are available only in a mounted device workspace. This Session uses the server workspace; open a terminal from a mounted device Session.',
 } satisfies Record<keyof typeof zh, string>
 
 /** Japanese copy, checked against the English keys. */
@@ -73,6 +75,7 @@ export const ja = {
   'attachmentEnded': 'ターミナル接続が終了しました。続行するには再接続してください。',
   'invalidOutput': 'ターミナル画面を受信できませんでした。再接続して復元してください。',
   'terminalLimit': 'ターミナルの上限に達しました。未使用のターミナルを閉じて再試行してください。終了したターミナルも上限に含まれます。',
+  notMountedWorkspace: 'ターミナルはマウントされたデバイスのワークスペースでのみ利用できます。このセッションはサーバーのワークスペースを使用しています。',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -91,6 +94,7 @@ export const es = {
   attachmentEnded: 'La conexión del terminal terminó. Vuelva a conectarse para continuar.',
   invalidOutput: 'No se pudo recibir la pantalla del terminal. Vuelva a conectarse para recuperarlo.',
   terminalLimit: 'Se ha alcanzado el límite terminal. Cierre los terminales no utilizados y vuelva a intentarlo. Las terminales salidas también cuentan para el límite.',
+  notMountedWorkspace: 'Los terminales solo están disponibles en el espacio de trabajo de un dispositivo montado. Esta sesión usa el espacio de trabajo del servidor.',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
@@ -109,6 +113,7 @@ export const fr = {
   attachmentEnded: 'La connexion du terminal est terminée. Reconnectez-vous pour continuer.',
   invalidOutput: "L'écran du terminal n'a pas pu être reçu. Reconnectez-vous pour le récupérer.",
   terminalLimit: 'La limite terminale a été atteinte. Fermez les terminaux inutilisés et réessayez. Les terminaux sortis comptent également dans la limite.',
+  notMountedWorkspace: 'Les terminaux ne sont disponibles que dans l’espace de travail d’un appareil monté. Cette session utilise l’espace de travail du serveur.',
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
@@ -127,6 +132,7 @@ export const de = {
   attachmentEnded: 'Die Terminalverbindung wurde beendet. Stellen Sie die Verbindung wieder her, um fortzufahren.',
   invalidOutput: 'Der Terminalbildschirm konnte nicht empfangen werden. Stellen Sie die Verbindung wieder her, um es wiederherzustellen.',
   terminalLimit: 'Das Endlimit wurde erreicht. Schließen Sie nicht verwendete Terminals und versuchen Sie es erneut. Auch verlassene Terminals werden auf das Limit angerechnet.',
+  notMountedWorkspace: 'Terminals sind nur im Arbeitsbereich eines eingebundenen Geräts verfügbar. Diese Sitzung verwendet den Arbeitsbereich des Servers.',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
@@ -145,6 +151,7 @@ export const ru = {
   attachmentEnded: 'Терминальное соединение завершилось. Подключитесь повторно, чтобы продолжить.',
   invalidOutput: 'Не удалось получить экран терминала. Повторно подключитесь, чтобы восстановить его.',
   terminalLimit: 'Достигнут лимит терминала. Закройте неиспользуемые терминалы и повторите попытку. Вышедшие терминалы также учитываются в лимите.',
+  notMountedWorkspace: 'Терминалы доступны только в рабочем пространстве подключённого устройства. Этот сеанс использует рабочее пространство сервера.',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -163,4 +170,5 @@ export const pt = {
   attachmentEnded: 'A conexão do terminal terminou. Reconecte para continuar.',
   invalidOutput: 'A tela do terminal não pôde ser recebida. Reconecte para recuperá-lo.',
   terminalLimit: 'O limite terminal foi atingido. Feche os terminais não utilizados e tente novamente. Os terminais encerrados também contam para o limite.',
+  notMountedWorkspace: 'Os terminais estão disponíveis apenas no espaço de trabalho de um dispositivo montado. Esta sessão usa o espaço de trabalho do servidor.',
 } satisfies Record<keyof typeof en, string>

@@ -10,6 +10,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'terminal/control-unavailable': { readonly reason: 'read-only' | 'not-running' }
     /** Retained screens and pending allocations consume the Session's terminal quota. */
     'terminal/limit-reached': { readonly limit: number }
+    /** This deployment opens terminals only inside a mounted device workspace. */
+    'terminal/not-mounted-workspace': Record<string, never>
   }
 }
 
@@ -27,6 +29,17 @@ export interface TerminalShell {
   readonly args: readonly string[]
   readonly name: string
 }
+
+/**
+ * Why a Session's workspace cannot open a terminal, or that it can.
+ *
+ * A team deployment confines terminals to mounted device workspaces: the shell
+ * runs on the paired machine, so a Session working on the account's own server
+ * workspace has no device to run it on.
+ */
+export type TerminalAvailability =
+  | { readonly available: true }
+  | { readonly available: false; readonly reason: 'not-mounted-workspace' }
 
 /** Current Session directory and terminal limits; retained terminals keep their own process directories. */
 export interface TerminalEnvironment {

@@ -7,6 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import AgentRegistry, { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -28,6 +29,7 @@ async function setup(
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(tool, { workspaceRoot, ...options })
   return ctx
@@ -57,13 +59,19 @@ function sessionAgent(id = 'wiki-agent'): Agent {
 
 let callCounter = 0
 function callWikiNote(ctx: Context, args: unknown, agent: Agent) {
-  return ctx.tools.execute({
+  return execute(ctx, 'wiki_note', args, agent)
+}
+
+/** Run one model tool call through the mounted executor and return its settled result. */
+async function execute(ctx: Context, name: string, args: unknown, agent: Agent) {
+  const batch = await ctx.tools.execute({
+    calls: [{ type: 'tool-call', id: ToolCallId(`call-${++callCounter}`), name, arguments: JSON.stringify(args) }],
     signal: testToolSignal,
-    callId: ToolCallId(`call-${++callCounter}`),
-    name: 'wiki_note',
-    arguments: args,
     agent,
   })
+  const outcome = batch.results[0]
+  if (outcome === undefined) throw new Error('executor omitted the tool result')
+  return outcome.result
 }
 
 describe('wiki_note tool', () => {

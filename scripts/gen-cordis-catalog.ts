@@ -1116,6 +1116,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   A2uiDataResolveValue: 'A2UI data-source payload contract is owned by packages/web/tool-a2ui-data/src/types.ts',
   TerminalShell: 'Browser terminal shell profiles are owned by packages/api/terminal-controller/README.md',
   TerminalEnvironment: 'Browser terminal environment fields are owned by packages/api/terminal-controller/README.md',
+  TerminalAvailability: 'Browser terminal workspace eligibility is owned by packages/api/terminal-controller/README.md',
   WebTerminalInfo: 'Browser terminal metadata is owned by packages/api/terminal-controller/README.md',
   TerminalCreateRequest: 'Browser terminal allocation fields are owned by packages/api/terminal-controller/README.md',
   TerminalInput: 'Browser terminal input commands are owned by packages/api/terminal-controller/README.md',

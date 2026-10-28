@@ -94,6 +94,7 @@ Client 在分配前将每条 Session/内容与终端身份的关联保存到独�
 - 原生 PTY 可用性和进程树清理保证由 subprocess provider 决定。找到可执行文件并不保证 PTY 分配成功。
 - 自动回收依赖 provider [支持的 shell 活动观察](../../subprocess/subprocess-local/README.zh.md#running-terminal-sessions)。不支持的 shell、自定义启动参数和不确定的进程观察可能让资源一直保留到明确关闭或 owner 卸载。运行中的命令没有强制最长执行时间。
 - 屏幕恢复只保留有界历史，不保留完整记录。同一时刻只有一个连接可输入或调整尺寸。
+- 设置了 `mountedWorkspaceRoot` 的部署只在该根及其子孙目录下打开终端，即只在配对设备的挂载工作区中打开；其他会话由 `availability` 报告原因，`create` 予以拒绝。PTY 仍运行在 Host 上、以挂载的影子目录为工作目录，而不是运行在配对设备上。
 
 <a id="dev-note"></a>
 ### 开发备注

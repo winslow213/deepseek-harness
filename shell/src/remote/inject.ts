@@ -248,6 +248,12 @@ export function regionRouterPatchYaml(config: {
       `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
       ...config.workspaceRoot === undefined ? [] : [`        workspaceRoot: ${JSON.stringify(config.workspaceRoot)}`],
       ...config.fsCwd === undefined ? [] : [`        cwd: ${JSON.stringify(config.fsCwd)}`],
+      // A shell belongs to the machine it runs on, so a browser terminal is
+      // offered only where the Session workspace is a paired device's mount.
+      '',
+      '- id: terminal-controller',
+      '  config:',
+      `    mountedWorkspaceRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
     )
   }
   if (config.syncMounts && config.syncMountFileUrl !== undefined) {

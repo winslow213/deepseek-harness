@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-28-mount-scoped-terminals.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-28-mount-scoped-terminals.md
+/agent-note-terminals-confined-to-mounted-device-workspaces:
+  en: 2d81ba0c0dea3f8d
+  zh: 96a45d45dd82d258
+/agent-note-terminals-confined-to-mounted-device-workspaces/problem:
+  en: 6523e69b4a9f9343
+  zh: f6cee7a7cfc55e40
+/agent-note-terminals-confined-to-mounted-device-workspaces/decision:
+  en: 24a5c8d800319cff
+  zh: 50d5a6fd5f1ebc99
+/agent-note-terminals-confined-to-mounted-device-workspaces/alternatives-considered:
+  en: 1638a2d6228bb841
+  zh: 38f9716ce0f4f9e8
+/agent-note-terminals-confined-to-mounted-device-workspaces/consequences:
+  en: acbd51f7405d113d
+  zh: 679d2bf41a885be9

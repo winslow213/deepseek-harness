@@ -244,6 +244,14 @@ Typed Remote control of transient Session-owned terminal processes.
 @Remote environment(agent: Agent, signal: AbortSignal): TerminalEnvironment
 
 /**
+ * Report whether this Session's workspace may open a terminal at all.
+ * @param agent - Session owner supplied by the Gateway.
+ * @param signal - request cancellation.
+ * @returns availability, with the reason when the workspace is not a mounted device.
+ */
+@Remote availability(agent: Agent, signal: AbortSignal): TerminalAvailability
+
+/**
  * Discover installed shells in the Session's execution environment.
  * @param agent - Session owner supplied by the Gateway.
  * @param signal - request cancellation.

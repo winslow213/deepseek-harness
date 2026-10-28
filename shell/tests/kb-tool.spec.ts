@@ -5,6 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -36,13 +37,19 @@ function sessionAgent(id = 'kb-agent'): Agent {
 
 let callCounter = 0
 function callKbSearch(ctx: Context, args: unknown, agent: Agent) {
-  return ctx.tools.execute({
+  return execute(ctx, 'kb_search', args, agent)
+}
+
+/** Run one model tool call through the mounted executor and return its settled result. */
+async function execute(ctx: Context, name: string, args: unknown, agent: Agent) {
+  const batch = await ctx.tools.execute({
+    calls: [{ type: 'tool-call', id: ToolCallId(`call-${++callCounter}`), name, arguments: JSON.stringify(args) }],
     signal: testToolSignal,
-    callId: ToolCallId(`call-${++callCounter}`),
-    name: 'kb_search',
-    arguments: args,
     agent,
   })
+  const outcome = batch.results[0]
+  if (outcome === undefined) throw new Error('executor omitted the tool result')
+  return outcome.result
 }
 
 /** A fake KB server implementing just enough of the job API for the tool. */
@@ -149,6 +156,7 @@ describe('kb_search tool', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(tool, { userId: 'alice', kbBaseUrl: fake.baseUrl, ...config })
     return ctx
@@ -235,10 +243,8 @@ describe('kb_search tool', () => {
     const ctx = await setup()
     const controller = new AbortController()
     const pending = ctx.tools.execute({
+      calls: [{ type: 'tool-call', id: ToolCallId(`call-${++callCounter}`), name: 'kb_search', arguments: JSON.stringify({ query: 'never completes' }) }],
       signal: controller.signal,
-      callId: ToolCallId(`call-${++callCounter}`),
-      name: 'kb_search',
-      arguments: { query: 'never completes' },
       agent: sessionAgent(),
     })
     // The real agent loop aborts a cancelled turn with a plain object reason
@@ -249,7 +255,8 @@ describe('kb_search tool', () => {
     // production failure) instead of the framework's own pre-dispatch check.
     await new Promise((resolve) => setTimeout(resolve, 50))
     controller.abort({ kind: 'aborted', reason: { kind: 'user' } })
-    const result = await pending
+    const batch = await pending
+    const result = batch.results[0]!.result
     assert.equal(result.isError, true)
     const text = JSON.stringify(result.content)
     assert.doesNotMatch(text, /\[object Object\]/)

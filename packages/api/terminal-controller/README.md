@@ -94,6 +94,7 @@ Directory recovery appends user context without replacing the system-prompt pref
 - The subprocess provider determines native PTY availability and process-tree cleanup guarantees. Finding an executable does not prove PTY allocation will succeed.
 - Automatic reclamation depends on the provider's [supported shell activity observation](../../subprocess/subprocess-local/README.md#running-terminal-sessions). Unsupported shells, custom launch arguments and uncertain process observations may retain resources until explicit close or owner disposal. No maximum runtime kills busy commands.
 - Screen recovery retains bounded history, not a complete transcript. Only one attachment at a time can write or resize.
+- A deployment that sets `mountedWorkspaceRoot` opens terminals only in that root and its descendants, i.e. only in a paired device's mounted workspace; every other Session reports the reason from `availability` and `create` refuses it. The PTY still runs on the Host over the mount's shadow directory, not on the paired device.
 
 <a id="dev-note"></a>
 ### Dev Note

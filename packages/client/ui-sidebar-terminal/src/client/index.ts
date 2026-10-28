@@ -88,6 +88,7 @@ export function apply(ctx: Context): void {
     inject: (sessionId): TerminalGuideInjected => ({
       hooks: { shortcuts: ctx.shortcuts.catalog },
       loadShells: signal => ctx.webTerminals.launchShells(sessionId, signal),
+      loadAvailability: signal => ctx.webTerminals.availability(sessionId, signal),
       selectShell: (path) => { ctx.webTerminals.selectShell(path) },
     }),
   }, TerminalGuide)), 'ui-sidebar-terminal.guide')

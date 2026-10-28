@@ -4001,6 +4001,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the logged current directory and terminal limits; retained terminals keep their own process directories.',
       },
       {
+        signature: '@Remote availability(agent: Agent, signal: AbortSignal): TerminalAvailability',
+        description: 'Report whether this Session\'s workspace may open a terminal at all.',
+        parameters: [{ name: 'agent', description: 'Session owner supplied by the Gateway.' }, { name: 'signal', description: 'request cancellation.' }],
+        returns: 'availability, with the reason when the workspace is not a mounted device.',
+      },
+      {
         signature: '@Remote shells(agent: Agent, signal: AbortSignal): Promise<TerminalShell[]>',
         description: 'Discover installed shells in the Session\'s execution environment.',
         parameters: [{ name: 'agent', description: 'Session owner supplied by the Gateway.' }, { name: 'signal', description: 'request cancellation.' }],
@@ -9618,6 +9624,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TeamWaitResult',
     declaration: 'export interface TeamWaitResult {\n    readonly timedOut: boolean;\n}',
+  },
+  {
+    name: 'TerminalAvailability',
+    declaration: 'export type TerminalAvailability = {\n    readonly available: true;\n} | {\n    readonly available: false;\n    readonly reason: \'not-mounted-workspace\';\n};',
   },
   {
     name: 'TerminalBackend',

@@ -7,7 +7,7 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { TerminalView, type TerminalRemote } from './model.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
-import type { TerminalShell, WebTerminalId, WebTerminalInfo } from '../types.ts'
+import type { TerminalAvailability, TerminalShell, WebTerminalId, WebTerminalInfo } from '../types.ts'
 import { preferredShell, rememberShell } from './shell-preference.ts'
 import { TerminalCloseRequests, type TerminalCloseRequest } from './close-requests.ts'
 import { TerminalWindowHold } from './retention.ts'
@@ -116,6 +116,18 @@ export class ClientTerminals extends Service {
       this.inventories.set(sessionId, inventory)
     }
     return inventory
+  }
+
+  /**
+   * Ask the Host whether this Session's workspace may open a terminal.
+   * @param sessionId - target Session.
+   * @param signal - the query lifetime.
+   * @returns availability, with the reason when the deployment confines terminals to mounted devices.
+   */
+  async availability(sessionId: SessionId, signal: AbortSignal): Promise<TerminalAvailability> {
+    const result = await this.remote.availability(sessionId, signal)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
   }
 
   /**

@@ -314,6 +314,13 @@ export interface Config {
   readonly activityPollIntervalMs: number
   /** Delay before retrying failed owned terminal cleanup. */
   readonly cleanupRetryMs: number
+  /**
+   * Root whose descendants are mounted-device workspaces, i.e. the team
+   * shell's shadow tree. When set, a Session may open terminals only where its
+   * workspace is one of those mounts, because the shell belongs to the paired
+   * machine rather than this Host; omitted leaves every workspace eligible.
+   */
+  readonly mountedWorkspaceRoot?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-api-terminal-controller -->

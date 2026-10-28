@@ -45,7 +45,8 @@ async function mountPlugin() {
   const model = { state: {} }
   const terminals = {
     retainTabs: vi.fn(), view: vi.fn(() => model), close: vi.fn(), closeFailures: {}, retryClose: vi.fn(),
-    launchShells: vi.fn(async () => ({ shells: [], selectedShell: undefined })), selectShell: vi.fn(),
+    launchShells: vi.fn(async () => ({ shells: [], selectedShell: undefined })),
+    availability: vi.fn(async () => ({ available: true as const })), selectShell: vi.fn(),
     recover: vi.fn(async (_sessionId: SessionId): Promise<WebTerminalInfo[]> => []),
   }
   let params: { terminalId: WebTerminalId } | { shellPath: string } | undefined
@@ -108,6 +109,8 @@ it('registers terminal views without recovery or cleanup slots, then releases co
     const signal = new AbortController().signal
     await launcher.loadShells(signal)
     expect(h.terminals.launchShells).toHaveBeenCalledWith(sessionId, signal)
+    expect(await launcher.loadAvailability(signal)).toEqual({ available: true })
+    expect(h.terminals.availability).toHaveBeenCalledWith(sessionId, signal)
     launcher.selectShell('/bin/bash')
     expect(h.terminals.selectShell).toHaveBeenCalledWith('/bin/bash')
     const face = h.entries[1]!.inject(sessionId) as TerminalBodyInjected
