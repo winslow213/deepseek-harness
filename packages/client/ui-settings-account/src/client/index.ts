@@ -13,8 +13,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { AccountView, AccountDetails } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { OnboardingChange } from './onboarding-contract.ts'
 import type { PlatformBridge } from './PlatformOverlay.tsx'
-import { ContactConfig, CONTACT_CONFIG_GLOBAL } from '../contact-config.ts'
-import { contactUrl } from './contact-url.ts'
+import { AccountConfig, ACCOUNT_CONFIG_GLOBAL } from '../account-config.ts'
 import { authorizeUrlWithTheme } from './authorize-url.ts'
 import { BrowserLogin } from './browser-login.ts'
 import { AccountOnboarding } from './AccountOnboarding.tsx'
@@ -48,8 +47,8 @@ export function apply(ctx: Context): void {
   const desktop = 'dshDesktop' in globalThis
   ctx.effect(() => ctx.locale.register('settings.account', { en, zh, ja, es, fr, de, ru, pt }), 'account: dictionaries')
   const t = ctx.locale.bind('settings.account')
-  const page = globalThis as Partial<Record<typeof CONTACT_CONFIG_GLOBAL, unknown>>
-  const config = ContactConfig(page[CONTACT_CONFIG_GLOBAL] ?? {})
+  const page = globalThis as Partial<Record<typeof ACCOUNT_CONFIG_GLOBAL, unknown>>
+  const config = AccountConfig(page[ACCOUNT_CONFIG_GLOBAL] ?? {})
   let snapshot: AccountSnapshot = {
     view: undefined, details: undefined, avatar: undefined, failed: false, loginVisible: false, desktopOnboardingVisible: desktop,
   }
@@ -200,35 +199,6 @@ export function apply(ctx: Context): void {
     subscribeModelSignInRequired: listener => ctx.remote.$on('deepseek-account/model-sign-in-required', listener),
     ...nativePlatform === undefined ? {} : { openPlatformPage: platformPageOpener(refreshAccount) },
     refreshAccount,
-    contactUs() {
-      // Sample the account, build and environment before awaiting native information, so
-      // a profile the read outlasts cannot replace the UID this click reported.
-      const profile = snapshot.details?.profile
-      const context = {
-        uid: profile?.status === 'ready' ? profile.value.id : null,
-        version: process.env.DSH_CLIENT_VERSION,
-        width: window.screen.width, height: window.screen.height, pixelRatio: window.devicePixelRatio,
-      }
-      const openForm = (deviceInfo: string): void => {
-        window.open(contactUrl(config, { ...context, deviceInfo }), '_blank', 'noopener,noreferrer')
-      }
-      const readDeviceInfo = (globalThis as typeof globalThis & {
-        dshDesktop?: { deviceInfo?: () => Promise<string> }
-      }).dshDesktop?.deviceInfo
-      if (readDeviceInfo === undefined) {
-        // A plain browser, or a Desktop bridge without the optional reader, reports the renderer user agent.
-        openForm(navigator.userAgent)
-        return
-      }
-      void (async () => {
-        let deviceInfo = ''
-        try { deviceInfo = await readDeviceInfo() }
-        catch (_error) {
-          // Native information is optional; the questionnaire opens without it.
-        }
-        openForm(deviceInfo)
-      })()
-    },
     showLogin(visible) { publish({ ...snapshot, loginVisible: visible }) },
     setOnboarding(active) { publish({ ...snapshot, onboarding: active }) },
     bonusNoticeShown(orderId) { notices.shown(orderId) },
