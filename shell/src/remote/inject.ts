@@ -459,8 +459,9 @@ export function injectKbSearch(options: {
   }
   const toolFileUrl = pathToFileURL(join(pluginsDir, 'kb-tool.ts')).href
   const lines = [
-    "# Team-injected kb_search: queries the team's knowledge base server over",
-    '# its HTTP job API and returns a citation-backed answer.',
+    "# Team-injected KB tools: kb_search (retrieval, ~1s) reads the server's",
+    '# open read surface, kb_answer (~100s) runs a cited synthesis job, and',
+    '# kb_document reads one page. All three come from this one plugin file.',
     '- insert:',
     '    - id: tool-kb-search',
     `      name: ${JSON.stringify(toolFileUrl)}`,

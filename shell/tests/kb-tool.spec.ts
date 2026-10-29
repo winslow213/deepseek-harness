@@ -36,9 +36,6 @@ function sessionAgent(id = 'kb-agent'): Agent {
 }
 
 let callCounter = 0
-function callKbSearch(ctx: Context, args: unknown, agent: Agent) {
-  return execute(ctx, 'kb_search', args, agent)
-}
 
 /** Run one model tool call through the mounted executor and return its settled result. */
 async function execute(ctx: Context, name: string, args: unknown, agent: Agent) {
@@ -52,7 +49,25 @@ async function execute(ctx: Context, name: string, args: unknown, agent: Agent) 
   return outcome.result
 }
 
-/** A fake KB server implementing just enough of the job API for the tool. */
+function callKbSearch(ctx: Context, args: unknown, agent: Agent) {
+  return execute(ctx, 'kb_search', args, agent)
+}
+
+function callKbAnswer(ctx: Context, args: unknown, agent: Agent) {
+  return execute(ctx, 'kb_answer', args, agent)
+}
+
+function callKbDocument(ctx: Context, args: unknown, agent: Agent) {
+  return execute(ctx, 'kb_document', args, agent)
+}
+
+/**
+ * A fake KB server implementing the two surfaces the tools use: the
+ * unauthenticated read surface (`/api/kb/search`, `/api/kb/document`) that
+ * `kb_search` and `kb_document` read, and the session-plus-job write surface
+ * (`/api/sessions`, `/api/jobs/query`, `/api/jobs/:id/events`) that
+ * `kb_answer` drives.
+ */
 class FakeKbServer {
   server: Server
   baseUrl = ''
@@ -62,9 +77,14 @@ class FakeKbServer {
   sessionAuth: (string | undefined)[] = []
   /** Authorization header seen on each `POST /api/jobs/query`, in call order. */
   queryAuth: (string | undefined)[] = []
+  /** Read-surface paths requested, in call order. */
+  reads: string[] = []
   /** The only session id the fake accepts, mirroring a live server-side TTL. */
   validSessionId: string | undefined
   jobState: 'completed' | 'failed' = 'completed'
+  /** Cosine every search hit carries; below the tool's floor when lowered. */
+  hitCosine = 0.9
+  documentMarkdown = '# G.711\n\nThe two companding curves differ in slope.\n'
 
   constructor() {
     this.server = createServer((req, res) => {
@@ -94,6 +114,34 @@ class FakeKbServer {
   }
 
   private handle(url: string, method: string, body: unknown, res: import('node:http').ServerResponse, auth: string | undefined): void {
+    if (method === 'GET' && url.startsWith('/api/kb/search')) {
+      this.reads.push(url)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        query: new URL(url, 'http://x').searchParams.get('q') ?? '',
+        scope: 'wiki',
+        top_k: 8,
+        hits: [{
+          path: 'g711.md',
+          title: 'G.711',
+          heading: 'G.711',
+          score: this.hitCosine,
+          semantic: this.hitCosine,
+        }],
+      }))
+      return
+    }
+    if (method === 'GET' && url.startsWith('/api/kb/document')) {
+      this.reads.push(url)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        scope: 'wiki',
+        path: 'g711.md',
+        title: 'G.711',
+        markdown: this.documentMarkdown,
+      }))
+      return
+    }
     if (method === 'POST' && url === '/api/sessions') {
       this.sessionRequests += 1
       this.sessionAuth.push(auth)
@@ -140,7 +188,7 @@ class FakeKbServer {
   }
 }
 
-describe('kb_search tool', () => {
+describe('kb tools', () => {
   let fake: FakeKbServer
 
   before(async () => {
@@ -162,18 +210,63 @@ describe('kb_search tool', () => {
     return ctx
   }
 
-  it('registers a kb_search tool with a required query parameter', async () => {
+  it('registers all three tools with their required parameter', async () => {
     const ctx = await setup()
-    const schema = ctx.tools.schemas().find(s => s.name === 'kb_search')
-    assert.ok(schema)
-    const props = (schema!.parameters as { properties?: Record<string, { required?: boolean }> }).properties
-    assert.ok(props?.query)
+    const schemas = ctx.tools.schemas()
+    for (const [name, param] of [['kb_search', 'query'], ['kb_answer', 'query'], ['kb_document', 'path']] as const) {
+      const schema = schemas.find(s => s.name === name)
+      assert.ok(schema, `${name} is not registered`)
+      const parameters = schema.parameters as { properties?: Record<string, unknown>, required?: string[] }
+      assert.ok(parameters.properties?.[param], `${name}.${param} must be a declared parameter`)
+      assert.deepEqual(parameters.required, [param], `${name} must require ${param} alone`)
+    }
   })
 
-  it('returns a synthesized answer with citations on success', async () => {
-    fake.jobState = 'completed'
+  it('returns on-topic passages without opening a KB session', async () => {
+    fake.reads = []
+    fake.sessionRequests = 0
     const ctx = await setup()
     const result = await callKbSearch(ctx, { query: 'a-law vs u-law' }, sessionAgent())
+
+    assert.equal(result.isError, false)
+    const text = JSON.stringify(result.content)
+    assert.match(text, /companding curves differ/)
+    assert.match(text, /g711\.md/)
+    // Retrieval alone must stay off the write surface: no session, no job.
+    assert.equal(fake.sessionRequests, 0)
+    assert.ok(fake.reads.some(url => url.startsWith('/api/kb/search')))
+    assert.ok(fake.reads.some(url => url.startsWith('/api/kb/document')))
+  })
+
+  it('reports nothing covered when every hit falls below the cosine floor', async () => {
+    fake.hitCosine = 0.05
+    const ctx = await setup()
+    const result = await callKbSearch(ctx, { query: 'unrelated' }, sessionAgent())
+    fake.hitCosine = 0.9
+
+    assert.equal(result.isError, false)
+    const text = JSON.stringify(result.content)
+    // The floor is a statement about the query, not about the KB's contents.
+    assert.match(text, /No confident match/)
+    assert.match(text, /rephrase/)
+  })
+
+  it('reads one page in full through kb_document', async () => {
+    fake.reads = []
+    const ctx = await setup()
+    const result = await callKbDocument(ctx, { path: 'g711.md' }, sessionAgent())
+
+    assert.equal(result.isError, false)
+    const text = JSON.stringify(result.content)
+    assert.match(text, /companding curves differ/)
+    assert.ok(fake.reads.some(url => url.startsWith('/api/kb/document') && url.includes('g711.md')))
+  })
+
+  it('synthesizes a cited answer through kb_answer', async () => {
+    fake.jobState = 'completed'
+    const ctx = await setup()
+    const result = await callKbAnswer(ctx, { query: 'a-law vs u-law' }, sessionAgent())
+
     assert.equal(result.isError, false)
     const text = JSON.stringify(result.content)
     assert.match(text, /companding curve/)
@@ -185,7 +278,7 @@ describe('kb_search tool', () => {
     fake.sessionAuth = []
     fake.queryAuth = []
     const ctx = await setup({ agentToken: 'test-agent-token' })
-    const result = await callKbSearch(ctx, { query: 'authorized' }, sessionAgent())
+    const result = await callKbAnswer(ctx, { query: 'authorized' }, sessionAgent())
 
     assert.equal(result.isError, false)
     assert.deepEqual(fake.sessionAuth, ['Bearer test-agent-token'])
@@ -197,7 +290,7 @@ describe('kb_search tool', () => {
     fake.sessionAuth = []
     fake.queryAuth = []
     const ctx = await setup()
-    await callKbSearch(ctx, { query: 'anonymous' }, sessionAgent())
+    await callKbAnswer(ctx, { query: 'anonymous' }, sessionAgent())
 
     assert.deepEqual(fake.sessionAuth, [undefined])
     assert.deepEqual(fake.queryAuth, [undefined])
@@ -207,8 +300,8 @@ describe('kb_search tool', () => {
     fake.jobState = 'completed'
     fake.sessionRequests = 0
     const ctx = await setup()
-    await callKbSearch(ctx, { query: 'first' }, sessionAgent())
-    await callKbSearch(ctx, { query: 'second' }, sessionAgent())
+    await callKbAnswer(ctx, { query: 'first' }, sessionAgent())
+    await callKbAnswer(ctx, { query: 'second' }, sessionAgent())
     assert.equal(fake.sessionRequests, 1)
   })
 
@@ -216,14 +309,14 @@ describe('kb_search tool', () => {
     fake.jobState = 'completed'
     fake.sessionRequests = 0
     const ctx = await setup()
-    await callKbSearch(ctx, { query: 'before expiry' }, sessionAgent())
+    await callKbAnswer(ctx, { query: 'before expiry' }, sessionAgent())
     assert.equal(fake.sessionRequests, 1)
 
     // A dsh process can outlive the KB session's 24h TTL; once the cached id
     // lapses the server rejects it and the tool must rebuild instead of
     // surfacing the 404 (which otherwise fails every later call until reload).
     fake.expireSession()
-    const result = await callKbSearch(ctx, { query: 'after expiry' }, sessionAgent())
+    const result = await callKbAnswer(ctx, { query: 'after expiry' }, sessionAgent())
 
     assert.equal(result.isError, false)
     assert.equal(fake.sessionRequests, 2)
@@ -233,7 +326,7 @@ describe('kb_search tool', () => {
   it('surfaces a job failure as a tool-call error carrying the KB error message', async () => {
     fake.jobState = 'failed'
     const ctx = await setup()
-    const result = await callKbSearch(ctx, { query: 'unanswerable' }, sessionAgent())
+    const result = await callKbAnswer(ctx, { query: 'unanswerable' }, sessionAgent())
     assert.equal(result.isError, true)
     assert.match(JSON.stringify(result.content), /no relevant documents found/)
   })
@@ -243,7 +336,7 @@ describe('kb_search tool', () => {
     const ctx = await setup()
     const controller = new AbortController()
     const pending = ctx.tools.execute({
-      calls: [{ type: 'tool-call', id: ToolCallId(`call-${++callCounter}`), name: 'kb_search', arguments: JSON.stringify({ query: 'never completes' }) }],
+      calls: [{ type: 'tool-call', id: ToolCallId(`call-${++callCounter}`), name: 'kb_answer', arguments: JSON.stringify({ query: 'never completes' }) }],
       signal: controller.signal,
       agent: sessionAgent(),
     })

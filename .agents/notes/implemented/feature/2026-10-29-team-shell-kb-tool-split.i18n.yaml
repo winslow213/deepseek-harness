@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-29-team-shell-kb-tool-split.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-29-team-shell-kb-tool-split.md
+/agent-note-splitting-the-kb-surface-into-retrieval-synthesis-and-page-reads:
+  en: 267f052197729c2f
+  zh: 3b249d34bfb4b283
+/agent-note-splitting-the-kb-surface-into-retrieval-synthesis-and-page-reads/problem:
+  en: 87909922d842c7bb
+  zh: aeeedc3340557cb7
+/agent-note-splitting-the-kb-surface-into-retrieval-synthesis-and-page-reads/decision:
+  en: a7030b32f49acdac
+  zh: a687f16ad2cccc48
+/agent-note-splitting-the-kb-surface-into-retrieval-synthesis-and-page-reads/alternatives-considered:
+  en: 540c1872f7550b95
+  zh: 8f019a8587a85352
+/agent-note-splitting-the-kb-surface-into-retrieval-synthesis-and-page-reads/consequences:
+  en: 9b977ed11300d8ff
+  zh: 33ef149b0befb40f
