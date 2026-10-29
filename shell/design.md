@@ -867,7 +867,8 @@ interface ExecutionTarget {
 把终端限制在挂载设备的工作区内 —— 见
 [挂载会话终端限制](../../.agents/notes/implemented/architecture/2026-10-28-mount-scoped-terminals.md)；
 随后线协议补上 PTY 帧，`region-subprocess` 把落在影子根下的终端分配转发到
-配对设备 —— 见
+配对设备，并在转发前把影子路径经挂载表翻译成设备的真实工作目录 —— 直接转发
+影子路径会被 agent 的根目录名单拒绝 —— 见
 [挂载会话终端跑在配对的设备上](../../.agents/notes/implemented/architecture/2026-10-31-remote-terminal-over-hub.md)。
 `ctx.subprocess` 的其余部分（`exec`、`spawn`、可执行文件查找）仍在本机，
 因此在挂载工作区里 grep/glob 搜索**仍是影子目录**；§13.6 的收敛目标不变。
