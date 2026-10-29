@@ -23,7 +23,10 @@ import { isAbsolute, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { LocalSubprocessRuntime } from '@deepseek-ai/dsh-subprocess-local'
+import { listMounts } from './client.ts'
+import type { MountRecord } from './hub.ts'
 import { openRemoteTerminal } from './pty-client.ts'
+import { translateShadowPath } from './shadow.ts'
 
 /** The local provider's config plus this router's own knobs. */
 export interface Config {
@@ -52,6 +55,7 @@ export class RegionRouterSubprocessRuntime extends LocalSubprocessRuntime {
   private readonly shadowRoot: string
   private readonly user: string
   private readonly agentId: string | undefined
+  private mountsCache: readonly MountRecord[] | undefined
 
   /**
    * @param ctx - plugin context this service registers on.
@@ -66,16 +70,54 @@ export class RegionRouterSubprocessRuntime extends LocalSubprocessRuntime {
     this.shadowRoot = resolve(config.shadowRoot)
     this.user = config.user
     this.agentId = config.agentId
+    void this.refreshMounts()
+  }
+
+  /** Pull the mount table this router translates shadow paths against. */
+  private async refreshMounts(): Promise<void> {
+    try {
+      this.mountsCache = await listMounts(this.hubUrl)
+    } catch {
+      this.mountsCache = []
+    }
+  }
+
+  /**
+   * Resolve the device's real working directory for one shadow path.
+   *
+   * The agent validates `cwd` against the roots it actually serves, so a shadow
+   * path cannot be forwarded as-is: it would name a server directory the device
+   * never had. The mount table is the only thing that maps one to the other, and
+   * it is pulled fire-and-forget, so a path that misses the cache refreshes once
+   * before the allocation is refused — a terminal opened right after pairing
+   * would otherwise run against the empty shadow stub.
+   * @param cwd - the Session's working directory, already known to sit under the shadow root.
+   * @returns the device path to allocate in, or undefined when no mount of this user covers it.
+   */
+  private async deviceCwdFor(cwd: string): Promise<string | undefined> {
+    const translation = (mounts: readonly MountRecord[] | undefined): string | undefined => {
+      const hit = translateShadowPath(cwd, mounts ?? [])
+      // A shadow path belonging to another account's mount is not this router's
+      // to serve; falling through to local would run the device's directory on
+      // the server, so it is refused instead.
+      return hit === undefined || hit.user !== this.user ? undefined : hit.remotePath
+    }
+    const cached = translation(this.mountsCache)
+    if (cached !== undefined) return cached
+    await this.refreshMounts()
+    return translation(this.mountsCache)
   }
 
   /** @inheritdoc */
   async spawnTerminal(spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle> {
     if (!isAbsolute(spec.cwd) || !isUnder(resolve(spec.cwd), this.shadowRoot)) return super.spawnTerminal(spec)
     spec.signal?.throwIfAborted()
+    const cwd = await this.deviceCwdFor(spec.cwd)
+    if (cwd === undefined) throw new Error(`region-subprocess: no paired device serves ${spec.cwd}`)
     return openRemoteTerminal(
       { hubUrl: this.hubUrl, user: this.user, agentId: this.agentId },
       {
-        argv: spec.argv, cwd: spec.cwd, cols: spec.cols, rows: spec.rows,
+        argv: spec.argv, cwd, cols: spec.cols, rows: spec.rows,
         terminalType: spec.terminalType, env: spec.env, signal: spec.signal,
       },
     )

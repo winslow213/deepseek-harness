@@ -21,14 +21,25 @@ import RegionRouterSubprocessRuntime from '../src/remote/region-subprocess.ts'
 const SHADOW_ROOT = '/tmp/dsh-shadow-subprocess-test'
 const USER = 'winslow'
 const SHADOW_CWD = `${SHADOW_ROOT}/${USER}/pairing@host`
+const DEVICE_ROOT = '/tmp/device-workspace'
+const DEVICE_CWD = DEVICE_ROOT
+const OTHER_SHADOW_CWD = `${SHADOW_ROOT}/someone-else/pairing@host`
 
-/** A hub stub that records `/api/pty` bodies and refuses every allocation. */
+/** A hub stub that serves the mount table and records `/api/pty` bodies. */
 async function startFakeHub(): Promise<{ url: string; ptyRequests: string[]; server: Server }> {
   const ptyRequests: string[] = []
   const server = createServer((req, res) => {
     let raw = ''
     req.on('data', (chunk: Buffer) => { raw += chunk.toString('utf8') })
     req.on('end', () => {
+      if (req.url === '/api/mounts') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify([
+          { agentId: 'pairing@host', user: USER, root: DEVICE_ROOT, shadowPath: SHADOW_CWD },
+          { agentId: 'pairing@host', user: 'someone-else', root: '/tmp/their-workspace', shadowPath: OTHER_SHADOW_CWD },
+        ]))
+        return
+      }
       if (req.url === '/api/pty') {
         ptyRequests.push(raw)
         res.writeHead(503, { 'content-type': 'application/json' })
@@ -57,7 +68,7 @@ async function mount(hubUrl: string, config: { readonly user?: string } = {}): P
 const TERMINAL = { cols: 80, rows: 24, terminalType: 'xterm-256color' } as const
 
 describe('RegionRouterSubprocessRuntime', () => {
-  it('allocates a shadow-path terminal on the paired device', async () => {
+  it('allocates a shadow-path terminal in the device real directory', async () => {
     const hub = await startFakeHub()
     const { ctx, fiber } = await mount(hub.url)
     try {
@@ -69,8 +80,29 @@ describe('RegionRouterSubprocessRuntime', () => {
       )
       assert.equal(hub.ptyRequests.length, 1, 'exactly one allocation reached the hub')
       const body = JSON.parse(hub.ptyRequests[0] ?? '{}') as { user?: string; cwd?: string }
-      assert.equal(body.cwd, SHADOW_CWD, 'the device receives the shadow path the Session named')
+      // The agent validates cwd against the roots it serves, so forwarding the
+      // shadow path would be rejected there — it names a directory only the
+      // server has.
+      assert.equal(body.cwd, DEVICE_CWD, 'the device receives its own real workspace path')
       assert.equal(body.user, USER, 'the hub addresses agents by owner')
+    } finally {
+      await fiber.dispose()
+      await new Promise<void>((resolve) => { hub.server.close(() => { resolve() }) })
+    }
+  })
+
+  it('refuses a shadow path no mount of this user covers', async () => {
+    const hub = await startFakeHub()
+    const { ctx, fiber } = await mount(hub.url)
+    try {
+      // Falling through to the local provider would run the other account's
+      // device directory on this server.
+      await assert.rejects(
+        (ctx as unknown as { subprocess: RegionRouterSubprocessRuntime }).subprocess
+          .spawnTerminal({ argv: ['bash'], cwd: OTHER_SHADOW_CWD, ...TERMINAL }),
+        /no paired device serves/u,
+      )
+      assert.deepEqual(hub.ptyRequests, [], 'an unserved shadow path must not reach the device')
     } finally {
       await fiber.dispose()
       await new Promise<void>((resolve) => { hub.server.close(() => { resolve() }) })

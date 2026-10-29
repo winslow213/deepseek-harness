@@ -18,6 +18,8 @@ agent 用 `node-pty` 提供终端，首次分配时才加载，因此从不打�
 
 置备的 profile 里由一个新增的 `region-subprocess` 提供方替代 `subprocess-local`。它继承本地提供方，只覆写 `spawnTerminal`：`cwd` 在影子根或其下的终端分配到配对 agent，其余调用保持本地语义。路由以 `spec.cwd` 为键，因为它是终端 seam 唯一携带的执行世界参数；shell 发现仍留在 Host（`terminalEnvironment()` 与 `resolveExecutable()` 不接受目录参数），所以设备上找不到该确切可执行文件时分配失败，而不是悄悄换一个 shell。
 
+路由器在转发前通过 hub 的挂载表翻译工作目录，并对该账号没有任何挂载覆盖的影子路径直接拒绝。原样转发影子路径正是这层翻译要防的错误：agent 用自己真正提供服务的根校验 `cwd`，只有服务端存在的目录会在那里被拒，分配以 `cwd outside allowed roots` 失败。挂载表是两个世界之间唯一的映射，且是 fire-and-forget 拉取的，所以未命中时会再刷新一次——否则刚配对后立刻打开的终端会拿空缓存去判断。`region-shell` 早已按同样方式翻译，两者现在共用 `translateShadowPath`。
+
 ## Alternatives considered
 
 **整体把 `ctx.subprocess` 换成远程提供方。** 不采纳：`exec`、管道式 `spawn`、可执行文件查找与 shell 环境探测在本协议里都没有远程对应物，替换整个服务会让每个会话里的 `tool-fs-search`、`lsp-stdio` 与 subagent 工具失效，而不是只路由一个面。继承本地提供方把改动限制在唯一有设备等价物的方法上。
