@@ -9,6 +9,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import AgentRegistry, { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
+import SessionProjection from '@deepseek-ai/dsh-session-projection'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as tool from '../src/remote/wiki-tool.ts'
@@ -30,6 +31,9 @@ async function setup(
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
+  // AgentRegistry injects the projection registry, so without it every plugin
+  // that injects `agents` — this tool included — stays inactive.
+  await ctx.plugin(SessionProjection)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(tool, { workspaceRoot, ...options })
   return ctx
