@@ -862,8 +862,12 @@ interface ExecutionTarget {
   与可执行文件命名空间，`allow` 承载命令与路径名单。
 
 浏览器终端是同一分歧的第三个表现：`terminal-controller` 用
-`ctx.subprocess.spawnTerminal` 在**本机**开 PTY，挂载会话的 `pwd` 因此是影子
-目录。在补上远程 PTY 之前，`regionRouterPatchYaml` 为该插件写入
-`mountedWorkspaceRoot: <shadowRoot>`，把终端限制在挂载设备的工作区内 —— 见
-[挂载会话终端限制](../../.agents/notes/implemented/architecture/2026-10-28-mount-scoped-terminals.md)。
-该限制只解决「不该冒充」的问题，不解决「用设备终端」；后者仍等 §13.6 的收敛。
+`ctx.subprocess.spawnTerminal` 开 PTY，挂载会话的 `pwd` 曾是影子目录。
+`regionRouterPatchYaml` 先为该插件写入 `mountedWorkspaceRoot: <shadowRoot>`，
+把终端限制在挂载设备的工作区内 —— 见
+[挂载会话终端限制](../../.agents/notes/implemented/architecture/2026-10-28-mount-scoped-terminals.md)；
+随后线协议补上 PTY 帧，`region-subprocess` 把落在影子根下的终端分配转发到
+配对设备 —— 见
+[挂载会话终端跑在配对的设备上](../../.agents/notes/implemented/architecture/2026-10-31-remote-terminal-over-hub.md)。
+`ctx.subprocess` 的其余部分（`exec`、`spawn`、可执行文件查找）仍在本机，
+因此在挂载工作区里 grep/glob 搜索**仍是影子目录**；§13.6 的收敛目标不变。

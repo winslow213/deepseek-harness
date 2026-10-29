@@ -59,10 +59,74 @@ export interface ExecRequest {
   timeoutMs?: number
 }
 
-/** Kill an in-flight `exec`'s process group (agent no-ops for unknown ids). */
+/** Kill an in-flight `exec`'s process group or one terminal session (agent no-ops for unknown ids). */
 export interface KillRequest {
   type: 'kill'
   id: string
+}
+
+/**
+ * Allocate one real terminal on the agent host.
+ *
+ * `argv[0]` must be an allowlisted command basename exactly as `exec` requires,
+ * and `cwd` must resolve under an agent `--root`; the agent enforces both
+ * before allocating. The reply is `pty:opened` followed by `pty:data` frames
+ * until the terminal exits.
+ */
+export interface PtyOpenRequest {
+  type: 'pty:open'
+  id: string
+  /** argv[0] must be an allowlisted command basename; the agent enforces it. */
+  argv: string[]
+  /** Working directory; must resolve under an agent `--root`. */
+  cwd?: string
+  cols: number
+  rows: number
+  /** Terminal identity handed to the PTY, e.g. `xterm-256color`. */
+  terminalType: string
+  /** Extra environment entries layered over the agent's own environment. */
+  env?: Record<string, string>
+}
+
+/**
+ * Write bytes to a terminal's input. `data` is base64 so a multi-byte
+ * character split across two frames cannot be corrupted by a JSON round trip.
+ */
+export interface PtyWriteRequest {
+  type: 'pty:write'
+  id: string
+  data: string
+}
+
+/** Change a terminal's dimensions and notify its foreground application. */
+export interface PtyResizeRequest {
+  type: 'pty:resize'
+  id: string
+  cols: number
+  rows: number
+}
+
+/** The agent allocated the requested terminal. */
+export interface PtyOpenedFrame {
+  type: 'pty:opened'
+  id: string
+  /** Top-level terminal process id, for diagnostics. */
+  pid: number
+}
+
+/** Terminal output bytes, base64-encoded. */
+export interface PtyDataFrame {
+  type: 'pty:data'
+  id: string
+  data: string
+}
+
+/** The terminal's top-level process exited; the session is gone. */
+export interface PtyExitFrame {
+  type: 'pty:exit'
+  id: string
+  code: number | null
+  signal: string | null
 }
 
 /** Stream the content of one file (the `cat` primitive) to the hub. */
@@ -102,7 +166,7 @@ export interface FsResultFrame {
   value: unknown
 }
 
-export type RequestFrame = ExecRequest | KillRequest | FsReadRequest | FsOpRequest
+export type RequestFrame = ExecRequest | KillRequest | FsReadRequest | FsOpRequest | PtyOpenRequest | PtyWriteRequest | PtyResizeRequest
 
 export interface StreamFrame {
   type: 'stream'
@@ -129,6 +193,7 @@ export interface RequestErrorFrame {
 
 /** Frames an agent sends toward the hub. */
 export type AgentOutFrame = HelloFrame | PongFrame | StreamFrame | ExitFrame | FsResultFrame | RequestErrorFrame
+  | PtyOpenedFrame | PtyDataFrame | PtyExitFrame
 
 /** Frames the hub sends toward an agent. */
 export type HubOutFrame = HelloAckFrame | ErrorFrame | PingFrame | RequestFrame

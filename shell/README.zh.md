@@ -143,7 +143,7 @@ HTTP 请求与 WebSocket 升级（dsh web 的 `/api/remote.mux` 通道）都会�
 
 ## 账号服务
 
-`account` 在 loopback 端口启动账号服务：成员账号、登录会话（Postgres + Redis）、agent token 签发，以及每位成员一个受监督的 dsh 实例。它是 shell 唯一需要第三方包（`pg`、`ioredis`）的表面；remote agent 仍保持零依赖。
+`account` 在 loopback 端口启动账号服务：成员账号、登录会话（Postgres + Redis）、agent token 签发，以及每位成员一个受监督的 dsh 实例。它是 shell 里唯一需要账号服务第三方包（`pg`、`ioredis`）的表面；remote agent 只多一个 `node-pty`，用于在配对设备上提供浏览器终端。
 
 ```sh
 cd shell

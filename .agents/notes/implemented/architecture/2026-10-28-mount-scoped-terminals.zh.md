@@ -32,6 +32,6 @@ Client 引导卡在每次挂载时读取一次 `availability`，被拒绝时把�
 
 成员的挂载会话保留终端；成员的服务器工作空间会话失去终端。因为门禁依据的是工作空间路径而不是挂载是否在线，挂载离线的会话仍会报告可用，然后在分配时失败 —— 终端报告的是提供方失败而不是限制，这是对实际发生之事的诚实描述。
 
-PTY 仍然运行在 Host 上、以影子目录为工作目录，而不是运行在配对的设备上。把终端路由到设备自己的 shell 需要在 hub 线协议上承载 PTY，[region 设计](../../../../shell/design.md) §13.6 将其列为「暂缓，非否决」；在此之前，这层限制确保终端不会冒充它并非之物。
+这层限制只确保终端不会冒充它并非之物，并没有把 shell 放到设备上。[挂载会话终端跑在配对的设备上](2026-10-31-remote-terminal-over-hub.zh.md) 在 hub 线协议上补了 PTY 帧，并把挂载会话的终端路由到配对 agent。
 
 覆盖：`packages/api/terminal-controller/tests/controller.spec.ts` 固定了拒绝、根本身与其下的接受、未配置时的默认行为以及取消；`packages/client/ui-sidebar-terminal/tests/terminal-guide.client.spec.tsx` 固定了替换后的卡片、查询失败时的回退，以及卸载后的拒绝。

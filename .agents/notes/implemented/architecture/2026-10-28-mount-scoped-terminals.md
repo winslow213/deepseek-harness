@@ -32,6 +32,6 @@ The Client guide reads `availability` once per mount and, when it is refused, re
 
 A member's mounted Session keeps a terminal; a member's server-workspace Session loses one. Because the gate keys on the workspace path rather than on mount liveness, a Session whose mount has gone offline still reports available and then fails during allocation — the terminal reports the provider failure rather than the confinement, which is the honest description of what went wrong.
 
-The PTY still runs on the Host over the shadow directory, not on the paired device. Routing the terminal to the device's own shell needs a PTY over the hub wire protocol, which [the region design](../../../../shell/design.md) defers as "暂缓，非否决" in §13.6; until then this confinement keeps the terminal from claiming to be something it is not.
+This confinement only stops the terminal from claiming to be something it is not; it does not put the shell on the device. [Terminals run on the paired device](2026-10-31-remote-terminal-over-hub.md) adds the PTY frames to the hub wire protocol and routes a mounted Session's terminal to the paired agent.
 
 Coverage: `packages/api/terminal-controller/tests/controller.spec.ts` pins the refusal, the rooted and at-root acceptance, the unconfigured default, and cancellation; `packages/client/ui-sidebar-terminal/tests/terminal-guide.client.spec.tsx` pins the replaced card, the failed-query fallback, and the unmounted rejection.

@@ -208,6 +208,8 @@ export function regionRouterPatchYaml(config: {
   mountDeclareFileUrl?: string
   fsCwd?: string
   includeShell?: boolean
+  includeSubprocess?: boolean
+  subprocessRouterFileUrl?: string
   syncMounts?: boolean
   declareMounts?: boolean
 }): string {
@@ -256,6 +258,22 @@ export function regionRouterPatchYaml(config: {
       `    mountedWorkspaceRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
     )
   }
+  if (config.includeSubprocess && config.subprocessRouterFileUrl !== undefined) {
+    // One ctx.subprocess: local processes stay local, and a terminal whose
+    // working directory is a mount's shadow path runs on the paired device.
+    lines.push(
+      '',
+      '- id: subprocess',
+      '  disabled: true',
+      '- insert:',
+      '    - id: region-subprocess',
+      `      name: ${JSON.stringify(config.subprocessRouterFileUrl)}`,
+      '      config:',
+      `        hubUrl: ${JSON.stringify(config.hubUrl)}`,
+      `        user: ${JSON.stringify(config.user)}`,
+      `        shadowRoot: ${JSON.stringify(config.shadowRoot ?? '/var/lib/dsh-mounts')}`,
+    )
+  }
   if (config.syncMounts && config.syncMountFileUrl !== undefined) {
     lines.push(
       '',
@@ -301,6 +319,10 @@ export interface InjectRegionRouterOptions {
   fsCwd?: string
   /** Also route ctx.shell through the remote agent (default false). */
   includeShell?: boolean
+  /** Also route terminal allocation through the remote agent (default false). */
+  includeSubprocess?: boolean
+  /** Runtime file URL of the region-subprocess provider; required with `includeSubprocess`. */
+  subprocessRouterFileUrl?: string
   /** Also auto-register mounted roots as workspaces (default false). */
   syncMounts?: boolean
   /** Also declare the mounted workspace in the system prompt (default false). */
@@ -316,6 +338,7 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
   writeLoosePluginManifest(pluginsDir)
   const files = ['region-router.ts', 'shadow.ts', 'client.ts']
   if (options.includeShell ?? false) files.push('region-shell.ts', 'executor.ts')
+  if (options.includeSubprocess ?? false) files.push('region-subprocess.ts', 'pty-client.ts')
   if (options.syncMounts ?? false) files.push('mount-sync.ts')
   if (options.declareMounts ?? false) files.push('mount-declare.ts', 'mount-declare-render.ts')
   for (const file of files) {
@@ -325,6 +348,7 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
   const shellFileUrl = pathToFileURL(join(pluginsDir, 'region-shell.ts')).href
   const syncMountFileUrl = pathToFileURL(join(pluginsDir, 'mount-sync.ts')).href
   const mountDeclareFileUrl = pathToFileURL(join(pluginsDir, 'mount-declare.ts')).href
+  const subprocessFileUrl = pathToFileURL(join(pluginsDir, 'region-subprocess.ts')).href
   const patch = join(options.profileDir, PROFILE_PATCH_FILENAME)
   writeFileSync(patch, regionRouterPatchYaml({
     hubUrl: options.hubUrl,
@@ -338,6 +362,8 @@ export function injectRegionRouter(options: InjectRegionRouterOptions): string {
     mountDeclareFileUrl: mountDeclareFileUrl,
     fsCwd: options.fsCwd,
     includeShell: options.includeShell ?? false,
+    subprocessRouterFileUrl: subprocessFileUrl,
+    includeSubprocess: options.includeSubprocess ?? false,
     syncMounts: options.syncMounts ?? false,
     declareMounts: options.declareMounts ?? false,
   }))

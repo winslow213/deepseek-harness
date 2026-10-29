@@ -428,6 +428,7 @@ export function ensureRegionRouter(user: string, env: NodeJS.ProcessEnv = proces
     readableRoots: sharedRootsFor(role, env).readable,
     profileDir,
     includeShell: true,
+    includeSubprocess: true,
     syncMounts: true,
     declareMounts: true,
     fsCwd: workspace,

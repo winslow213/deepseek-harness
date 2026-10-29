@@ -150,7 +150,7 @@ routing and does not start processes. See [the account design](team-access-desig
 
 ## Account service
 
-`account` boots the account service on a loopback port: member accounts, login sessions (Postgres + Redis), agent-token issuance, and one supervised dsh instance per member. It is the only shell surface that needs third-party packages (`pg`, `ioredis`); the remote agent stays dependency-free.
+`account` boots the account service on a loopback port: member accounts, login sessions (Postgres + Redis), agent-token issuance, and one supervised dsh instance per member. It is the only shell surface that needs the account-service packages (`pg`, `ioredis`); the remote agent adds only `node-pty`, needed to serve a browser terminal on the paired device.
 
 ```sh
 cd shell

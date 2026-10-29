@@ -47,3 +47,21 @@ describe('regionRouterPatchYaml readableRoots', () => {
     assert.match(patch, /^ {8}workspaceRoot: "\/home\/winslow\/\.dsh-users\/winslow\/workspace"$/m)
   })
 })
+
+describe('regionRouterPatchYaml terminal routing', () => {
+  it('hands the subprocess router the user and hub its PTY frames are addressed by', () => {
+    const patch = regionRouterPatchYaml({
+      ...BASE,
+      includeSubprocess: true,
+      subprocessRouterFileUrl: 'file:///plugins/region-subprocess.ts',
+    })
+    assert.match(patch, /^ {4}- id: region-subprocess$/m, 'the router must be mounted in place of subprocess-local')
+    assert.match(patch, /^ {8}hubUrl: "http:\/\/127\.0\.0\.1:7100"$/m)
+    assert.match(patch, /^ {8}user: "winslow"$/m, 'the hub addresses agents by owner, so the router needs the user')
+    assert.match(patch, /^ {8}shadowRoot: "\/tmp\/dsh-shadow"$/m, 'the same root decides filesystem routing and terminal eligibility')
+  })
+
+  it('leaves subprocess-local mounted when no router is configured', () => {
+    assert.doesNotMatch(regionRouterPatchYaml(BASE), /region-subprocess/, 'an unconfigured deployment keeps local terminals')
+  })
+})

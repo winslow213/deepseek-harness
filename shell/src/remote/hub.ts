@@ -11,7 +11,7 @@
  */
 
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { createServer as createNetServer, type Socket } from 'node:net'
+import { createServer as createNetServer, type AddressInfo, type Socket } from 'node:net'
 import { randomUUID } from 'node:crypto'
 import {
   encodeFrame,
@@ -124,8 +124,12 @@ interface PendingRequest {
 }
 
 export interface TeamHub {
-  agentPort: number
-  controlPort: number
+  /** Port the agent listener is bound to; reflects the real port after `ready`. */
+  readonly agentPort: number
+  /** Port the control listener is bound to; reflects the real port after `ready`. */
+  readonly controlPort: number
+  /** Resolves once both listeners accept connections. */
+  readonly ready: Promise<void>
   /** Snapshot of connected agents, newest first. */
   agents(): AgentRecord[]
   /** Mountable region view: every online agent's roots mapped under a virtual server prefix. */
@@ -357,9 +361,12 @@ export function createHub(options: HubOptions): TeamHub {
           const msg = frame as { type?: string }
           switch (msg.type) {
             case 'stream':
+            case 'pty:opened':
+            case 'pty:data':
               relayStream(pending, conn, frame as StreamFrame)
               return
             case 'fs:result':
+            case 'pty:exit':
             case 'exit':
             case 'request-error':
               endPending(pending, conn, frame as { id: string })
@@ -528,6 +535,46 @@ export function createHub(options: HubOptions): TeamHub {
         ...(typeof s.cwd === 'string' ? { cwd: s.cwd } : {}),
         ...(typeof s.timeoutMs === 'number' ? { timeoutMs: s.timeoutMs } : {}),
       }
+    } else if (url.pathname === '/api/pty') {
+      // Terminal allocation: the streaming response carries `pty:opened` and
+      // then base64 `pty:data` frames until `pty:exit`.
+      const s = body as { argv?: unknown; cwd?: unknown; cols?: unknown; rows?: unknown; terminalType?: unknown; env?: unknown }
+      if (!Array.isArray(s.argv) || s.argv.length === 0 || s.argv.some((a) => typeof a !== 'string')) {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'expected non-empty string array field "argv"' }))
+        return
+      }
+      if (typeof s.cols !== 'number' || typeof s.rows !== 'number') {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'expected numeric fields "cols" and "rows"' }))
+        return
+      }
+      frame = {
+        type: 'pty:open',
+        id,
+        argv: s.argv as string[],
+        cols: s.cols,
+        rows: s.rows,
+        terminalType: typeof s.terminalType === 'string' ? s.terminalType : 'xterm-256color',
+        ...(typeof s.cwd === 'string' ? { cwd: s.cwd } : {}),
+        ...typeof s.env === 'object' && s.env !== null && !Array.isArray(s.env) ? { env: s.env as Record<string, string> } : {},
+      }
+    } else if (url.pathname === '/api/pty-write') {
+      const s = body as { id?: unknown; data?: unknown }
+      if (typeof s.id !== 'string' || typeof s.data !== 'string') {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'expected string fields "id" and "data"' }))
+        return
+      }
+      frame = { type: 'pty:write', id: s.id, data: s.data }
+    } else if (url.pathname === '/api/pty-resize') {
+      const s = body as { id?: unknown; cols?: unknown; rows?: unknown }
+      if (typeof s.id !== 'string' || typeof s.cols !== 'number' || typeof s.rows !== 'number') {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'expected string field "id" and numeric fields "cols"/"rows"' }))
+        return
+      }
+      frame = { type: 'pty:resize', id: s.id, cols: s.cols, rows: s.rows }
     } else if (url.pathname === '/api/kill') {
       const s = body as { id?: unknown }
       if (typeof s.id !== 'string') {
@@ -603,9 +650,10 @@ export function createHub(options: HubOptions): TeamHub {
       res.end(JSON.stringify({ error: `agent offline for user ${user}` }))
       return
     }
-    // Kill is fire-and-forget: forward it and answer immediately. The agent
-    // ends the matching exec's own NDJSON response when the process dies.
-    if (frame.type === 'kill') {
+    // Kill, terminal input and terminal resize are fire-and-forget: forward
+    // them and answer immediately. The agent ends the matching exec's or
+    // terminal's own NDJSON response when the process dies.
+    if (frame.type === 'kill' || frame.type === 'pty:write' || frame.type === 'pty:resize') {
       if (!conn.socket.destroyed) conn.socket.write(encodeFrame(frame))
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))
@@ -656,12 +704,27 @@ export function createHub(options: HubOptions): TeamHub {
     return [...pairings.values()].sort((a, b) => b.createdAt - a.createdAt)
   }
 
-  agentServer.listen(options.agentPort, options.agentHost ?? '0.0.0.0')
-  controlServer.listen(options.controlPort, options.controlHost ?? '127.0.0.1')
+  // `listen` binds asynchronously, so a caller that requested an ephemeral port
+  // (`0`) learns the real one from these getters once `ready` has resolved.
+  const boundPort = (server: { address: () => string | AddressInfo | null }, fallback: number): number => {
+    const address = server.address()
+    return typeof address === 'object' && address !== null ? address.port : fallback
+  }
+  const ready = Promise.all([
+    new Promise<void>((resolveListen) => {
+      agentServer.once('listening', () => { resolveListen() })
+      agentServer.listen(options.agentPort, options.agentHost ?? '0.0.0.0')
+    }),
+    new Promise<void>((resolveListen) => {
+      controlServer.once('listening', () => { resolveListen() })
+      controlServer.listen(options.controlPort, options.controlHost ?? '127.0.0.1')
+    }),
+  ]).then(() => undefined)
 
   return {
-    agentPort: options.agentPort,
-    controlPort: options.controlPort,
+    get agentPort() { return boundPort(agentServer, options.agentPort) },
+    get controlPort() { return boundPort(controlServer, options.controlPort) },
+    ready,
     agents,
     mounts,
     pairings: pairingList,

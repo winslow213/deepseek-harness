@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-31-remote-terminal-over-hub.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-31-remote-terminal-over-hub.md
+/agent-note-terminals-run-on-the-paired-device:
+  en: 1e67ecd21c017fba
+  zh: 46c1f76c6376e553
+/agent-note-terminals-run-on-the-paired-device/problem:
+  en: 07c16b9fa6e60c78
+  zh: 34e70405415f3f00
+/agent-note-terminals-run-on-the-paired-device/decision:
+  en: 6422cdf4564d7340
+  zh: 888e80cd13c183cd
+/agent-note-terminals-run-on-the-paired-device/alternatives-considered:
+  en: 89bdfe02701f44a5
+  zh: e9ddfaeb7ce10b6f
+/agent-note-terminals-run-on-the-paired-device/consequences:
+  en: 348783822427d2de
+  zh: b256e7950e4446a1

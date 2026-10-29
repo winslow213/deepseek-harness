@@ -19,6 +19,8 @@
  */
 
 import { connect, type Socket } from 'node:net'
+import { createRequire } from 'node:module'
+import type * as NodePty from 'node-pty'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path'
@@ -45,6 +47,9 @@ import {
   type FsOpRequest,
   type FsReadRequest,
   type KillRequest,
+  type PtyOpenRequest,
+  type PtyResizeRequest,
+  type PtyWriteRequest,
 } from './protocol.ts'
 import { checkEnvironment, parseCheckArgs } from './check.ts'
 
@@ -147,8 +152,27 @@ interface Session {
   readonly commands: ReadonlySet<string>
   /** In-flight exec children keyed by request id (kill targets). */
   readonly active: Map<string, ChildProcess>
+  /** Allocated terminal sessions keyed by request id (write, resize, and kill targets). */
+  readonly terminals: PtyTerminals
   authed: boolean
 }
+
+/** One allocated terminal and the id its frames are addressed by. */
+interface PtyTerminal {
+  readonly id: string
+  readonly terminal: NodePty.IPty
+}
+
+/** Allocated terminals of one channel, closed together when the channel drops. */
+type PtyTerminals = Map<string, PtyTerminal>
+
+/**
+ * Load `node-pty` on first use. It is a native module, so requiring it at
+ * startup would make `dsh-shell remote agent` fail to load on a host that only
+ * needs `exec` and file primitives; the failure belongs to the terminal
+ * request that needs it.
+ */
+const requireNodePty = (): typeof NodePty => createRequire(import.meta.url)('node-pty') as typeof NodePty
 
 /** Terminate a launched command tree with platform-correct semantics. */
 function killProcessGroup(child: ChildProcess): void {
@@ -329,8 +353,117 @@ async function runExec(session: Session, req: ExecRequest): Promise<void> {
   })
 }
 
+/**
+ * Allocate one real terminal on the agent host and stream its output.
+ *
+ * The same two allowlists `exec` enforces gate the allocation: `argv[0]`'s
+ * basename must be a permitted command, and `cwd` must resolve under a served
+ * root. A terminal is strictly more powerful than one exec, so neither check
+ * may be relaxed for it.
+ */
+async function runPtyOpen(session: Session, req: PtyOpenRequest): Promise<void> {
+  const send = (frame: AgentOutFrame) => { sendFrame(session.socket, frame) }
+  const fail = (message: string) => { send({ type: 'request-error', id: req.id, message }) }
+  const bin = req.argv[0] === undefined ? '' : basename(req.argv[0])
+  if (!session.commands.has(bin)) {
+    fail(`command not allowed: ${bin || '(empty)'}`)
+    return
+  }
+  if (req.argv.length === 0) {
+    fail('empty argv')
+    return
+  }
+  if (!Number.isSafeInteger(req.cols) || req.cols < 1 || !Number.isSafeInteger(req.rows) || req.rows < 1) {
+    fail('invalid terminal dimensions')
+    return
+  }
+  let cwd = req.cwd ?? session.realRoots[0]
+  if (cwd === undefined) {
+    fail('no root to serve as cwd')
+    return
+  }
+  try {
+    const realCwd = await fsp.realpath(cwd)
+    if (!isUnderRoots(realCwd, session.realRoots)) {
+      fail(`cwd outside allowed roots: ${cwd}`)
+      return
+    }
+    cwd = realCwd
+  } catch {
+    fail(`cwd does not exist: ${cwd}`)
+    return
+  }
+  if (session.terminals.has(req.id)) {
+    fail(`terminal ${req.id} already exists on this channel`)
+    return
+  }
+  let terminal: NodePty.IPty
+  try {
+    terminal = requireNodePty().spawn(req.argv[0]!, req.argv.slice(1), {
+      name: req.terminalType,
+      cols: req.cols,
+      rows: req.rows,
+      cwd,
+      env: { ...process.env, ...req.env ?? {}, TERM: req.terminalType } as Record<string, string>,
+    })
+  } catch (error) {
+    fail(`terminal allocation failed: ${error instanceof Error ? error.message : String(error)}`)
+    return
+  }
+  session.terminals.set(req.id, { id: req.id, terminal })
+  send({ type: 'pty:opened', id: req.id, pid: terminal.pid })
+  terminal.onData((data) => {
+    send({ type: 'pty:data', id: req.id, data: Buffer.from(data, 'utf8').toString('base64') })
+  })
+  terminal.onExit(({ exitCode, signal }) => {
+    session.terminals.delete(req.id)
+    send({ type: 'pty:exit', id: req.id, code: exitCode, signal: signal === undefined ? null : String(signal) })
+  })
+}
+
+/** Write input bytes to one allocated terminal (no-op when the id is unknown). */
+function runPtyWrite(session: Session, req: PtyWriteRequest): void {
+  const entry = session.terminals.get(req.id)
+  if (entry === undefined) return
+  try {
+    entry.terminal.write(Buffer.from(req.data, 'base64').toString('utf8'))
+  } catch (error) {
+    sendFrame(session.socket, {
+      type: 'request-error',
+      id: req.id,
+      message: `terminal write failed: ${error instanceof Error ? error.message : String(error)}`,
+    })
+  }
+}
+
+/** Resize one allocated terminal (no-op when the id is unknown). */
+function runPtyResize(session: Session, req: PtyResizeRequest): void {
+  const entry = session.terminals.get(req.id)
+  if (entry === undefined) return
+  if (!Number.isSafeInteger(req.cols) || req.cols < 1 || !Number.isSafeInteger(req.rows) || req.rows < 1) return
+  try {
+    entry.terminal.resize(req.cols, req.rows)
+  } catch (error) {
+    sendFrame(session.socket, {
+      type: 'request-error',
+      id: req.id,
+      message: `terminal resize failed: ${error instanceof Error ? error.message : String(error)}`,
+    })
+  }
+}
+
 /** Kill one in-flight exec's process group (no-op when the id is unknown). */
 function killExec(session: Session, req: KillRequest): void {
+  const terminal = session.terminals.get(req.id)
+  if (terminal !== undefined) {
+    session.terminals.delete(req.id)
+    try {
+      terminal.terminal.kill()
+    } catch {
+      // The terminal already exited; its own onExit already reported the outcome.
+    }
+    return
+  }
   const child = session.active.get(req.id)
   if (child === undefined) return
   killProcessGroup(child)
@@ -495,6 +628,15 @@ function handleFrame(session: Session, frame: unknown): void {
     case 'fs:op':
       void runFsOp(session, frame as FsOpRequest)
       break
+    case 'pty:open':
+      void runPtyOpen(session, frame as PtyOpenRequest)
+      break
+    case 'pty:write':
+      runPtyWrite(session, frame as PtyWriteRequest)
+      break
+    case 'pty:resize':
+      runPtyResize(session, frame as PtyResizeRequest)
+      break
     default:
       break
   }
@@ -504,7 +646,7 @@ function handleFrame(session: Session, frame: unknown): void {
 function connectOnce(opts: AgentOptions, realRoots: string[], commands: ReadonlySet<string>): Promise<void> {
   return new Promise((done) => {
     const socket = connect({ host: opts.hubHost, port: opts.hubPort })
-    const session: Session = { socket, opts, realRoots, commands, active: new Map(), authed: false }
+    const session: Session = { socket, opts, realRoots, commands, active: new Map(), terminals: new Map(), authed: false }
     const send = (out: AgentOutFrame) => { sendFrame(socket, out) }
 
     socket.on('connect', () => {
@@ -530,7 +672,20 @@ function connectOnce(opts: AgentOptions, realRoots: string[], commands: Readonly
     socket.on('error', (error: Error) => {
       console.error(`[agent] channel error: ${error.message}`)
     })
-    socket.on('close', () => done())
+    socket.on('close', () => {
+      // A dropped channel cannot carry input any more, so its terminals would
+      // linger as orphaned shells on this host. Kill them before reporting the
+      // channel closed; the reconnect starts from a clean session.
+      for (const { terminal } of session.terminals.values()) {
+        try {
+          terminal.kill()
+        } catch {
+          // Already exited; nothing left to release.
+        }
+      }
+      session.terminals.clear()
+      done()
+    })
   })
 }
 

@@ -24,7 +24,8 @@
   },
   "dependencies": {
     "pg": "^8.13.1",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "node-pty": "1.2.0-beta.15"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

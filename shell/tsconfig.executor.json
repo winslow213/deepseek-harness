@@ -37,6 +37,8 @@
     "src/remote/wiki-tool.ts",
     "src/remote/wiki-merge.ts",
     "src/remote/wiki-fs.ts",
-    "src/remote/kb-tool.ts"
+    "src/remote/kb-tool.ts",
+    "src/remote/pty-client.ts",
+    "src/remote/region-subprocess.ts"
   ]
 }

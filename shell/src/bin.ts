@@ -275,8 +275,9 @@ async function remoteHub(args: readonly string[]): Promise<void> {
     ...accountUrl === undefined || accountUrl === '' ? {} : { accountUrl },
     ...accountSecret === undefined || accountSecret === '' ? {} : { adminSecret: accountSecret },
   })
-  console.log(`hub agent listener on 0.0.0.0:${String(agentPort)}`)
-  console.log(`hub control API on http://127.0.0.1:${String(control)}`)
+  await hub.ready
+  console.log(`hub agent listener on 0.0.0.0:${String(hub.agentPort)}`)
+  console.log(`hub control API on http://127.0.0.1:${String(hub.controlPort)}`)
   console.log(autoInject ? 'auto-inject: on (paired agents get remote providers injected)' : 'auto-inject: off')
   process.on('SIGINT', () => { void hub.close().then(() => process.exit(0)) })
   await keepAlive(hub)
