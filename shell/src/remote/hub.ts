@@ -78,6 +78,10 @@ export interface AgentRecord {
   remote: string
   roots: readonly string[]
   commands: readonly string[]
+  /** Terminal world of the agent host; absent when the agent predates this field. */
+  platform?: 'posix' | 'windows'
+  /** Shell the agent host opens when no shell is named. */
+  defaultShell?: string
   connectedAt: number
   lastSeen: number
 }
@@ -206,6 +210,21 @@ async function accountClaim(account: AccountVerifier | undefined, uuid: string):
 }
 
 /**
+ * The terminal facts one `hello` advertises, spread into an agent record.
+ *
+ * Both fields are optional so an agent built before they existed still
+ * registers; a router that finds no platform treats the mount as unrouted.
+ * @param hello - the frame the agent introduced itself with.
+ * @returns the platform and default shell it reported, each only when present.
+ */
+function terminalWorldOf(hello: Partial<HelloFrame>): { platform?: 'posix' | 'windows'; defaultShell?: string } {
+  return {
+    ...hello.platform === 'posix' || hello.platform === 'windows' ? { platform: hello.platform } : {},
+    ...typeof hello.defaultShell === 'string' && hello.defaultShell !== '' ? { defaultShell: hello.defaultShell } : {},
+  }
+}
+
+/**
  * Validate and authenticate an agent `hello`, registering it on success.
  * Two auth modes: token mode (`user`+`token`) and pairing mode (`pairUuid`).
  * A hub-minted (CLI) code is one-time; an account-service-minted code is
@@ -266,6 +285,7 @@ async function authenticate(
         remote: `${socket.remoteAddress ?? '?'}:${String(socket.remotePort ?? '?')}`,
         roots: hello.roots ?? [],
         commands: hello.commands ?? [],
+        ...terminalWorldOf(hello),
         connectedAt: Date.now(),
         lastSeen: Date.now(),
       }
@@ -291,6 +311,7 @@ async function authenticate(
     remote: `${socket.remoteAddress ?? '?'}:${String(socket.remotePort ?? '?')}`,
     roots: hello.roots ?? [],
     commands: hello.commands ?? [],
+    ...terminalWorldOf(hello),
     connectedAt: Date.now(),
     lastSeen: Date.now(),
     socket,

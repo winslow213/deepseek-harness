@@ -26,6 +26,13 @@ export interface HelloFrame {
   roots: string[]
   /** Command basenames the agent will execute, advertised for diagnostics. */
   commands: string[]
+  /**
+   * Terminal world of the agent host, so a router can name a shell that host
+   * can run instead of forwarding the server's own executable path.
+   */
+  platform?: 'posix' | 'windows'
+  /** The shell the agent host opens when no shell is named. */
+  defaultShell?: string
 }
 
 export interface HelloAckFrame {

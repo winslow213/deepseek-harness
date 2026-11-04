@@ -24,7 +24,7 @@ import type * as NodePty from 'node-pty'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path'
-import { hostname } from 'node:os'
+import { hostname, userInfo } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import {
   editRemote,
@@ -174,6 +174,19 @@ type PtyTerminals = Map<string, PtyTerminal>
  */
 const requireNodePty = (): typeof NodePty => createRequire(import.meta.url)('node-pty') as typeof NodePty
 
+/**
+ * The shell this host opens when no shell is named.
+ *
+ * Advertised in `hello` so a router can build shell candidates on the device
+ * instead of forwarding the server's own executable path, which does not exist
+ * here. A device without this fact still serves `exec` and file primitives.
+ * @returns the host's default shell path, or undefined when it has none.
+ */
+function localDefaultShell(): string | undefined {
+  if (process.platform === 'win32') return process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe'
+  return process.env.SHELL ?? userInfo().shell ?? undefined
+}
+
 /** Terminate a launched command tree with platform-correct semantics. */
 function killProcessGroup(child: ChildProcess): void {
   if (child.pid === undefined) return
@@ -280,12 +293,34 @@ function findUnsafePathArg(cwdReal: string, tokens: readonly string[], realRoots
   return undefined
 }
 
+/**
+ * Whether a request's program is on the agent's command allowlist.
+ *
+ * The allowlist names programs, and Windows resolves `cmd` and `cmd.exe` to the
+ * same file, so a name and its `.exe` form are the same grant there. Without
+ * that equivalence an allowlisted `cmd` could never run the `cmd.exe` path a
+ * shell world names, and the terminal would fail on every Windows device.
+ * @param commands - basenames the operator permitted.
+ * @param bin - basename of the requested program, as `basename` reports it.
+ * @param platform - the agent host's platform; Windows names are case-insensitive and `.exe`-optional.
+ * @returns true when the program may run.
+ */
+export function isAllowedCommand(
+  commands: ReadonlySet<string>, bin: string, platform: NodeJS.Platform,
+): boolean {
+  if (commands.has(bin)) return true
+  if (platform !== 'win32') return false
+  const normalize = (name: string): string => name.toLowerCase().replace(/\.exe$/u, '')
+  const wanted = normalize(bin)
+  return [...commands].some((name) => normalize(name) === wanted)
+}
+
 /** Run one `exec` request on the agent host and stream its output. */
 async function runExec(session: Session, req: ExecRequest): Promise<void> {
   const send = (frame: AgentOutFrame) => { sendFrame(session.socket, frame) }
   const fail = (message: string) => { send({ type: 'request-error', id: req.id, message }) }
   const bin = req.argv[0] === undefined ? '' : basename(req.argv[0])
-  if (!session.commands.has(bin)) {
+  if (!isAllowedCommand(session.commands, bin, process.platform)) {
     fail(`command not allowed: ${bin || '(empty)'}`)
     return
   }
@@ -365,7 +400,7 @@ async function runPtyOpen(session: Session, req: PtyOpenRequest): Promise<void> 
   const send = (frame: AgentOutFrame) => { sendFrame(session.socket, frame) }
   const fail = (message: string) => { send({ type: 'request-error', id: req.id, message }) }
   const bin = req.argv[0] === undefined ? '' : basename(req.argv[0])
-  if (!session.commands.has(bin)) {
+  if (!isAllowedCommand(session.commands, bin, process.platform)) {
     fail(`command not allowed: ${bin || '(empty)'}`)
     return
   }
@@ -651,6 +686,7 @@ function connectOnce(opts: AgentOptions, realRoots: string[], commands: Readonly
 
     socket.on('connect', () => {
       console.error(`[agent] dialed ${opts.hubHost}:${String(opts.hubPort)}`)
+      const defaultShell = localDefaultShell()
       send({
         type: 'hello',
         agentId: opts.agentId,
@@ -659,6 +695,8 @@ function connectOnce(opts: AgentOptions, realRoots: string[], commands: Readonly
           : { user: opts.user, token: opts.token },
         roots: realRoots,
         commands: [...commands],
+        platform: process.platform === 'win32' ? 'windows' : 'posix',
+        ...defaultShell === undefined ? {} : { defaultShell },
       })
     })
     const reader = makeLineReader(
