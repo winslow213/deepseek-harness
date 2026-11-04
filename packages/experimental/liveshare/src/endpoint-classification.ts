@@ -124,6 +124,7 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'settings/replace': 'owner-only', // owner settings
   'settings/update': 'owner-only', // owner settings
   'terminal/attach': 'owner-only', // owner terminals
+  'terminal/availability': 'owner-only', // owner terminals; names the mounted-device confinement
   'terminal/close': 'owner-only', // owner terminals
   'terminal/create': 'owner-only', // owner terminals
   'terminal/environment': 'owner-only', // owner terminals
