@@ -870,5 +870,13 @@ interface ExecutionTarget {
 配对设备，并在转发前把影子路径经挂载表翻译成设备的真实工作目录 —— 直接转发
 影子路径会被 agent 的根目录名单拒绝 —— 见
 [挂载会话终端跑在配对的设备上](../../.agents/notes/implemented/architecture/2026-10-31-remote-terminal-over-hub.md)。
-`ctx.subprocess` 的其余部分（`exec`、`spawn`、可执行文件查找）仍在本机，
-因此在挂载工作区里 grep/glob 搜索**仍是影子目录**；§13.6 的收敛目标不变。
+
+终端分配的 `cwd` 决定执行世界，shell 发现也必须跟着它走：`terminalEnvironment()`
+与 `resolveExecutable()` 各带一个可选 `cwd`，`region-subprocess` 据此返回**设备**
+自述的 `platform` / `defaultShell`（`hello` 帧携带），并把裸名单原样下发由设备在
+自己的 PATH 上解析。若仍在远端解析，Host 会把 `/usr/bin/bash` 这类本机路径发给
+Windows 设备，ConPTY 只报无法归因的 `File not found:`。agent 的命令名单按平台比较：
+Windows 上程序名大小写不敏感且 `.exe` 可省略，因此 `cmd` 与 `cmd.exe` 是同一条授权。
+
+`ctx.subprocess` 的 `exec` 与 `spawn` 仍在本机，因此在挂载工作区里 grep/glob
+搜索**仍是影子目录**；§13.6 的收敛目标不变。
