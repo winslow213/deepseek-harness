@@ -176,7 +176,11 @@ export class TerminalController extends TypertRemoteService {
   @Remote
   shells(agent: Agent, signal: AbortSignal): Promise<TerminalShell[]> {
     signal.throwIfAborted()
-    return discoverShells(this.execution(agent).subprocess, this.config.shell, this.config.shellCandidates, signal)
+    const { subprocess, workingDirectory } = this.execution(agent)
+    return discoverShells(
+      subprocess, this.config.shell, this.config.shellCandidates, signal,
+      workingDirectory.get(agent.session),
+    )
   }
 
   /**
@@ -359,7 +363,7 @@ export class TerminalController extends TypertRemoteService {
     const { subprocess, workingDirectory } = this.execution(agent)
     const cwd = await workingDirectory.ensure(agent, signal)
     const shell = request.shellPath === undefined
-      ? await resolveShell(subprocess, this.config.shell, signal)
+      ? await resolveShell(subprocess, this.config.shell, signal, cwd)
       : (await this.shells(agent, signal)).find(candidate => candidate.path === request.shellPath)
     if (shell === undefined) throw new Error('Selected shell is not available in this execution environment')
     const handle = await subprocess.spawnTerminal({

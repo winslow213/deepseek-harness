@@ -4,20 +4,25 @@ import type { TerminalShell } from './types.ts'
 
 /**
  * Resolve the configured shell or the execution environment's default shell.
+ *
+ * `cwd` names the execution world, because a Session's workspace may live on
+ * another machine than the Host: a mounted workspace's shell must be the one
+ * that machine can run, not the Host's own executable path.
  * @param subprocess - target execution provider.
  * @param configured - optional profile overriding the environment's default shell.
  * @param signal - resolution cancellation.
+ * @param cwd - working directory whose execution world provides the shell.
  * @returns one verified shell; a declared default that cannot resolve rejects.
  */
 export async function resolveShell(
-  subprocess: SubprocessRuntime, configured: TerminalShell | undefined, signal: AbortSignal,
+  subprocess: SubprocessRuntime, configured: TerminalShell | undefined, signal: AbortSignal, cwd?: string,
 ): Promise<TerminalShell> {
   let shell = configured
   if (shell === undefined) {
-    const environment = await subprocess.terminalEnvironment(signal)
+    const environment = await subprocess.terminalEnvironment(signal, cwd)
     shell = profile(environment.defaultShell ?? (environment.platform === 'windows' ? 'cmd.exe' : '/bin/sh'))
   }
-  const path = await subprocess.resolveExecutable(shell.path, undefined, signal)
+  const path = await subprocess.resolveExecutable(shell.path, undefined, signal, cwd)
   return { ...shell, path }
 }
 
@@ -41,15 +46,16 @@ function shellKind(path: string): string {
  * @param configured - optional default profile.
  * @param candidates - executable names or paths permitted for shell selection.
  * @param signal - discovery cancellation.
+ * @param cwd - working directory whose execution world provides the shells.
  * @returns installed shells with the default first, keeping the earliest entry per name; transport failures reject.
  */
 export async function discoverShells(
   subprocess: SubprocessRuntime, configured: TerminalShell | undefined,
-  candidates: readonly string[], signal: AbortSignal,
+  candidates: readonly string[], signal: AbortSignal, cwd?: string,
 ): Promise<TerminalShell[]> {
-  const preferred = await resolveShell(subprocess, configured, signal)
+  const preferred = await resolveShell(subprocess, configured, signal, cwd)
   const found = await Promise.all(candidates.map(async (candidate) => {
-    try { return await resolveShell(subprocess, profile(candidate), signal) }
+    try { return await resolveShell(subprocess, profile(candidate), signal, cwd) }
     catch (error) {
       if (typeof error === 'object' && error !== null
         && 'name' in error && error.name === 'SubprocessExecutableNotFoundError') return undefined

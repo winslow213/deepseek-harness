@@ -537,7 +537,7 @@ describe('shell resolution', () => {
     const runtime = subprocess as unknown as SubprocessRuntime
     const requestSignal = signal()
     expect(await resolveShell(runtime, undefined, requestSignal)).toEqual({ path, name, args })
-    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith(path, undefined, requestSignal)
+    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith(path, undefined, requestSignal, undefined)
   })
 
   it.each([
@@ -552,8 +552,8 @@ describe('shell resolution', () => {
     const runtime = subprocess as unknown as SubprocessRuntime
     const requestSignal = signal()
     expect(await resolveShell(runtime, undefined, requestSignal)).toEqual({ path: '/resolved/shell', name, args })
-    expect(subprocess.terminalEnvironment).toHaveBeenCalledExactlyOnceWith(requestSignal)
-    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith(defaultShell, undefined, requestSignal)
+    expect(subprocess.terminalEnvironment).toHaveBeenCalledExactlyOnceWith(requestSignal, undefined)
+    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith(defaultShell, undefined, requestSignal, undefined)
   })
 
   it('uses an explicit profile without querying the environment and preserves its name and arguments', async () => {
@@ -564,7 +564,21 @@ describe('shell resolution', () => {
     const configured = { path: 'custom', name: 'Project shell', args: ['--project'] }
     expect(await resolveShell(runtime, configured, requestSignal)).toEqual({ ...configured, path: '/resolved/custom' })
     expect(subprocess.terminalEnvironment).not.toHaveBeenCalled()
-    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith('custom', undefined, requestSignal)
+    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith('custom', undefined, requestSignal, undefined)
+  })
+
+  it('asks the execution world serving the working directory for its shell', async () => {
+    const { subprocess } = fixture()
+    subprocess.terminalEnvironment.mockResolvedValue({ platform: 'windows', defaultShell: 'C:\\Windows\\system32\\cmd.exe' })
+    subprocess.resolveExecutable.mockResolvedValue('cmd.exe')
+    const runtime = subprocess as unknown as SubprocessRuntime
+    const requestSignal = signal()
+    // A Session's workspace may sit on another machine, so the working
+    // directory is what names the world that must answer.
+    await resolveShell(runtime, undefined, requestSignal, 'D:\\workspace')
+    expect(subprocess.terminalEnvironment).toHaveBeenCalledExactlyOnceWith(requestSignal, 'D:\\workspace')
+    expect(subprocess.resolveExecutable).toHaveBeenCalledExactlyOnceWith(
+      'C:\\Windows\\system32\\cmd.exe', undefined, requestSignal, 'D:\\workspace')
   })
 
   it.each([new SubprocessExecutableNotFoundError('missing default'), new Error('transport unavailable')])('reports default resolution failure without attempting fallback: %s', async (failure) => {

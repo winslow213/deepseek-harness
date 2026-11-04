@@ -125,23 +125,33 @@ export abstract class SubprocessRuntime extends Service {
    * plus explicit environment overrides. Relative paths containing separators
    * are rejected: the resolution base is undefined, so providers fail loud
    * instead of guessing.
+   *
+   * A provider that routes by execution world resolves against the world `cwd`
+   * names, so a bare name reaches the machine that will run it.
    * @param command - absolute executable path or bare PATH name.
    * @param env - explicit environment entries used for lookup.
    * @param signal - aborts remote or local lookup.
+   * @param cwd - working directory whose execution world should answer.
    * @returns a canonical executable path.
    */
   abstract resolveExecutable(
     command: string,
     env?: Readonly<Record<string, string>>,
     signal?: AbortSignal,
+    cwd?: string,
   ): Promise<string>
 
   /**
    * Inspect shell-selection facts in the provider's execution environment.
+   *
+   * A provider that routes by execution world answers for the world `cwd`
+   * names, so a Session whose workspace lives on another machine is described
+   * by that machine. Providers with one world ignore it.
    * @param signal - cancellation of remote environment inspection.
+   * @param cwd - working directory whose execution world should answer.
    * @returns platform and preferred shell; executable lookup and allocation remain separate operations.
    */
-  abstract terminalEnvironment(signal?: AbortSignal): Promise<SubprocessTerminalEnvironment>
+  abstract terminalEnvironment(signal?: AbortSignal, cwd?: string): Promise<SubprocessTerminalEnvironment>
 
   /**
    * Start one managed child process from a fully-specified spec; this seam
