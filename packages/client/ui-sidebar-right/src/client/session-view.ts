@@ -31,7 +31,12 @@ export class SidebarSessionView {
     private readonly onTabRelease: (view: SidebarSessionView) => void,
   ) {
     this.reference = sessions.retain(sessionId, { source: 'sidebarView' })
-    void this.reference.ready.catch((error: unknown) => { console.error('Sidebar Session opening failed:', error) })
+    // `release()` rejects `ready` on purpose, so a withdrawn view settles this
+    // promise with the same error its own disposal raised. Only a reference this
+    // view still owns describes an opening that actually failed.
+    void this.reference.ready.catch((error: unknown) => {
+      if (!this.disposed) console.error('Sidebar Session opening failed:', error)
+    })
   }
 
   /** Whether an initialized retained body still needs this view. */

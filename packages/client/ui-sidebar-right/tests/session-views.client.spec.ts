@@ -112,3 +112,18 @@ it('reports opening failure and releases Views even when committed roots are sti
   unmount()
   expect(release).toHaveBeenCalledOnce()
 })
+
+it('does not report a released reference as a failed opening', async () => {
+  const r = await runtime()
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const views = new SidebarSessionViews(r.sessions)
+  owners.push(views)
+  views.select(A)
+  const view = views.source.getSnapshot()[0]!
+  // Switching the selection retires the withdrawn view while its opening is
+  // still in flight, so its own disposal rejects `ready` with the very error it
+  // raised — not a failure to report.
+  views.select(B)
+  await expect(view.reference.ready).rejects.toThrow(/is released/)
+  expect(error).not.toHaveBeenCalled()
+})
