@@ -70,6 +70,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   util/                 zero-dependency utilities
 python/      Python SDK/runtime (python/README.md)
 native/      @deepseek-ai/node-addon-system source (native/README.md)
+plugins/     Plugin sources maintained outside the package tier, whose host-side code must match this harness (plugins/ds-bot/README.md)
 benchmarks/  performance gates
 .agents/     Agent workflows/notes
 docs/        Documentation (docs/AGENTS.md)

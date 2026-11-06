@@ -7,6 +7,9 @@ packages:
   - native/system/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Third-party plugin sources maintained outside the package tier, kept here so
+  # their host-side fixes travel with the harness they must match.
+  - plugins/*
   # Private package owning repository-level benchmark dependencies.
   - benchmarks
   - website
