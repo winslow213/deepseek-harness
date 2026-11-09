@@ -58,10 +58,7 @@ const WEB_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] as con
  * rather than let every provision retry an install the plugin manager
  * rejects.
  */
-const MANDATORY_BUNDLE_SPECS: Readonly<Record<string, string>> = {
-  '@xmanrui/dsh-im': '4.20.2',
-  '@nanmicoder/dsh-agent-teams': '^0.1.18',
-}
+const MANDATORY_BUNDLE_SPECS: Readonly<Record<string, string>> = {}
 
 /**
  * Resolve the specs to install from `TEAM_MANDATORY_BUNDLES`, a

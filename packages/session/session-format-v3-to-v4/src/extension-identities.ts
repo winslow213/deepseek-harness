@@ -6,6 +6,8 @@ import type { SessionFormatEvent } from '@deepseek-ai/dsh-session-format'
 /* jscpd:ignore-start */
 /** First-party event names understood by the released V3 reader, independent of the installed writer. */
 export const RELEASED_V3_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'a2ui/surface',
+  'a2ui/update',
   'agent-preset/selected',
   'agent/inbox/spliced',
   'approval/asked',
